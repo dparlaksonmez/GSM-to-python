@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass
 import json
 import shutil  # Added for file copying
 
-from modeling.run_modeling import ModelingResult
+from src.modeling.run_modeling import ModelingResult
 
 @dataclass
 class IterationMetadata:

@@ -21,7 +21,9 @@ from statsmodels.stats.multitest import multipletests
 from scipy import stats
 from typing import Union, Optional
 from dataclasses import dataclass
-from config import INITIAL_FEATURE_FILTER_SIZE
+
+# Default value for initial feature filter size
+DEFAULT_INITIAL_FEATURE_FILTER_SIZE = 1000
 
 ##### Data Structure Definitions #####
 
@@ -47,6 +49,7 @@ class TTestParameters:
     threshold: float = 0.05  # P-value cutoff
     equal_var: bool = False  # Whether to assume equal variances
     correction_method: str = 'fdr_bh'  # Multiple testing correction method
+    initial_feature_filter_size: int = DEFAULT_INITIAL_FEATURE_FILTER_SIZE  # Max features to keep (0 = no limit)
 
 def perform_ttest(
     data: GeneExpressionData,
@@ -117,12 +120,12 @@ def filter_by_pvalue(
         # First filter by p-value threshold
         significant_mask = adjusted_pvals < config.threshold
         
-        # Only apply top-K filter if INITIAL_FEATURE_FILTER_SIZE > 0
-        if INITIAL_FEATURE_FILTER_SIZE > 0:
+        # Only apply top-K filter if initial_feature_filter_size > 0
+        if config.initial_feature_filter_size > 0:
             # Take top K features by p-value
             sorted_indices = np.argsort(adjusted_pvals)
             top_k_mask = np.zeros_like(significant_mask)
-            top_k_mask[sorted_indices[:INITIAL_FEATURE_FILTER_SIZE]] = True
+            top_k_mask[sorted_indices[:config.initial_feature_filter_size]] = True
             # Combine both filters
             final_mask = significant_mask & top_k_mask
         else:
@@ -137,8 +140,8 @@ def filter_by_pvalue(
 
         logger.info(f"✅ Selected {sum(significant_mask)} significant genes")
         # TODO: mention about the p-value threshold
-        if INITIAL_FEATURE_FILTER_SIZE > 0:
-            logger.info(f"✅ Final selection: {sum(final_mask)} genes after size filter (INITIAL_FEATURE_FILTER_SIZE={INITIAL_FEATURE_FILTER_SIZE})")
+        if config.initial_feature_filter_size > 0:
+            logger.info(f"✅ Final selection: {sum(final_mask)} genes after size filter (initial_feature_filter_size={config.initial_feature_filter_size})")
         
         return TTestResults(
             statistics=pvalues,

@@ -26,8 +26,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.svm import SVC
 
-from scoring.metrics import MetricsData
-from grouping.grouping_utils import GroupFeatureMappingData
+from src.scoring.metrics import MetricsData
+from src.grouping.grouping_utils import GroupFeatureMappingData
 
 
 @dataclass

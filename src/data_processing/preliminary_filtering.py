@@ -20,7 +20,7 @@ Usage Example:
 import numpy as np
 import pandas as pd
 from typing import Union
-from feature_selection.ttest_filter import select_features, TTestResults
+from src.feature_selection.ttest_filter import select_features, TTestResults
 
 def preliminary_ttest_filter(
     X: Union[np.ndarray, pd.DataFrame],

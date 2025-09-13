@@ -37,13 +37,15 @@ Note: All functions use explicit parameter names for better code readability.
 from typing import Tuple, Union, Any
 import pandas as pd
 
-from data_processing.normalization import normalize_data
-from data_processing.train_test_splitter import train_test_split
-from data_processing.handle_missing_values import drop_missing_values, fill_missing_values
-from config import (GENE_COLUMN_NAME, 
-                    GROUP_COLUMN_NAME, 
-                    MIN_CLASS_BALANCE_RATIO, 
-                    SAMPLING_METHOD)
+from src.data_processing.normalization import normalize_data
+from src.data_processing.train_test_splitter import train_test_split
+from src.data_processing.handle_missing_values import drop_missing_values, fill_missing_values
+
+# Default constants for gene grouping (used when working with GSM workflow)
+DEFAULT_GENE_COLUMN_NAME = "geneSymbol"
+DEFAULT_GROUP_COLUMN_NAME = "diseaseName"
+DEFAULT_MIN_CLASS_BALANCE_RATIO = 0.5
+DEFAULT_SAMPLING_METHOD = 'undersampling'
 
 
 def validate_input_data(data: pd.DataFrame, label_column_name: str) -> None:
@@ -77,6 +79,9 @@ def preprocess_data(
     test_size: float = 0.2,
     normalization_method: str = 'zscore',
     random_state: int = 42,
+    apply_class_balancing: bool = False,
+    min_class_balance_ratio: float = DEFAULT_MIN_CLASS_BALANCE_RATIO,
+    sampling_method: str = DEFAULT_SAMPLING_METHOD,
 ) -> pd.DataFrame:
     """
     Executes the complete data preprocessing pipeline.
@@ -90,9 +95,12 @@ def preprocess_data(
         test_size (float, optional): Proportion of test set. Defaults to 0.2
         normalization_method (str, optional): Method for normalization. Defaults to 'zscore'
         random_state (int, optional): Random seed. Defaults to 42
+        apply_class_balancing (bool, optional): Whether to apply class balancing. Defaults to False
+        min_class_balance_ratio (float, optional): Minimum acceptable ratio between classes. Defaults to 0.5
+        sampling_method (str, optional): Method for balancing ('undersampling', 'oversampling'). Defaults to 'undersampling'
     
     Returns:
-        tuple[pd.DataFrame, pd.DataFrame]: Processed (train_data, test_data)
+        pd.DataFrame: Processed data
     
     Raises:
         ValueError: If input validation fails
@@ -116,11 +124,17 @@ def preprocess_data(
                                      label_column_name=label_column_name,
                                      logger=logger,
                                      method=normalization_method)
-    sampled_data = determine_class_balance(normalized_data, 
-                                           logger=logger,
-                                           min_class_balance_ratio=0.5,
-                                           sampling_method='undersampling')
-    logger.info(f"Sampled data size: {sampled_data.shape}")
+    
+    # Apply class balancing if enabled
+    if apply_class_balancing:
+        sampled_data = determine_class_balance(normalized_data, 
+                                               logger=logger,
+                                               min_class_balance_ratio=min_class_balance_ratio,
+                                               sampling_method=sampling_method)
+        logger.info(f"Sampled data size: {sampled_data.shape}")
+    else:
+        sampled_data = normalized_data
+        logger.info("Class balancing disabled - using original data")
     
     # Split data
     # train_data, test_data = train_test_split(
@@ -233,13 +247,20 @@ def determine_class_balance(data: pd.DataFrame,
         logger.info(f"Class balance ratio {ratio} is acceptable")
     return data
 
-def preprocess_grouping_data(grouping_data: pd.DataFrame, logger: Any) -> pd.DataFrame:
+def preprocess_grouping_data(
+    grouping_data: pd.DataFrame, 
+    logger: Any,
+    gene_column_name: str = DEFAULT_GENE_COLUMN_NAME,
+    group_column_name: str = DEFAULT_GROUP_COLUMN_NAME
+) -> pd.DataFrame:
     """
     Preprocesses gene grouping data by validating its structure.
     
     Parameters:
         grouping_data (pd.DataFrame): Raw grouping data
         logger (Any): Logger instance
+        gene_column_name (str): Name of the gene column
+        group_column_name (str): Name of the group column
     
     Returns:
         pd.DataFrame: Processed grouping data
@@ -252,7 +273,7 @@ def preprocess_grouping_data(grouping_data: pd.DataFrame, logger: Any) -> pd.Dat
         if grouping_data.empty:
             raise ValueError("Grouping data is empty")
         
-        required_columns = [GENE_COLUMN_NAME, GROUP_COLUMN_NAME]
+        required_columns = [gene_column_name, group_column_name]
         missing_cols = [col for col in required_columns if col not in grouping_data.columns]
         if missing_cols:
             raise ValueError(f"Missing required columns: {missing_cols}")

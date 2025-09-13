@@ -11,13 +11,14 @@ from tqdm import tqdm
 from datetime import datetime
 from pathlib import Path
 
-from config import CROSS_VALIDATION_FOLDS
-from utils.save_ranked_features import save_ranked_features, FeatureRankingOutput
-from utils.save_ranked_groups import save_ranked_groups
+# Default cross-validation folds
+DEFAULT_CROSS_VALIDATION_FOLDS = 5
+from src.utils.save_ranked_features import save_ranked_features, FeatureRankingOutput
+from src.utils.save_ranked_groups import save_ranked_groups
 from .score_data import ScoringParameters, score_data
 from .metrics import MetricsData, rank_by_score
 from .feature_scorer import score_features, FeatureScore
-from grouping.grouping_utils import GroupFeatureMappingData
+from src.grouping.grouping_utils import GroupFeatureMappingData
 
 
 @dataclass
@@ -35,7 +36,8 @@ def run_scoring(
     groups: List[GroupFeatureMappingData],
     output_dir: Path,
     iteration: int,
-    logger
+    logger,
+    cross_validation_folds: int = DEFAULT_CROSS_VALIDATION_FOLDS
 ) -> ScoringResults:
     """
     # TODO: Parallelize the scoring process for groups
@@ -99,7 +101,7 @@ def run_scoring(
                 group_name=current_group.group_name,
                 labels=labels,
                 classifier_name=model_name,
-                cross_validation_folds=CROSS_VALIDATION_FOLDS,
+                cross_validation_folds=cross_validation_folds,
                 logger=logger
             )
             

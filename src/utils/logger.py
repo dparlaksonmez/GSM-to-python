@@ -18,7 +18,11 @@ import logging
 import sys
 import os
 from typing import Optional
-from config import LOGGING_LEVEL, LOGGING_FORMAT, LOGGING_OUTPUT_FILE
+
+# Default logging configuration for classification workflow
+DEFAULT_LOGGING_LEVEL = 'INFO'
+DEFAULT_LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+DEFAULT_LOGGING_OUTPUT_FILE = 'classification_workflow.log'
 
 # ANSI color codes
 COLORS = {
@@ -49,19 +53,25 @@ class ColoredFormatter(logging.Formatter):
         
         return super().format(record)
 
-def setup_logger(log_file: Optional[str] = 'gsm_pipeline.log', 
-                level: int = logging.DEBUG) -> logging.Logger:
+def setup_logger(log_file: Optional[str] = None, 
+                level: int = logging.INFO,
+                logger_name: str = 'classification_pipeline') -> logging.Logger:
     """Sets up the logger with colored console and file output.
     
     Args:
         log_file: Full path or relative path for log file. Directories will be created if needed.
-        level: Logging level (default: logging.DEBUG)
+        level: Logging level (default: logging.INFO)
+        logger_name: Name for the logger (default: 'classification_pipeline')
     
     Returns:
         Configured logger instance
     """
     
-    logger = logging.getLogger('gsm_pipeline')
+    # Use default log file if none provided
+    if log_file is None:
+        log_file = DEFAULT_LOGGING_OUTPUT_FILE
+    
+    logger = logging.getLogger(logger_name)
     
     # Clear existing handlers
     if logger.hasHandlers():
@@ -96,9 +106,9 @@ def setup_logger(log_file: Optional[str] = 'gsm_pipeline.log',
     logger.addHandler(console_handler)
     return logger
 
-def get_logger() -> logging.Logger:
-    """Returns the singleton logger instance."""
-    return logging.getLogger('gsm_pipeline')
+def get_logger(logger_name: str = 'classification_pipeline') -> logging.Logger:
+    """Returns the logger instance."""
+    return logging.getLogger(logger_name)
 
 def log_debug(message: str):
     """Logs a debug message."""

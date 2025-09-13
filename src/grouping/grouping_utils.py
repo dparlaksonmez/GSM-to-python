@@ -22,7 +22,10 @@ import pandas as pd
 import logging
 from typing import List, Optional
 from dataclasses import dataclass, field
-from config import GROUP_COLUMN_NAME, GENE_COLUMN_NAME
+
+# Default column names for grouping data
+DEFAULT_GROUP_COLUMN_NAME = "diseaseName"
+DEFAULT_GENE_COLUMN_NAME = "geneSymbol"
 
 
 @dataclass
@@ -40,6 +43,8 @@ class GroupFeatureMappingData:
 
 def create_group_feature_mapping(
     grouping_data: pd.DataFrame,
+    group_column_name: str = DEFAULT_GROUP_COLUMN_NAME,
+    gene_column_name: str = DEFAULT_GENE_COLUMN_NAME,
     logger: Optional[logging.Logger] = None
 ) -> List[GroupFeatureMappingData]:
     """
@@ -71,7 +76,7 @@ def create_group_feature_mapping(
         return []
     
     # Check if required columns exist
-    required_columns = [GROUP_COLUMN_NAME, GENE_COLUMN_NAME]
+    required_columns = [group_column_name, gene_column_name]
     for column in required_columns:
         if column not in grouping_data.columns:
             if logger:
@@ -83,8 +88,8 @@ def create_group_feature_mapping(
     
     # Process each row in the grouping data
     for _, row in grouping_data.iterrows():
-        group_name = str(row[GROUP_COLUMN_NAME])
-        feature_name = str(row[GENE_COLUMN_NAME])
+        group_name = str(row[group_column_name])
+        feature_name = str(row[gene_column_name])
         
         # Skip if either is empty
         if not group_name or not feature_name:

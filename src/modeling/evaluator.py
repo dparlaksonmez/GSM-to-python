@@ -17,7 +17,7 @@ Key Functions:
 - calculate_confidence_scores: Generate prediction confidence metrics
 """
 
-from scoring.metrics import MetricsData
+from src.scoring.metrics import MetricsData
 
 from typing import Dict, Tuple, Optional, List
 import pandas as pd

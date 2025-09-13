@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.impute import SimpleImputer
-from grouping.group_feature_mapping import GroupFeatureMappingData
+from src.grouping.grouping_utils import GroupFeatureMappingData
 
 
 def validate_data(data: pd.DataFrame) -> Tuple[bool, str]:

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from sklearn.metrics import f1_score
 
-from scoring.metrics import MetricsData
+from src.scoring.metrics import MetricsData
 
 
 def save_ranked_groups(
