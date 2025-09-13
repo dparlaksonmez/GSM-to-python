@@ -63,7 +63,7 @@ This project implements a modular data pipeline for bioinformatics analysis usin
 
 2. **Run the pipeline**:
     ```sh
-    python3 src/main.py
+    python3 src/workflows/classification_workflow.py
     ```
 
 ## Documentation
@@ -85,7 +85,7 @@ This project implements a modular data pipeline for bioinformatics analysis usin
    - Reinstall dependencies: `pip install -r dependencies.txt`
 
 2. **Permission denied errors**:
-   - Check file permissions: `chmod +x src/run_pipeline.py`
+   - Check file permissions: `chmod +x src/run_workflow.py`
 
 
 ## Contributing
