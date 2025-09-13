@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 from statsmodels.stats.multitest import multipletests
 from scipy import stats
-from typing import Union, Optional
+from typing import Union, Optional, Tuple
 from dataclasses import dataclass
 
 # Default value for initial feature filter size
@@ -55,7 +55,7 @@ def perform_ttest(
     data: GeneExpressionData,
     parameters: TTestParameters,
     logger
-) -> tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Perform t-test for each gene between two groups.
     
