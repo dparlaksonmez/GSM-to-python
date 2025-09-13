@@ -14,6 +14,13 @@ This project implements a modular data pipeline for bioinformatics analysis usin
 
 ## Getting Started
 
+### Setup Video Tutorial
+For a visual walkthrough of setting up this project, watch our tutorial video:
+
+[![Project Setup Tutorial](https://img.youtube.com/vi/brYpWo7VfK0/0.jpg)](https://www.youtube.com/watch?v=brYpWo7VfK0&feature=youtu.be)
+
+**Video Link**: [GSM Pipeline Setup Tutorial](https://www.youtube.com/watch?v=brYpWo7VfK0&feature=youtu.be)
+
 ### Setting Up Your Environment
 1. **Clone the repository**:
     ```sh
