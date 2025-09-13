@@ -39,7 +39,8 @@ Notes:
 ##### Imports #####
 from math import exp
 from pathlib import Path
-from GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROUP_DATA, OUTPUT_DIR, 
+
+from .GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROUP_DATA, OUTPUT_DIR, 
                         RANDOM_SEED, CROSS_VALIDATION_FOLDS, NUMBER_OF_ITERATIONS, 
                         SAVE_INTERMEDIATE_RESULTS, TRAIN_TEST_SPLIT_RATIO, MODEL_NAME, LABEL_COLUMN_NAME, NORMALIZATION_METHOD,
                         CLASS_LABELS_NEGATIVE, CLASS_LABELS_POSITIVE, BEST_GROUPS_TO_KEEP)
@@ -274,3 +275,44 @@ def set_random_seed(seed: int, logger) -> None:
     random.seed(seed)
     np.random.seed(seed)
     logger.info(f"Random seed set to: {seed}")
+
+##### Main Execution Function #####
+def main() -> None:
+    """
+    Main execution function for the GSM pipeline.
+    
+    This function orchestrates the complete GSM workflow by:
+    1. Resolving project folder and file paths
+    2. Loading input expression and group data
+    3. Executing the GSM pipeline
+    
+    Example:
+        >>> main()  # Runs the complete pipeline with default configuration
+    """
+    # Resolve project folder path
+    project_folder = Path().resolve()
+    print(f"🏠 Project Folder: {project_folder}")
+    
+    # Set up file paths
+    input_file = project_folder / INPUT_EXPRESSION_DATA
+    group_file = project_folder / INPUT_GROUP_DATA
+    
+    print(f"📊 Loading expression data from: {input_file}")
+    print(f"🔗 Loading group data from: {group_file}")
+    
+    # Load input data
+    input_data = load_input_file(input_file)
+    group_data = load_group_file(group_file)
+    
+    print(f"✅ Expression data loaded: {input_data.shape}")
+    print(f"✅ Group data loaded: {group_data.shape}")
+    
+    # Execute GSM pipeline
+    print("🚀 Starting GSM workflow execution...")
+    gsm_run(input_data, group_data)
+    print("🎉 GSM workflow completed successfully!")
+
+##### Script Execution Entry Point #####
+if __name__ == '__main__':
+    """Enable direct script execution from command line."""
+    main()

@@ -81,6 +81,14 @@ Notes:
     - Preprocessing is optional and configurable
 """
 
+##### PATH SETUP #####
+import sys
+from pathlib import Path
+
+# Add the project root directory to Python path to enable imports
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
 ##### IMPORTS #####
 import time
 import random
@@ -102,7 +110,7 @@ from sklearn.metrics import (
 # Configuration and utilities
 
 from src.utils.logger import setup_logger
-from classification_workflow_config import DEFAULT_CONFIG, ClassificationWorkflowConfig
+from src.workflows.classification_workflow_config import DEFAULT_CONFIG, ClassificationWorkflowConfig
 
 # Machine Learning algorithms
 from src.machine_learning.random_forest import train_random_forest, predict_random_forest

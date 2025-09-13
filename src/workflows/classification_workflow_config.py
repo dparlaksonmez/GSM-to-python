@@ -35,8 +35,8 @@ class ClassificationWorkflowConfig:
     
     ##### DATA CONFIGURATION #####
     # Input data file path (relative to project root)
-    # input_data_path: str = "data/test/test_main_data.csv"
-    input_data_path: str = "data/main_data/GDS2545.csv"
+    input_data_path: str = "data/test/test_main_data.csv"
+    # input_data_path: str = "data/main_data/GDS2545.csv"
 
     
     # Target column name in the dataset
@@ -44,7 +44,7 @@ class ClassificationWorkflowConfig:
     
     ##### MONTE CARLO CROSS-VALIDATION SETTINGS #####
     # Number of Monte Carlo iterations to perform
-    n_iterations: int = 3
+    n_iterations: int = 5
     
     # Proportion of data to use for testing (0.0 to 1.0)
     test_size: float = 0.3
