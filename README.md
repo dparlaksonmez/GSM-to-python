@@ -92,14 +92,14 @@ For a visual walkthrough of setting up this project, watch our tutorial video:
    - Reinstall dependencies: `pip install -r dependencies.txt`
 
 2. **Permission denied errors**:
-   - Check file permissions: `chmod +x src/run_pipeline.py`
+   - Check file permissions: `chmod +x src/name_of_your_file`
 
 
 ## Contributing
-1. Create a new branch (`git checkout -b feature-branch`)
+1. Create a new branch
 2. Make your changes
-3. Commit your changes (`git commit -am 'Add new feature'`)
-4. Push to the branch (`git push origin feature-branch`)
+3. Commit your changes 
+4. Push to the branch 
 5. Create a new Pull Request
 
 ## License
