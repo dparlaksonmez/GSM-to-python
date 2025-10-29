@@ -10,3 +10,4 @@ openpyxl
 
 # Machine learning
 xgboost
+group-lasso

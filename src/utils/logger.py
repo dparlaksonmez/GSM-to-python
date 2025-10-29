@@ -83,7 +83,7 @@ def setup_logger(log_file: Optional[str] = None,
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     colored_formatter = ColoredFormatter(
-        '%(color)s%(emoji)s %(asctime)s - %(name)s - %(levelname)s - %(message)s%(reset)s'
+        '%(color)s%(emoji)s %(asctime)s - %(levelname)s - %(message)s%(reset)s'
     )
     console_handler.setFormatter(colored_formatter)
     console_handler.flush = sys.stdout.flush  # Force flush
