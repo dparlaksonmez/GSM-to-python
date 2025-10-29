@@ -15,9 +15,9 @@ from pathlib import Path
 DEFAULT_CROSS_VALIDATION_FOLDS = 5
 from src.utils.save_ranked_features import save_ranked_features, FeatureRankingOutput
 from src.utils.save_ranked_groups import save_ranked_groups
-from .score_data import ScoringParameters, score_data
-from .metrics import MetricsData, rank_by_score
-from .feature_scorer import score_features, FeatureScore
+from src.scoring.score_data import ScoringParameters, score_data
+from src.scoring.metrics import MetricsData, rank_by_score
+from src.scoring.feature_scorer import score_features, FeatureScore
 from src.grouping.grouping_utils import GroupFeatureMappingData
 
 

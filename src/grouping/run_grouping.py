@@ -19,7 +19,7 @@ import logging
 from typing import List
 import pandas as pd
 
-from .grouping_utils import GroupFeatureMappingData, create_group_feature_mapping
+from src.grouping.grouping_utils import GroupFeatureMappingData, create_group_feature_mapping
 
 
 def run_grouping(

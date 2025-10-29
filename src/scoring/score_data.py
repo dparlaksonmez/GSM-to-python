@@ -22,7 +22,7 @@ from typing import Dict
 import logging
 import numpy as np
 import pandas as pd
-from .metrics import MetricsData
+from src.scoring.metrics import MetricsData
 from sklearn.model_selection import cross_validate
 from src.machine_learning.classification import get_classifier_object
 from sklearn.metrics import make_scorer, f1_score, precision_score, recall_score
