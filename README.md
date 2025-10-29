@@ -70,7 +70,7 @@ For a visual walkthrough of setting up this project, watch our tutorial video:
 
 2. **Run the pipeline**:
     ```sh
-    python3 src/workflows/GSM_workflow.py
+    python src/workflows/GSM_workflow.py
     ```
 
 ## Documentation
