@@ -72,6 +72,10 @@ For a visual walkthrough of setting up this project, watch our tutorial video:
     ```sh
     python src/workflows/GSM_workflow.py
     ```
+    **If it gives error, then try this:**
+    ```
+    python -m src.workflows.GSM_workflow
+    ```
 
 ## Documentation
 - Maintain comprehensive docstrings
