@@ -24,14 +24,15 @@ from src.grouping.grouping_utils import GroupFeatureMappingData, create_group_fe
 
 def run_grouping(
     grouping_data: pd.DataFrame,
+    filtered_features: List[str],
     logger: logging.Logger
 ) -> List[GroupFeatureMappingData]:
     """
     Run the grouping process to organize features into their respective groups.
     
     Args:
-        grouping_data: DataFrame with columns ['feature_id', 'group_name']
-        group_feature_mappings: List of existing group-feature mappings
+        grouping_data: DataFrame with columns ['geneSymbol', 'diseaseName']
+        filtered_features: List of feature names that passed preliminary filtering
         logger: Logger instance for tracking progress
     
     Returns:
@@ -42,8 +43,25 @@ def run_grouping(
     """
     logger.info(f"#" * 50)
     logger.info(f"🔄 Starting grouping process...")
+    logger.info(f"📊 Total filtered features available: {len(filtered_features)}")
 
-    group_feature_mappings = create_group_feature_mapping(grouping_data, logger)
+    # Create initial group mappings from all grouping data
+    all_group_mappings = create_group_feature_mapping(grouping_data, logger=logger)
+    
+    # Filter groups to only include features that passed preliminary filtering
+    filtered_set = set(filtered_features)
+    group_feature_mappings = []
+    
+    for group in all_group_mappings:
+        # Keep only features that are in the filtered set
+        filtered_feature_list = [f for f in group.feature_list if f in filtered_set]
+        
+        # Only include groups that have at least one filtered feature
+        if filtered_feature_list:
+            group.feature_list = filtered_feature_list
+            group_feature_mappings.append(group)
+    
+    logger.info(f"📊 Groups after filtering: {len(group_feature_mappings)} (from {len(all_group_mappings)} original)")
         
     # Log information about the groups
     total_features = sum(len(group.feature_list) for group in group_feature_mappings)

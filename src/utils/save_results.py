@@ -169,8 +169,8 @@ def save_modeling_results(
     output_path = Path(output_dir)
     setup_save_directory(output_path, logger)
     
-    # Save the config file to the results directory for reproducibility
-    save_config_file(output_path, logger)
+    # Note: Configuration is defined in GSM_workflow_config.py
+    # No need to copy a separate config.py file
     
     try:
         # Save detailed results

@@ -37,8 +37,14 @@ Notes:
 """
 
 ##### Imports #####
+import sys
 from math import exp
 from pathlib import Path
+
+# Add the project root to the Python path
+project_root = Path(__file__).resolve().parents[2]
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
 
 from src.workflows.GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROUP_DATA, OUTPUT_DIR, 
                         RANDOM_SEED, CROSS_VALIDATION_FOLDS, NUMBER_OF_ITERATIONS, 
@@ -221,7 +227,15 @@ def gsm_main_loop(data: pd.DataFrame,
     # Gene Grouping - Fixed to use the proper function from grouping_utils
     logger.info("🔗 Running gene grouping analysis...")
 
+    # Pass the filtered feature names to grouping
+    if filtered_train.selected_feature_names is not None:
+        filtered_feature_names = list(filtered_train.selected_feature_names)
+    else:
+        # Fallback: use the column names from the filtered data if available
+        filtered_feature_names = list(train_test_split_data.X_train.columns[filtered_train.selected_features])
+    
     group_feature_mappings = run_grouping(grouping_data, 
+                                  filtered_features=filtered_feature_names,
                                   logger=logger)
     
     logger.info("Grouping completed.")
