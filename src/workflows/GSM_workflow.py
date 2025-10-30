@@ -107,9 +107,10 @@ def gsm_run(
     output_folder_path = Path(OUTPUT_DIR) / time.strftime("%Y_%m_%d-%H_%M_%S")        
     output_folder_path.mkdir(parents=True, exist_ok=True)
     if logger_path is None:
-        logger_path = output_folder_path / "gsm_pipeline.log"
+        logger_path = output_folder_path / "gsm_workflow.log"
 
-    logger = setup_logger(str(logger_path))
+    logger = setup_logger(str(logger_path),
+                          logger_name='GSM_workflow_logger')
     logger.info("🚀 Starting GSM pipeline...")
 
     # Run the GSM pipeline

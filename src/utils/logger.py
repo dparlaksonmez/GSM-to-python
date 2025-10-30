@@ -22,7 +22,7 @@ from typing import Optional
 # Default logging configuration for classification workflow
 DEFAULT_LOGGING_LEVEL = 'INFO'
 DEFAULT_LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-DEFAULT_LOGGING_OUTPUT_FILE = 'classification_workflow.log'
+DEFAULT_LOGGING_OUTPUT_FILE = 'workflow.log'
 
 # ANSI color codes
 COLORS = {
@@ -53,7 +53,7 @@ class ColoredFormatter(logging.Formatter):
         
         return super().format(record)
 
-def setup_logger(log_file: Optional[str] = None, 
+def setup_logger(log_file: Optional[str] = None,
                 level: int = logging.INFO,
                 logger_name: str = 'classification_pipeline') -> logging.Logger:
     """Sets up the logger with colored console and file output.
@@ -103,10 +103,19 @@ def setup_logger(log_file: Optional[str] = None,
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
 
+    # Error file handler
+    error_handler = logging.FileHandler('error.log')
+    error_handler.setLevel(logging.ERROR)
+    error_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    error_handler.setFormatter(error_formatter)
+    logger.addHandler(error_handler)
+
     logger.addHandler(console_handler)
     return logger
 
-def get_logger(logger_name: str = 'classification_pipeline') -> logging.Logger:
+def get_logger(logger_name: str = 'workflow') -> logging.Logger:
     """Returns the logger instance."""
     return logging.getLogger(logger_name)
 
