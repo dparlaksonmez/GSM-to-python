@@ -47,7 +47,8 @@ if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 from src.workflows.GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROUP_DATA, OUTPUT_DIR, 
-                        RANDOM_SEED, CROSS_VALIDATION_FOLDS, NUMBER_OF_ITERATIONS, 
+                        RANDOM_SEED, CROSS_VALIDATION_FOLDS, NUMBER_OF_ITERATIONS,
+                        GENE_COLUMN_NAME, GROUP_COLUMN_NAME,
                         SAVE_INTERMEDIATE_RESULTS, TRAIN_TEST_SPLIT_RATIO, MODEL_NAME, LABEL_COLUMN_NAME, NORMALIZATION_METHOD,
                         CLASS_LABELS_NEGATIVE, CLASS_LABELS_POSITIVE, BEST_GROUPS_TO_KEEP)
 
@@ -130,7 +131,10 @@ def gsm_run(
         normalization_method=normalization_method
     )
     logger.info("Data preprocessing completed.")
-    group_data_processed = preprocess_grouping_data(group_data, logger=logger)
+    group_data_processed = preprocess_grouping_data(group_data, 
+                                                    gene_column_name=GENE_COLUMN_NAME,
+                                                    group_column_name=GROUP_COLUMN_NAME,
+                                                    logger=logger)
     logger.info("Grouping data preprocessing completed.")
     
     iteration_results: List[IterationResult] = []
@@ -235,8 +239,10 @@ def gsm_main_loop(data: pd.DataFrame,
         filtered_feature_names = list(train_test_split_data.X_train.columns[filtered_train.selected_features])
     
     group_feature_mappings = run_grouping(grouping_data, 
-                                  filtered_features=filtered_feature_names,
-                                  logger=logger)
+                                          gene_column_name=GENE_COLUMN_NAME,
+                                          group_column_name=GROUP_COLUMN_NAME,
+                                          filtered_features=filtered_feature_names,
+                                          logger=logger)
     
     logger.info("Grouping completed.")
 

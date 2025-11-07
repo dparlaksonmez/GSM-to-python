@@ -42,8 +42,8 @@ from src.data_processing.train_test_splitter import train_test_split
 from src.data_processing.handle_missing_values import drop_missing_values, fill_missing_values
 
 # Default constants for gene grouping (used when working with GSM workflow)
-DEFAULT_GENE_COLUMN_NAME = "geneSymbol"
-DEFAULT_GROUP_COLUMN_NAME = "diseaseName"
+DEFAULT_GENE_COLUMN_NAME = "feature_id"
+DEFAULT_GROUP_COLUMN_NAME = "group_name"
 DEFAULT_MIN_CLASS_BALANCE_RATIO = 0.5
 DEFAULT_SAMPLING_METHOD = 'undersampling'
 

@@ -65,8 +65,8 @@ def run_scoring(
         group_features: Dict[str, List[str]] = {}  # Track features per group
 
         logger.info("#" * 50)
-        logger.info("🔍 Found the following groups:"
-                    f"{[group.group_name for group in groups]}")
+        logger.info("🔍 Found the following groups (first 10 as example):"
+                    f"{[group.group_name for group in groups[:10]]}")
         logger.info(f"🔍 Found {len(feature_scores)} features in the dataset")
         logger.info(f"🔍 Found {len(groups)} groups in the dataset")
         logger.info(f"🔍 Found {len(data_x)} samples in the dataset")

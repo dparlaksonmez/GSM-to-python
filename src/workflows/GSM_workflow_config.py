@@ -23,17 +23,17 @@ from pathlib import Path
 # Input/Output Configuration
 # ============================================================================
 
-# Get the project directory. This assumes the config.py file is in the 'src' directory.
+# Get the project directory. This assumes the config file is located at src/workflows/....
 project_dir = Path(__file__).resolve().parents[1]
 
-NUMBER_OF_ITERATIONS = 1
+NUMBER_OF_ITERATIONS = 3
 
 ### TEST DATA ###
 INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
 INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
 # # Group Settings
-GROUP_COLUMN_NAME = "diseaseName"
-GENE_COLUMN_NAME = "geneSymbol"
+GENE_COLUMN_NAME = "feature_id"
+GROUP_COLUMN_NAME = "group_name"
 
 ### REAL DATA ###
 # INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"

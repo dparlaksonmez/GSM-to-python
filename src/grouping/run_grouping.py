@@ -19,13 +19,15 @@ import logging
 from typing import List
 import pandas as pd
 
-from src.grouping.grouping_utils import GroupFeatureMappingData, create_group_feature_mapping
+from src.grouping.grouping_utils import DEFAULT_GENE_COLUMN_NAME, DEFAULT_GROUP_COLUMN_NAME, GroupFeatureMappingData, create_group_feature_mapping
 
 
 def run_grouping(
     grouping_data: pd.DataFrame,
     filtered_features: List[str],
-    logger: logging.Logger
+    logger: logging.Logger,
+    gene_column_name: str = DEFAULT_GENE_COLUMN_NAME,
+    group_column_name: str = DEFAULT_GROUP_COLUMN_NAME,
 ) -> List[GroupFeatureMappingData]:
     """
     Run the grouping process to organize features into their respective groups.
@@ -46,7 +48,10 @@ def run_grouping(
     logger.info(f"📊 Total filtered features available: {len(filtered_features)}")
 
     # Create initial group mappings from all grouping data
-    all_group_mappings = create_group_feature_mapping(grouping_data, logger=logger)
+    all_group_mappings = create_group_feature_mapping(grouping_data, 
+                                                      gene_column_name=gene_column_name,
+                                                      group_column_name=group_column_name,
+                                                      logger=logger)
     
     # Filter groups to only include features that passed preliminary filtering
     filtered_set = set(filtered_features)
