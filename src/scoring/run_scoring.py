@@ -68,11 +68,9 @@ def run_scoring(
         logger.info("🔍 Found the following groups (first 10 as example):"
                     f"{[group.group_name for group in groups[:10]]}")
         logger.info(f"🔍 Found {len(feature_scores)} features in the dataset")
-        logger.info(f"🔍 Found {len(groups)} groups in the dataset")
+        logger.info(f"🔍 Found {len(groups)} relevant groups in the dataset")
         logger.info(f"🔍 Found {len(data_x)} samples in the dataset")
-        logger.info(f"🔍 Found {len(data_x.columns)} features in the dataset")
         logger.info(f"🔍 Found {len(labels.unique())} unique labels in the dataset")
-        logger.info(f"🔍 Found {len(groups)} groups in the dataset")
 
         logger.info("🔄 Starting group scoring process...")
         for current_group in tqdm(groups, desc="📊 Scoring groups"):

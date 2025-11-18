@@ -145,7 +145,7 @@ def preprocess_data(
     
     # Give a snapshot of the data
     logger.info(f"Data shape: {sampled_data.shape}")
-    logger.info(f"Data columns: {sampled_data.columns.tolist()}")
+    logger.info(f"Data columns (first 10): {sampled_data.columns[:10].tolist()}")
     logger.info(f"Data head:\n{sampled_data.head()}")
     
     return sampled_data

@@ -33,7 +33,7 @@ def run_grouping(
     Run the grouping process to organize features into their respective groups.
     
     Args:
-        grouping_data: DataFrame with columns ['geneSymbol', 'diseaseName']
+        grouping_data: DataFrame with gene and group columns
         filtered_features: List of feature names that passed preliminary filtering
         logger: Logger instance for tracking progress
     

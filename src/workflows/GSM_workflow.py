@@ -48,7 +48,8 @@ if str(project_root) not in sys.path:
 
 from src.workflows.GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROUP_DATA, OUTPUT_DIR, 
                         RANDOM_SEED, CROSS_VALIDATION_FOLDS, NUMBER_OF_ITERATIONS,
-                        GENE_COLUMN_NAME, GROUP_COLUMN_NAME,
+                        GENE_COLUMN_NAME, GROUP_COLUMN_NAME, INITIAL_FEATURE_FILTER_SIZE,
+                        TTEST_THRESHOLD,
                         SAVE_INTERMEDIATE_RESULTS, TRAIN_TEST_SPLIT_RATIO, MODEL_NAME, LABEL_COLUMN_NAME, NORMALIZATION_METHOD,
                         CLASS_LABELS_NEGATIVE, CLASS_LABELS_POSITIVE, BEST_GROUPS_TO_KEEP)
 
@@ -92,6 +93,7 @@ def gsm_run(
     model_name: str = MODEL_NAME,
     label_column: str = LABEL_COLUMN_NAME,
     normalization_method: str = NORMALIZATION_METHOD,
+    initial_feature_filter_size: int = 0,
     initial_seed: int = 42,
     logger_path: Optional[Path] = None,
     notebook_mode: bool = False
@@ -225,6 +227,8 @@ def gsm_main_loop(data: pd.DataFrame,
     # TODO: Use this one !!!
     filtered_train = preliminary_ttest_filter(train_test_split_data.X_train, 
                                         train_test_split_data.y_train,
+                                        threshold=TTEST_THRESHOLD,
+                                        initial_feature_filter_size=INITIAL_FEATURE_FILTER_SIZE,
                                         logger=logger)
     logger.info("Preliminary filtering completed.")
 

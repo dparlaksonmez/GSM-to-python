@@ -27,7 +27,8 @@ def preliminary_ttest_filter(
     y: Union[np.ndarray, pd.Series],
     logger,
     threshold: float = 0.05,
-    equal_var: bool = False
+    equal_var: bool = False,
+    initial_feature_filter_size: int = 0
 ) -> TTestResults:
     """
     Perform preliminary filtering on gene expression data using t-tests.
@@ -51,7 +52,12 @@ def preliminary_ttest_filter(
         logger.info("Starting preliminary filtering...")
         
         # Select features using t-test
-        results = select_features(X, y, threshold=threshold, equal_var=equal_var, logger=logger)
+        results = select_features(X, 
+                                  y, 
+                                  threshold=threshold, 
+                                  equal_var=equal_var, 
+                                  initial_feature_filter_size=0,
+                                  logger=logger)
         
         logger.info(f"Preliminary filtering completed. Selected {len(results.selected_features)} features.")
         return results

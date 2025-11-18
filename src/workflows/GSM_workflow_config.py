@@ -26,20 +26,20 @@ from pathlib import Path
 # Get the project directory. This assumes the config file is located at src/workflows/....
 project_dir = Path(__file__).resolve().parents[1]
 
-NUMBER_OF_ITERATIONS = 3
+NUMBER_OF_ITERATIONS = 2
 
 ### TEST DATA ###
-INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
-INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
+# INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
+# INPUT_GROUP_DATA = "data/test/sampled_test_grouping_data.csv"
 # # Group Settings
 GENE_COLUMN_NAME = "feature_id"
 GROUP_COLUMN_NAME = "group_name"
 
 ### REAL DATA ###
-# INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
+INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
 # INPUT_EXPRESSION_DATA = "data/main_data/GDS1962.csv"
 
-# INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET.txt"
+INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET.txt"
 # GROUP_COLUMN_NAME = "group_name"
 # GENE_COLUMN_NAME = "feature_id"
 
@@ -87,11 +87,11 @@ MODEL_NAME : ModelType = 'RandomForest'
 # Feature Selection Settings
 # ============================================================================
 
-INITIAL_FEATURE_FILTER_SIZE = 1000  # 0 to disable initial filtering
+INITIAL_FEATURE_FILTER_SIZE = 0  # 0 to disable initial filtering
 BEST_GROUPS_TO_KEEP = 10
 # MIN_VARIANCE_THRESHOLD = 0.01 #TODO: should I keep it?
 SELECTION_METHOD = 't_test'  # Options: 't_test', 'f_test', 'mutual_info'
-
+TTEST_THRESHOLD = 0.05  # P-value threshold for t-test feature selection
 # ============================================================================
 # Logging Configuration
 # ============================================================================

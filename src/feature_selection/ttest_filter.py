@@ -23,7 +23,7 @@ from typing import Union, Optional, Tuple
 from dataclasses import dataclass
 
 # Default value for initial feature filter size
-DEFAULT_INITIAL_FEATURE_FILTER_SIZE = 1000
+DEFAULT_INITIAL_FEATURE_FILTER_SIZE = 0
 
 ##### Data Structure Definitions #####
 
@@ -161,6 +161,7 @@ def select_features(
     feature_names: Optional[np.ndarray] = None,
     threshold: float = 0.05,
     equal_var: bool = False,
+    initial_feature_filter_size: int = DEFAULT_INITIAL_FEATURE_FILTER_SIZE,
     logger=None
 ) -> TTestResults:
     """
@@ -183,7 +184,8 @@ def select_features(
         # Create config
         config = TTestParameters(
             threshold=threshold,
-            equal_var=equal_var
+            equal_var=equal_var,
+            initial_feature_filter_size=initial_feature_filter_size
         )
         
         # Run analysis

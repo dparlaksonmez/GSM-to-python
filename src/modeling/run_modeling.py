@@ -144,7 +144,7 @@ def train_and_evaluate_model(
         raise ValueError(f"Unsupported model type: {model_name}")
     
     logger.info(f"🚀 Training {model_name} model"
-                f" with {len(train_x)} samples and {len(train_x.columns)} features")
+                f" with {len(train_x)} samples and {len(train_x.columns)} unique features")
     # Train model
     start_time = time.time()
     model.fit(train_x, train_y)
@@ -223,7 +223,7 @@ def run_modeling(
         # Filter to only include features that exist in the data
         available_features = [f for f in features_result.selected_features if f in data_train_x.columns]
         
-        logger.info(f"✅ Found {len(available_features)} valid features for modeling")
+        logger.info(f"✅ Found {len(available_features)} unique valid features for modeling")
         
         if len(available_features) < len(features_result.selected_features):
             missing = len(features_result.selected_features) - len(available_features)
@@ -246,7 +246,7 @@ def run_modeling(
         train_x = data_train_x[available_features]
         test_x = data_test_x[available_features]
         
-        logger.info(f"🔬 Training {model_name} model with {len(available_features)} features from {len(features_result.used_group_names)} groups")
+        logger.info(f"🔬 Training {model_name} model with {len(available_features)} unique features from {len(features_result.used_group_names)} groups")
         
         # Train and evaluate model
         training_result = train_and_evaluate_model(
