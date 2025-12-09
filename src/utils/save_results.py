@@ -154,7 +154,8 @@ def save_modeling_results(
     iteration_metadata: List[IterationMetadata],
     output_dir: str,
     experiment_name: str,
-    logger: logging.Logger
+    logger: logging.Logger,
+    save_visualizations: bool = True
 ) -> None:
     """
     Save modeling results in both detailed and summary formats.
@@ -230,3 +231,74 @@ def save_modeling_results(
     except Exception as e:
         logger.error(f"❌ Failed to save results: {str(e)}")
         raise
+
+def save_summary_report(
+    results: List[List[ModelingResult]], 
+    iteration_metadata: List[IterationMetadata], 
+    output_dir: Path, 
+    logger: logging.Logger
+) -> None:
+    """
+    Identify the best performing model configuration and save a summary report.
+    
+    Args:
+        results: List of lists of ModelingResult objects
+        iteration_metadata: Metadata for each iteration
+        output_dir: Directory to save the report
+        logger: Logger instance
+    """
+    best_f1 = -1.0
+    best_result = None
+    best_iteration_meta = None
+    
+    # Find best result
+    for i, iteration_results in enumerate(results):
+        meta = iteration_metadata[i]
+        for res in iteration_results:
+            if res.f1_score > best_f1:
+                best_f1 = res.f1_score
+                best_result = res
+                best_iteration_meta = meta
+                
+    if best_result is None or best_iteration_meta is None:
+        logger.warning("⚠️ No results found to generate summary report.")
+        return
+
+    report_path = output_dir / "summary_report.txt"
+    
+    try:
+        with open(report_path, "w") as f:
+            f.write("=" * 50 + "\n")
+            f.write("🏆 GSM Pipeline Summary Report 🏆\n")
+            f.write("=" * 50 + "\n\n")
+            
+            f.write(f"Best Performance Achieved:\n")
+            f.write(f"-------------------------\n")
+            f.write(f"F1 Score:       {best_result.f1_score:.4f}\n")
+            f.write(f"Accuracy:       {best_result.accuracy:.4f}\n")
+            f.write(f"Precision:      {best_result.precision:.4f}\n")
+            f.write(f"Recall:         {best_result.recall:.4f}\n\n")
+            
+            f.write(f"Configuration Details:\n")
+            f.write(f"---------------------\n")
+            f.write(f"Iteration:      {best_iteration_meta.iteration}\n")
+            f.write(f"Random Seed:    {best_iteration_meta.random_seed}\n")
+            f.write(f"Groups Used:    {best_result.num_groups_used}\n")
+            f.write(f"Features Used:  {best_result.num_features_used}\n")
+            f.write(f"Model Name:     {best_result.model_name}\n\n")
+            
+            f.write(f"Top Features:\n")
+            f.write(f"------------\n")
+            # Sort features by importance if available
+            sorted_features = sorted(
+                best_result.feature_importance.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )
+            for feature, importance in sorted_features[:10]:  # Top 10 features
+                f.write(f"{feature}: {importance:.4f}\n")
+                
+        logger.info(f"✅ Summary report saved to: {report_path}")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to save summary report: {str(e)}")

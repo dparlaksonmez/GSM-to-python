@@ -1,6 +1,5 @@
 # TODO: Implement unit tests for gsm_run and gsm_main_loop functions
 # TODO: Add support for additional ML models in the modeling stage
-# TODO: Add functionality to visualize intermediate results and final outputs
 
 """
 🧬 GSM_pipeline.py - Main Pipeline Implementation for Gene Analysis
@@ -40,6 +39,7 @@ Notes:
 import sys
 from math import exp
 from pathlib import Path
+import logging
 
 # Add the project root to the Python path
 project_root = Path(__file__).resolve().parents[2]
@@ -72,6 +72,7 @@ from src.data_processing.preliminary_filtering import preliminary_ttest_filter
 from src.data_processing.train_test_splitter import TrainTestValSplitData
 from src.utils import save_results
 from src.utils.save_ranked_groups import save_ranked_groups
+from src.utils.visualization import visualize_f1_scores
 from src.utils.logger import setup_logger  # Add this import at the top with other imports
 import time
 
@@ -92,12 +93,17 @@ def gsm_run(
     n_iterations: int = NUMBER_OF_ITERATIONS,
     model_name: str = MODEL_NAME,
     label_column: str = LABEL_COLUMN_NAME,
+    positive_class_label: str = CLASS_LABELS_POSITIVE,
+    negative_class_label: str = CLASS_LABELS_NEGATIVE,
+    gene_column: str = GENE_COLUMN_NAME,
+    group_column: str = GROUP_COLUMN_NAME,
     normalization_method: str = NORMALIZATION_METHOD,
     initial_feature_filter_size: int = 0,
     initial_seed: int = 42,
     logger_path: Optional[Path] = None,
-    notebook_mode: bool = False
-) -> None:
+    notebook_mode: bool = False,
+    extra_handlers: Optional[List[logging.Handler]] = None
+) -> Path:
     """
     Main entry point for the GSM pipeline execution.
     
@@ -112,6 +118,9 @@ def gsm_run(
         initial_seed: Starting seed for reproducibility
         logger_path: Path where log files will be stored
         notebook_mode: Enable notebook-specific optimizations
+        
+    Returns:
+        Path: The directory where results were saved.
     """
     output_folder_path = Path(OUTPUT_DIR) / time.strftime("%Y_%m_%d-%H_%M_%S")        
     output_folder_path.mkdir(parents=True, exist_ok=True)
@@ -120,6 +129,11 @@ def gsm_run(
 
     logger = setup_logger(str(logger_path),
                           logger_name='GSM_workflow_logger')
+    
+    if extra_handlers:
+        for handler in extra_handlers:
+            logger.addHandler(handler)
+
     logger.info("🚀 Starting GSM pipeline...")
 
     # Run the GSM pipeline
@@ -128,14 +142,14 @@ def gsm_run(
         input_data,
         label_column,
         logger=logger,
-        label_of_negative_class=CLASS_LABELS_NEGATIVE,
-        label_of_positive_class=CLASS_LABELS_POSITIVE,
+        label_of_negative_class=negative_class_label,
+        label_of_positive_class=positive_class_label,
         normalization_method=normalization_method
     )
     logger.info("Data preprocessing completed.")
     group_data_processed = preprocess_grouping_data(group_data, 
-                                                    gene_column_name=GENE_COLUMN_NAME,
-                                                    group_column_name=GROUP_COLUMN_NAME,
+                                                    gene_column_name=gene_column,
+                                                    group_column_name=group_column,
                                                     logger=logger)
     logger.info("Grouping data preprocessing completed.")
     
@@ -156,7 +170,9 @@ def gsm_run(
             model_name=model_name,
             output_dir=output_folder_path,
             iteration=i,
-            logger=logger
+            logger=logger,
+            gene_column=gene_column,
+            group_column=group_column
         )
         
         iteration_results.append(IterationResult(
@@ -179,8 +195,40 @@ def gsm_run(
             experiment_name="modeling_results",
             logger=logger
         )
+
         logger.info("Intermediate results saved.")
+
+    # Visualize the F1 scores across different numbers of groups for all iterations and save the plot.
+    logger.info("📊 Generating visualizations...")
+    viz_data = []
+    for res in iteration_results:
+        for model_res in res.modeling_results:
+            viz_data.append({
+                "Iteration": res.iteration,
+                "NumGroups": model_res.num_groups_used,
+                "F1Score": model_res.f1_score
+            })
+    
+    if viz_data:
+        viz_df = pd.DataFrame(viz_data)
+        visualize_f1_scores(viz_df, output_folder_path, logger)
+    else:
+        logger.warning("⚠️ No data available for visualization.")
+
+    # Identify the best performing iteration and save a summary report to a text file
+    logger.info("📝 Generating summary report...")
+    save_results.save_summary_report(
+        results=[r.modeling_results for r in iteration_results],
+        iteration_metadata=[save_results.IterationMetadata(
+            iteration=r.iteration,
+            random_seed=r.random_seed
+        ) for r in iteration_results],
+        output_dir=output_folder_path,
+        logger=logger
+    )
+
     logger.info("GSM pipeline completed successfully.")
+    return output_folder_path
 
     
 
@@ -190,7 +238,9 @@ def gsm_main_loop(data: pd.DataFrame,
                   model_name: str, 
                   output_dir: Path,
                   iteration: int,
-                  logger) -> List[ModelingResult]:
+                  logger,
+                  gene_column: str = GENE_COLUMN_NAME,
+                  group_column: str = GROUP_COLUMN_NAME) -> List[ModelingResult]:
     """
     Executes one complete iteration of the GSM workflow.
 
@@ -208,6 +258,8 @@ def gsm_main_loop(data: pd.DataFrame,
         output_dir: Directory to save results
         iteration: Current iteration number
         logger: Pipeline logging interface
+        gene_column: Column name for gene identifiers
+        group_column: Column name for group identifiers
 
     Technical Notes:
         - Uses stratified sampling for data splitting
@@ -243,8 +295,8 @@ def gsm_main_loop(data: pd.DataFrame,
         filtered_feature_names = list(train_test_split_data.X_train.columns[filtered_train.selected_features])
     
     group_feature_mappings = run_grouping(grouping_data, 
-                                          gene_column_name=GENE_COLUMN_NAME,
-                                          group_column_name=GROUP_COLUMN_NAME,
+                                          gene_column_name=gene_column,
+                                          group_column_name=group_column,
                                           filtered_features=filtered_feature_names,
                                           logger=logger)
     

@@ -20,23 +20,23 @@ Each stage processes gene data sequentially, transforming raw input into actiona
   3. Break down each stage into smaller helper functions
   4. Create utility functions last
 - Prefer pure functions over classes
-- Use dataclasses for ALL data structures
-- NEVER use dictionaries, tuples, or named tuples - always use dataclasses instead
+- Use dataclasses for data structures and results (not for configuration)
+- NEVER use dictionaries, tuples, or named tuples for data - always use dataclasses instead
 - Do not create additonal file for dataclasses, define them in the same file where they are used
 - If a function returns multiple values, use a dataclass to encapsulate them.
 
 Example of top-down hierarchy:
 ```python
 # Level 1: Main Pipeline (gsm_pipeline.py)
-def gsm_pipeline(input_data: GeneData, config: Config, logger: Logger) -> Results:
+def gsm_pipeline(input_data: GeneData, logger: Logger) -> Results:
     """Main pipeline orchestrating the entire GSM analysis."""
-    filtered_data = filter_genes(input_data, config, logger)
-    groups = group_genes(filtered_data, config, logger)
-    scores = score_groups(groups, config, logger)
-    return train_model(scores, config, logger)
+    filtered_data = filter_genes(input_data, logger)
+    groups = group_genes(filtered_data, logger)
+    scores = score_groups(groups, logger)
+    return train_model(scores, logger)
 
 # Level 2: Major Stage (group.py)
-def group_genes(filtered_data: FilteredData, config: Config, logger: Logger) -> list[GeneGroup]:
+def group_genes(filtered_data: FilteredData, logger: Logger) -> list[GeneGroup]:
     """Major stage function for gene grouping."""
     normalized_data = normalize_expression(filtered_data)
     clusters = perform_clustering(normalized_data)

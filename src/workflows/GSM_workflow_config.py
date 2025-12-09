@@ -26,20 +26,20 @@ from pathlib import Path
 # Get the project directory. This assumes the config file is located at src/workflows/....
 project_dir = Path(__file__).resolve().parents[1]
 
-NUMBER_OF_ITERATIONS = 2
+NUMBER_OF_ITERATIONS = 10
 
 ### TEST DATA ###
-# INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
-# INPUT_GROUP_DATA = "data/test/sampled_test_grouping_data.csv"
+INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
+INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
 # # Group Settings
 GENE_COLUMN_NAME = "feature_id"
 GROUP_COLUMN_NAME = "group_name"
 
 ### REAL DATA ###
-INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
+# INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
 # INPUT_EXPRESSION_DATA = "data/main_data/GDS1962.csv"
 
-INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET.txt"
+# INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET.txt"
 # GROUP_COLUMN_NAME = "group_name"
 # GENE_COLUMN_NAME = "feature_id"
 
