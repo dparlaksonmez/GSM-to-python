@@ -53,6 +53,11 @@ from src.workflows.GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROU
                         SAVE_INTERMEDIATE_RESULTS, TRAIN_TEST_SPLIT_RATIO, MODEL_NAME, LABEL_COLUMN_NAME, NORMALIZATION_METHOD,
                         CLASS_LABELS_NEGATIVE, CLASS_LABELS_POSITIVE, BEST_GROUPS_TO_KEEP)
 
+# Import the config module itself (not only constants) so we can log where it
+# was loaded from at runtime. This is critical for debugging “wrong config file
+# / stale notebook kernel / wrong checkout” issues.
+import src.workflows.GSM_workflow_config as gsm_workflow_config
+
 import pandas as pd
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -129,6 +134,16 @@ def gsm_run(
 
     logger = setup_logger(str(logger_path),
                           logger_name='GSM_workflow_logger')
+
+    if n_iterations < 1:
+        raise ValueError(f"n_iterations must be >= 1, got {n_iterations}")
+
+    logger.info(
+        "GSM config resolved: "
+        f"n_iterations={n_iterations} (default NUMBER_OF_ITERATIONS={NUMBER_OF_ITERATIONS}); "
+        f"config_module={gsm_workflow_config.__file__}; "
+        f"output_dir={OUTPUT_DIR}"
+    )
     
     if extra_handlers:
         for handler in extra_handlers:
