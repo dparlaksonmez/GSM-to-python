@@ -40,6 +40,7 @@ import sys
 from math import exp
 from pathlib import Path
 import logging
+import shutil
 
 # Add the project root to the Python path
 project_root = Path(__file__).resolve().parents[2]
@@ -90,6 +91,17 @@ class IterationResult:
     random_seed: int
     modeling_results: List[ModelingResult]
 
+
+def copy_used_config_file(*, output_dir: Path, logger) -> None:
+    """Copy the exact config module file used at runtime into the output folder."""
+    try:
+        config_source_path = Path(gsm_workflow_config.__file__).resolve()
+        config_dest_path = output_dir / "config_used.py"
+        shutil.copy2(config_source_path, config_dest_path)
+        logger.info(f"Copied used config file to: {config_dest_path}")
+    except Exception as exc:
+        logger.warning(f"Could not copy used config file: {exc}")
+
 def gsm_run(
     input_data: pd.DataFrame,
     group_data: pd.DataFrame,
@@ -127,7 +139,7 @@ def gsm_run(
     Returns:
         Path: The directory where results were saved.
     """
-    output_folder_path = Path(OUTPUT_DIR) / time.strftime("%Y_%m_%d-%H_%M_%S")        
+    output_folder_path = Path(OUTPUT_DIR) / f"gsm_{time.strftime('%Y_%m_%d-%H_%M_%S')}"
     output_folder_path.mkdir(parents=True, exist_ok=True)
     if logger_path is None:
         logger_path = output_folder_path / "gsm_workflow.log"
@@ -144,6 +156,8 @@ def gsm_run(
         f"config_module={gsm_workflow_config.__file__}; "
         f"output_dir={OUTPUT_DIR}"
     )
+
+    copy_used_config_file(output_dir=output_folder_path, logger=logger)
     
     if extra_handlers:
         for handler in extra_handlers:

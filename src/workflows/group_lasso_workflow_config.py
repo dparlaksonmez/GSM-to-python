@@ -62,4 +62,4 @@ class GroupLassoConfig:
     # Proportion of the dataset to be used for testing.
     test_size: float = 0.3
     # Base directory for all output files.
-    output_dir: str = "output/group_lasso"
+    output_dir: str = "output"

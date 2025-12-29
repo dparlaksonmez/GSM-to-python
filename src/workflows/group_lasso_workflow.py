@@ -363,7 +363,8 @@ if __name__ == "__main__":
     
     # Create a unique, timestamped directory for this run to store outputs.
     timestamp = time.strftime("%Y_%m_%d-%H_%M_%S")
-    output_dir = Path(config.output_dir) / f"group_lasso_{timestamp}"
+    project_root = Path(__file__).resolve().parents[2]
+    output_dir = project_root / "output" / f"glasso_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Set up the logger to save logs to a file within the run-specific directory.

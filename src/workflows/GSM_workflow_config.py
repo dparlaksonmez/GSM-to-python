@@ -24,9 +24,10 @@ from pathlib import Path
 # ============================================================================
 
 # Get the project directory. This assumes the config file is located at src/workflows/....
-project_dir = Path(__file__).resolve().parents[1]
+# parents[2] => <project_root>
+project_dir = Path(__file__).resolve().parents[2]
 
-NUMBER_OF_ITERATIONS = 10
+NUMBER_OF_ITERATIONS = 3
 
 ### TEST DATA ###
 INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"

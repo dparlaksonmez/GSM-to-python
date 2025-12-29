@@ -125,8 +125,8 @@ from src.data_processing.data_preprocess import preprocess_data, determine_class
 from src.data_processing.normalization import normalize_data
 from src.data_processing.handle_missing_values import drop_missing_values, fill_missing_values
 
-# Use default values instead of importing from GSM config
-OUTPUT_DIR = "output"
+# Use a project-root anchored output directory (never under src/)
+OUTPUT_DIR = project_root / "output"
 RANDOM_SEED = 42
 
 ##### DATA STRUCTURES #####
@@ -687,7 +687,7 @@ def classification_run(
     
     # Setup output directory
     if output_dir is None:
-        output_dir = Path(OUTPUT_DIR) / time.strftime("classification_%Y_%m_%d-%H_%M_%S")
+        output_dir = Path(OUTPUT_DIR) / f"classif_{time.strftime('%Y_%m_%d-%H_%M_%S')}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Setup logger

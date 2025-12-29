@@ -12,7 +12,18 @@ This project implements a modular data pipeline for bioinformatics analysis usin
 5. **Model**: Train ML models on best-performing groups
 6. **Predict**: Generate predictions using trained models
 
-## Getting Started
+## Documentation & Guides
+
+We have detailed documentation available in the `DOCS/` folder:
+
+- **[Installation Guide (WSL/Linux)](DOCS/INSTALL_WSL.md)**: Step-by-step setup instructions.
+- **[Running the Pipeline](DOCS/RUNNING.md)**: How to use the Web UI and scripts.
+- **[Development Guide](DOCS/DEVELOPMENT.md)**: Project structure and coding standards.
+- **[GitHub Workflow](DOCS/GITHUB_WORKFLOW.md)**: How to contribute, branch, and submit PRs.
+- **[GitHub Copilot Pro Guide](DOCS/COPILOT.md)**: How to install Copilot Pro and use it for coding.
+- **[Troubleshooting](DOCS/TROUBLESHOOTING.md)**: Common fixes for installation and runtime errors.
+
+## Getting Started (Quick)
 
 ### Setup Video Tutorial
 For a visual walkthrough of setting up this project, watch our tutorial video:
@@ -21,33 +32,28 @@ For a visual walkthrough of setting up this project, watch our tutorial video:
 
 **Video Link**: [GSM Pipeline Setup Tutorial](https://www.youtube.com/watch?v=brYpWo7VfK0&feature=youtu.be)
 
-### Setting Up Your Environment
+### Quick Setup
 1. **Clone the repository**:
     ```sh
     git clone https://github.com/shiny-apricot/GSM-to-python.git
     cd GSM-to-python
     ```
 
-2. **Create a virtual environment**:
-   
-   Using venv (Python's built-in virtual environment):
+2. **Install & Run**:
     ```sh
-    # Create a virtual environment named 'venv'
-    python -m venv venv
-    
-    # Activate the virtual environment
-    # On Windows:
-    venv\Scripts\activate
-    
-    # On macOS and Linux:
+    # Create venv
+    python3 -m venv venv
     source venv/bin/activate
+    
+    # Install deps
+    pip install -r dependencies.txt
+    
+    # Run UI
+    streamlit run src/ui/app.py
     ```
 
-   Using conda (if you prefer Anaconda/Miniconda):
-    ```sh
-    # Create a conda environment
-    conda create -n gsm-env python=3.8
-    
+For detailed instructions, please refer to the [Installation Guide](DOCS/INSTALL_WSL.md).
+
     # Activate the conda environment
     conda activate gsm-env
     ```
