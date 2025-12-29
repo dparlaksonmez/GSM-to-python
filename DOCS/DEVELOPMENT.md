@@ -115,7 +115,42 @@ If something breaks, check errors carefully. Most issues are missing packages or
 
 ---
 
-## 7) Asking for help (recommended)
+## 7) Share your changes on GitHub (integrate your code)
+
+If you want your changes to become part of the shared project, you need to push them to GitHub and open a Pull Request.
+
+### VS Code way (recommended)
+
+Important: do **not** work directly on `main`.
+
+Analogy: `main` is the “official lab protocol”. You do your experiments on a separate bench (a branch), then propose an update.
+
+1. Create a new branch (before editing, if possible)
+  - Look at the bottom-left of VS Code: it shows your current branch (often `main`)
+  - Click the branch name
+  - Choose **Create new branch…**
+  - Name it like `yourname-short-task` (example: `yasin-fix-upload`)
+
+2. Make your changes in code
+
+3. Open **Source Control** (left sidebar)
+
+4. Review the changed files (click to see the diff)
+
+5. Stage files with **+** (or **Stage All**)
+
+6. Write a commit message and click **Commit**
+
+7. Click **Sync Changes** / **Push** to send your branch to GitHub
+
+8. Open a **Pull Request** on GitHub (or using the VS Code PR extension)
+
+This process is explained in detail (with screenshots placeholders and fallbacks) in:
+- [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md)
+
+---
+
+## 8) Asking for help (recommended)
 
 If you get stuck, copy:
 - The command you ran
