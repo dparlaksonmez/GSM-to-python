@@ -117,35 +117,88 @@ If something breaks, check errors carefully. Most issues are missing packages or
 
 ## 7) Share your changes on GitHub (integrate your code)
 
-If you want your changes to become part of the shared project, you need to push them to GitHub and open a Pull Request.
+If you want your changes to become part of the shared project, the safe way is:
+**Branch → Commit → Push → Pull Request → Review → Merge**.
 
-### VS Code way (recommended)
+### Why we do it this way (with lab analogies)
+
+If you skip these steps, it’s easy to accidentally break the project for everyone.
+
+- `main` is the **official lab protocol** (the “approved” version).
+- A **branch** is a **separate bench / draft copy** of the protocol.
+  - You can try changes without touching the official protocol.
+  - Everyone can work in parallel without overwriting each other.
+- A **commit** is a **lab notebook entry**: “I changed X because Y”.
+  - Small, clear commits make it easier to understand and undo mistakes.
+- **Push** is **uploading your bench work to the shared freezer (GitHub)**.
+  - It also prevents losing work if your laptop dies.
+- A **Pull Request (PR)** is a **formal request**: “Please review my proposed protocol update.”
+  - It creates a discussion thread, shows the diffs, and allows approvals.
+- **Review** is the **buddy-check** step: another person (or you, later) verifies it makes sense.
+- **Merge** is when your update becomes the **new official protocol** on `main`.
+
+### VS Code way (recommended, step-by-step)
 
 Important: do **not** work directly on `main`.
 
-Analogy: `main` is the “official lab protocol”. You do your experiments on a separate bench (a branch), then propose an update.
+#### Step A — Create a branch (your private bench)
 
-1. Create a new branch (before editing, if possible)
-  - Look at the bottom-left of VS Code: it shows your current branch (often `main`)
-  - Click the branch name
-  - Choose **Create new branch…**
-  - Name it like `yourname-short-task` (example: `yasin-fix-upload`)
+1. Look at the bottom-left of VS Code: it shows your current branch (often `main`)
+2. Click the branch name
+3. Choose **Create new branch…**
+4. Name it like:
+   - `yourname-short-task` (example: `yasin-fix-upload`)
+   - or `feature-short-task` (example: `feature-new-plot`)
 
-2. Make your changes in code
+Rule of thumb: one branch = one idea.
 
-3. Open **Source Control** (left sidebar)
+#### Step B — Make and check your changes
 
-4. Review the changed files (click to see the diff)
+1. Edit files
+2. Run the UI or workflow to ensure it still works (see section 6)
 
-5. Stage files with **+** (or **Stage All**)
+#### Step C — Commit (write a notebook entry)
 
-6. Write a commit message and click **Commit**
+1. Open **Source Control** (left sidebar)
+2. Click files to review the diff
+3. Stage the files that belong to this change:
+   - Click **+** next to a file to stage it
+   - Or use **Stage All** if everything is part of the same change
+4. Write a short commit message in the message box
+   - Good: `Fix upload validation in UI`
+   - Avoid: `update` or `changes`
+5. Click **Commit**
 
-7. Click **Sync Changes** / **Push** to send your branch to GitHub
+If VS Code asks you to configure your name/email, follow the prompt.
 
-8. Open a **Pull Request** on GitHub (or using the VS Code PR extension)
+#### Step D — Push (upload your branch to GitHub)
 
-This process is explained in detail (with screenshots placeholders and fallbacks) in:
+1. In **Source Control**, click **Sync Changes** or **Push**
+2. Sign in to GitHub if prompted
+
+After this, your work is safely on GitHub.
+
+#### Step E — Pull Request (ask for review)
+
+1. Open GitHub in your browser
+2. You will often see a banner suggesting: **Compare & pull request**
+3. Create the PR
+4. In the PR description, write:
+   - What you changed
+   - Why you changed it
+   - How someone can test it
+
+#### Step F — After merge (get the official version back)
+
+Once your PR is merged by a maintainer:
+1. Switch back to `main` (click branch name bottom-left)
+2. Pull the latest `main` (Source Control → **…** → Pull)
+
+Optional cleanup: you can delete your old branch after merge.
+
+### Full GitHub guide
+
+This process is explained in more detail (with screenshot placeholders and terminal fallbacks) in:
 - [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md)
 
 ---
