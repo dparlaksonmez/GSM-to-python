@@ -25,6 +25,11 @@ Each stage processes gene data sequentially, transforming raw input into actiona
 - Do not create additonal file for dataclasses, define them in the same file where they are used
 - If a function returns multiple values, use a dataclass to encapsulate them.
 
+Additional guardrails:
+- Keep functions short (<= 20 lines) with minimal nesting.
+- Use clear, non-technical comments when explaining pipeline logic.
+- Keep output files stable and backward-compatible unless stated.
+
 Example of top-down hierarchy:
 ```python
 # Level 1: Main Pipeline (gsm_pipeline.py)

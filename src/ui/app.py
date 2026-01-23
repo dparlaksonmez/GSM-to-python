@@ -71,19 +71,37 @@ def smart_read_csv(file_input):
             return pd.read_csv(file_input, sep='\t')
 
 class StreamlitLogHandler(logging.Handler):
-    def __init__(self, container):
+    def __init__(self, container, state_key: str):
         super().__init__()
         self.container = container
-        self.text = ""
+        self.state_key = state_key
 
     def emit(self, record):
         msg = self.format(record)
-        self.text += msg + "\n"
-        self.container.code(self.text, language='bash')
+        current = st.session_state.get(self.state_key, "")
+        st.session_state[self.state_key] = current + msg + "\n"
+        log_text = st.session_state[self.state_key].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        self.container.markdown(
+            f"""
+            <div id="log-box" style="height:240px; overflow-y:auto; border:1px solid #ddd; padding:8px; background:#0e1117; color:#e6e6e6; font-family:monospace; white-space:pre-wrap;">
+{log_text}
+            </div>
+            <script>
+            const logBox = document.getElementById('log-box');
+            if (logBox) {{ logBox.scrollTop = logBox.scrollHeight; }}
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
 
 def main():
     st.title("🧬 GSM Bioinformatics Pipeline")
     st.markdown("### Grouping-Scoring-Modeling Analysis Tool")
+
+    if "log_text" not in st.session_state:
+        st.session_state["log_text"] = ""
+    if "last_output_path" not in st.session_state:
+        st.session_state["last_output_path"] = None
     
     # Sidebar for Configuration
     with st.sidebar:
@@ -177,7 +195,10 @@ def main():
                 st.markdown("**Expression Data**")
                 try:
                     df_expr = smart_read_csv(expression_file)
-                    st.dataframe(df_expr.head())
+                    preview_cols = list(df_expr.columns[:12])
+                    if len(df_expr.columns) > 12:
+                        st.caption("Showing first 12 columns for readability.")
+                    st.dataframe(df_expr[preview_cols].head())
                     st.caption(f"Shape: {df_expr.shape}")
                     # Reset file pointer if it's an uploaded file
                     if hasattr(expression_file, 'seek'):
@@ -189,7 +210,10 @@ def main():
                 st.markdown("**Group Data**")
                 try:
                     df_group = smart_read_csv(group_file)
-                    st.dataframe(df_group.head())
+                    preview_cols = list(df_group.columns[:6])
+                    if len(df_group.columns) > 6:
+                        st.caption("Showing first 6 columns for readability.")
+                    st.dataframe(df_group[preview_cols].head())
                     st.caption(f"Shape: {df_group.shape}")
                     # Reset file pointer if it's an uploaded file
                     if hasattr(group_file, 'seek'):
@@ -200,12 +224,14 @@ def main():
         # Run Button
         if st.button("🚀 Run GSM Pipeline"):
             try:
-                # Create a placeholder for logs
-                log_expander = st.expander("📜 Execution Logs", expanded=True)
-                log_placeholder = log_expander.empty()
+                st.session_state["log_text"] = ""
+                st.session_state["last_output_path"] = None
+
+                log_section = st.container()
+                log_placeholder = log_section.empty()
                 
                 # Create handler
-                st_handler = StreamlitLogHandler(log_placeholder)
+                st_handler = StreamlitLogHandler(log_placeholder, "log_text")
                 st_handler.setLevel(logging.INFO)
                 
                 # Create a formatter
@@ -234,37 +260,37 @@ def main():
                         extra_handlers=[st_handler]
                     )
                     
+                    st.session_state["last_output_path"] = output_path
                     st.success(f"Pipeline completed successfully! Results saved to: {output_path}")
-                    
-                    # Display Results
-                    st.markdown("## 📈 Analysis Results")
-                    
-                    # Summary Report
-                    summary_file = output_path / "summary_report.txt"
-                    if summary_file.exists():
-                        with st.expander("📄 Summary Report", expanded=True):
-                            with open(summary_file, 'r') as f:
-                                report_content = f.read()
-                            st.text(report_content)
-                    
-                    # Visualizations
-                    st.markdown("### 📊 Visualizations")
-                    col1, col2 = st.columns(2)
-                    
-                    plot1 = output_path / "f1_scores_across_iterations.png"
-                    plot2 = output_path / "average_f1_scores_by_groups.png"
-                    
-                    with col1:
-                        if plot1.exists():
-                            st.image(str(plot1), caption="F1 Scores across Iterations", use_column_width=True)
-                    
-                    with col2:
-                        if plot2.exists():
-                            st.image(str(plot2), caption="Average F1 Scores by Groups", use_column_width=True)
                             
             except Exception as e:
                 st.error(f"An error occurred during execution: {str(e)}")
                 st.exception(e)
+
+        # Results Section (always below the run button)
+        if st.session_state.get("last_output_path"):
+            output_path = st.session_state["last_output_path"]
+            st.markdown("## 📈 Analysis Results")
+
+            summary_file = output_path / "summary_report.txt"
+            if summary_file.exists():
+                with st.expander("📄 Summary Report", expanded=True):
+                    with open(summary_file, 'r') as f:
+                        report_content = f.read()
+                    st.text(report_content)
+
+            st.markdown("### 📊 Visualizations")
+            col1, col2 = st.columns(2)
+            plot1 = output_path / "f1_scores_across_iterations.png"
+            plot2 = output_path / "average_f1_scores_by_groups.png"
+
+            with col1:
+                if plot1.exists():
+                    st.image(str(plot1), caption="F1 Scores across Iterations", use_column_width=True)
+
+            with col2:
+                if plot2.exists():
+                    st.image(str(plot2), caption="Average F1 Scores by Groups", use_column_width=True)
                 
     else:
         st.warning("👈 Please select or upload both Expression Data and Group Data files in the sidebar to proceed.")

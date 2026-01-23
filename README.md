@@ -23,6 +23,9 @@ We have detailed documentation available in the `DOCS/` folder:
 - **[GitHub Copilot Pro Guide](DOCS/COPILOT.md)**: How to install Copilot Pro and use it for coding.
 - **[Troubleshooting](DOCS/TROUBLESHOOTING.md)**: Common fixes for installation and runtime errors.
 
+## VS Code Extensions
+Recommended extensions for this repo are listed in [EXTENSIONS.txt](EXTENSIONS.txt).
+
 ## Getting Started (Quick)
 
 ### Setup Video Tutorial
@@ -39,29 +42,28 @@ For a visual walkthrough of setting up this project, watch our tutorial video:
     cd GSM-to-python
     ```
 
-2. **Install & Run**:
+2. **Create a virtual environment**:
     ```sh
-    # Create venv
     python3 -m venv venv
     source venv/bin/activate
-    
-    # Install deps
-    pip install -r dependencies.txt
-    
-    # Run UI
-    streamlit run src/ui/app.py
     ```
 
-For detailed instructions, please refer to the [Installation Guide](DOCS/INSTALL_WSL.md).
-
-    # Activate the conda environment
-    conda activate gsm-env
-    ```
-
-3. **Install the required dependencies**:
+3. **Install dependencies**:
     ```sh
     pip install -r dependencies.txt
     ```
+
+4. **Run the pipeline**:
+    ```sh
+    python src/workflows/GSM_workflow.py
+    ```
+
+Optional UI (if present):
+```sh
+streamlit run src/ui/app.py
+```
+
+For detailed setup, see the [Installation Guide](DOCS/INSTALL_WSL.md).
 ## Usage
 
 ### Running from Command Line
@@ -82,6 +84,16 @@ For detailed instructions, please refer to the [Installation Guide](DOCS/INSTALL
     ```
     python -m src.workflows.GSM_workflow
     ```
+
+### Outputs
+Each run creates a timestamped folder under `output/` containing:
+- `gsm_workflow.log` (run logs)
+- `ranked_groups_all_iterations.xlsx`
+- `ranked_features_all_iterations.xlsx`
+- `modeling_results_all_iterations.json`
+- `summary_report.txt`
+
+If an explanation file is present for an output, it will be placed alongside it.
 
 ## Documentation
 - Maintain comprehensive docstrings
