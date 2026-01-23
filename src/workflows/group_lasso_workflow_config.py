@@ -43,7 +43,7 @@ class GroupLassoConfig:
     # Higher values lead to more individual features being removed from the selected groups.
     l1_reg: float = 0.05
     # The maximum number of iterations to perform.
-    n_iter: int = 1000
+    n_iter: int = 500
     # The convergence tolerance. The optimization will stop once the norm of the change in coefficients is less than this.
     tol: float = 1e-5
     # How to scale the group-wise regularization coefficients.

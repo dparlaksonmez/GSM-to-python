@@ -1,22 +1,151 @@
 feature_id	group_name
-A1BG	Glioblastoma
-A1BG	Meningioma
-A1BG	Subependymal Giant Cell Astrocytoma
-A1BG	Glioblastoma Multiforme
-A1BG	Liver carcinoma
-A2M	Astrocytoma
-A2M	Malignant tumor of colon
-A2M	liposarcoma
-A2M	melanoma
-A2M	Myelomonocytic leukemia
-A2M	Hepatoblastoma Caused By Somatic Mutation
-A2M	Childhood Astrocytoma
-NAT1	Malignant neoplasm of urinary bladder
-NAT1	Bladder Neoplasm
-NAT1	Malignant neoplasm of breast
-NAT1	Malignant tumor of colon
-NAT1	Malignant neoplasm of larynx
-NAT1	Squamous cell carcinoma of the head and neck
-NAT1	Adenoma of large intestine
-NAT1	Chronic Lymphocytic Leukemia/Small Lymphocytic Lymphoma
-NAT1	Primary malignant neoplasm of lung
+ACACA	Adenoid cystic breast carcinoma
+AFP	Acinar cell carcinoma of pancreas
+AKT1	Adenosquamous cell lung cancer
+ALK	Adenosquamous cell lung cancer
+ALK	Anaplastic large B-cell lymphoma
+ALK	ALK positive large B-cell lymphoma
+AMBN	Adenoameloblastoma
+APC	Acinar cell carcinoma of pancreas
+ARR3	Acute lymphoblastic leukemia recurrent
+BCL2	Adenoameloblastoma
+BCL2A1	Anaplastic large B-cell lymphoma
+BCL6	AIDS-Related Non-Hodgkin Lymphoma
+BGN	Adenoameloblastoma
+BMP2	Adenoameloblastoma
+BMP4	Adenoameloblastoma
+BRCA1	Acinar cell carcinoma of pancreas
+BRAF	Adenosquamous cell lung cancer
+BRCA2	Acinar cell carcinoma of pancreas
+CASR	Acute lymphoblastic leukemia recurrent
+CD86	AIDS-Related Non-Hodgkin Lymphoma
+CD34	Acute myeloid leukemia with mutated NPM1
+CD44	Adenocarcinoma of ampulla of Vater
+CDKN1A	Adenoameloblastoma
+CDKN2A	Acinar cell carcinoma of pancreas
+CDKN2A	Adenoameloblastoma
+CDX2	Adenocarcinoma of appendix
+CDX2	Adenocarcinoma of ampulla of Vater
+CEACAM5	Acrospiroma
+CEBPB	Anaplastic large B-cell lymphoma
+CPA3	Acute myeloid leukemia with mutated NPM1
+CTNNB1	Acinar cell carcinoma of pancreas
+CTNNB1	Adenoameloblastoma
+CXADR	Acute lymphoblastic leukemia recurrent
+DNMT3A	Acute myeloid leukemia with mutated NPM1
+EGFR	Adenosquamous cell lung cancer
+EGFR	Anaplastic large B-cell lymphoma
+EGFR	Adenocarcinoma of ampulla of Vater
+EGFR	ADRENOCORTICAL CARCINOMA, HEREDITARY
+EGFR	Acrospiroma
+CELA1	Acinar cell carcinoma of pancreas
+ERBB2	Adenosquamous cell lung cancer
+ERBB2	Adenoid cystic breast carcinoma
+ESR1	Adenoid cystic breast carcinoma
+EWSR1	Acrospiroma
+FLT3	Acute myeloid leukemia with mutated NPM1
+GJA8	ADRENOCORTICAL CARCINOMA, HEREDITARY
+GNAS	Adenocarcinoma of ampulla of Vater
+GSTM1	ADRENOCORTICAL CARCINOMA, HEREDITARY
+GSTP1	ADRENOCORTICAL CARCINOMA, HEREDITARY
+GSTT1	ADRENOCORTICAL CARCINOMA, HEREDITARY
+HGF	Acanthomatous ameloblastoma
+HLA-A	Acute myeloid leukemia with mutated NPM1
+FOXA1	Adenosquamous cell lung cancer
+HRAS	Acanthomatous ameloblastoma
+IDH1	Acute myeloid leukemia with mutated NPM1
+IFNG	ADRENOCORTICAL CARCINOMA, HEREDITARY
+IL6	AIDS-Related Non-Hodgkin Lymphoma
+ITIH4	AIDS-Related Non-Hodgkin Lymphoma
+KIF5B	Adenosquamous cell lung cancer
+KIT	Adenocarcinoma of ampulla of Vater
+KIT	Acrospiroma
+KRAS	Adenocarcinoma of appendix
+KRAS	Adenosquamous cell lung cancer
+KRAS	Adenoameloblastoma
+KRAS	Adenocarcinoma of ampulla of Vater
+KRT7	ADRENOCORTICAL CARCINOMA, HEREDITARY
+KRT13	ADRENOCORTICAL CARCINOMA, HEREDITARY
+MDM2	Adenoameloblastoma
+MDM2	Acanthomatous ameloblastoma
+MDM2	ADRENOCORTICAL CARCINOMA, HEREDITARY
+MLF1	Acute myeloid leukemia with multilineage dysplasia
+MME	Acrospiroma
+MPO	Acute myeloid leukemia with multilineage dysplasia
+MUC5AC	Adenocarcinoma of ampulla of Vater
+MYB	Adenoid cystic breast carcinoma
+MYCN	Anaplastic large B-cell lymphoma
+NFIB	Adenoid cystic breast carcinoma
+NPM1	Anaplastic large B-cell lymphoma
+NPM1	ALK positive large B-cell lymphoma
+NPM1	Acute myeloid leukemia with mutated NPM1
+PCNA	Adenoameloblastoma
+PDGFRA	Adenocarcinoma of ampulla of Vater
+ABCB1	AIDS-Related Non-Hodgkin Lymphoma
+PIK3CA	Adenosquamous cell lung cancer
+PIK3CA	Adenoid cystic breast carcinoma
+PRKAR1A	Acute lymphoblastic leukemia recurrent
+PTEN	Adenosquamous cell lung cancer
+PTEN	Adenoid cystic breast carcinoma
+PTEN	Adenocarcinoma of ampulla of Vater
+PTN	Anaplastic large B-cell lymphoma
+RET	Adenosquamous cell lung cancer
+RNASE1	Adenocarcinoma of ampulla of Vater
+ROS1	Anaplastic large B-cell lymphoma
+SATB1	Anaplastic large B-cell lymphoma
+SDC1	Anaplastic large B-cell lymphoma
+SOX2	Adenocarcinoma of ampulla of Vater
+SPG7	Acute lymphoblastic leukemia recurrent
+STAT3	ALK positive large B-cell lymphoma
+STK11	Acinar cell carcinoma of pancreas
+TFRC	AIDS-Related Non-Hodgkin Lymphoma
+TGFB1	AIDS-Related Non-Hodgkin Lymphoma
+TLR2	AIDS-Related Non-Hodgkin Lymphoma
+TNF	AIDS-Related Non-Hodgkin Lymphoma
+TP53	Adenocarcinoma of appendix
+TP53	Acinar cell carcinoma of pancreas
+TP53	Adenoameloblastoma
+TP53	Adenoid cystic breast carcinoma
+TP53	ADRENOCORTICAL CARCINOMA, HEREDITARY
+TWIST1	Adenocarcinoma of appendix
+VEGFA	Adenocarcinoma of appendix
+VHL	Adenocarcinoma of ampulla of Vater
+VIM	Acrospiroma
+PAX8	Acrospiroma
+HMGA2	Adenocarcinoma of ampulla of Vater
+AXIN2	ADRENOCORTICAL CARCINOMA, HEREDITARY
+PROM1	Acute myeloid leukemia with multilineage dysplasia
+SQSTM1	ALK positive large B-cell lymphoma
+BCL10	Acinar cell carcinoma of pancreas
+PDLIM7	AIDS-Related Non-Hodgkin Lymphoma
+TCEAL1	Adenoameloblastoma
+NAPSA	Acrospiroma
+SDC3	Anaplastic large B-cell lymphoma
+BMS1	Adenoid cystic breast carcinoma
+FAM30A	Adenoameloblastoma
+NR1I3	Acute lymphoblastic leukemia recurrent
+TRIM13	Acute lymphoblastic leukemia recurrent
+CPQ	Adenocarcinoma of ampulla of Vater
+MMRN1	Adenoameloblastoma
+TBC1D9	AIDS-Related Non-Hodgkin Lymphoma
+CRTC1	Acrospiroma
+NSG1	Adenoameloblastoma
+DKK4	ADRENOCORTICAL CARCINOMA, HEREDITARY
+EML4	Anaplastic large B-cell lymphoma
+CD274	Adenocarcinoma of appendix
+CD274	Adenosquamous cell lung cancer
+CD274	AIDS-Related Non-Hodgkin Lymphoma
+CD274	ADRENOCORTICAL CARCINOMA, HEREDITARY
+IGK	ALK positive large B-cell lymphoma
+RMDN1	Anaplastic large B-cell lymphoma
+RTEL1	AIDS-Related Non-Hodgkin Lymphoma
+TET2	Acute myeloid leukemia with multilineage dysplasia
+TET2	Acute myeloid leukemia with mutated NPM1
+RMDN3	Anaplastic large B-cell lymphoma
+SYBU	Anaplastic large B-cell lymphoma
+AICDA	AIDS-Related Non-Hodgkin Lymphoma
+CRTC3	Acrospiroma
+MAML2	Acrospiroma
+RMDN2	Anaplastic large B-cell lymphoma
+MIR155	Anaplastic large B-cell lymphoma
+MIR21	Adenocarcinoma of ampulla of Vater

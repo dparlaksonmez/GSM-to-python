@@ -4,6 +4,7 @@ ARCHIVE/
 *.knwf
 .cursorrules
 output/
+*ARCHIVE*/
 
 data/grouping_data/*
 data/main_data

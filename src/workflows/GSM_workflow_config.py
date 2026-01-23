@@ -32,14 +32,13 @@ NUMBER_OF_ITERATIONS = 3
 ### TEST DATA ###
 INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
 INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
-# # Group Settings
+# Group Settings
 GENE_COLUMN_NAME = "feature_id"
 GROUP_COLUMN_NAME = "group_name"
 
 ### REAL DATA ###
 # INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
 # INPUT_EXPRESSION_DATA = "data/main_data/GDS1962.csv"
-
 # INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET.txt"
 # GROUP_COLUMN_NAME = "group_name"
 # GENE_COLUMN_NAME = "feature_id"

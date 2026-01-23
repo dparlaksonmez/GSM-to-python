@@ -7,7 +7,6 @@ Purpose:
 
 from dataclasses import dataclass
 from typing import List
-from numpy import append
 import pandas as pd
 from pathlib import Path
 import logging
@@ -19,6 +18,7 @@ class FeatureRankingOutput:
     feature_scores: List
     timestamp: str
     model_name: str
+    iteration: int
 
 def save_ranked_features(
     ranking_data: FeatureRankingOutput,
@@ -59,17 +59,17 @@ def save_ranked_features(
         # Add metadata
         results_df['model'] = ranking_data.model_name
         results_df['timestamp'] = ranking_data.timestamp
+        results_df['iteration'] = ranking_data.iteration
 
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Save to Excel without formatting
-        # Check if file exists to determine write mode
+        # Save to a single sheet, appending rows across iterations
         if output_path.exists():
-            with pd.ExcelWriter(output_path, mode='a', if_sheet_exists='replace') as writer:
-                results_df.to_excel(writer, sheet_name='Ranked Features', index=False)
-        else:
-            results_df.to_excel(output_path, sheet_name='Ranked Features', index=False)
+            existing_df = pd.read_excel(output_path)
+            results_df = pd.concat([existing_df, results_df], ignore_index=True)
+
+        results_df.to_excel(output_path, sheet_name='Ranked Features', index=False)
         
         logger.info(f"✅ Successfully saved {len(results_df)} ranked features to Excel")
 

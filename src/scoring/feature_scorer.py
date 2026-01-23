@@ -21,6 +21,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import mutual_info_classif
 from sklearn.metrics import f1_score
+from tqdm import tqdm
 import logging
 
 @dataclass
@@ -73,18 +74,23 @@ def score_features(
             raise ValueError("Number of features doesn't match feature names")
 
         logger.info(f"📊 Scoring {len(feature_names)} features...")
-        
-        # Calculate mutual information scores
+
+        logger.info("⏳ Computing mutual information scores...")
         mutual_info = mutual_info_classif(data_x, labels)
-        
-        # Initialize random forest for importance calculation
+
+        logger.info("⏳ Training random forest for feature importance...")
         rf = RandomForestClassifier(n_estimators=100, random_state=42)
         rf.fit(data_x, labels)
         importance_scores = rf.feature_importances_
 
         # Score each feature individually
         feature_scores = []
-        for idx, feature in enumerate(feature_names):
+        for idx, feature in tqdm(
+            enumerate(feature_names),
+            total=len(feature_names),
+            desc="📊 Scoring features",
+            unit="feature"
+        ):
             # Calculate F1 score for binary classification based on this feature
             feature_data = data_x.iloc[:, idx]
             threshold = feature_data.median()

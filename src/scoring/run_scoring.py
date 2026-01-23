@@ -37,7 +37,9 @@ def run_scoring(
     output_dir: Path,
     iteration: int,
     logger,
-    cross_validation_folds: int = DEFAULT_CROSS_VALIDATION_FOLDS
+    cross_validation_folds: int = DEFAULT_CROSS_VALIDATION_FOLDS,
+    feature_scores: Optional[List[FeatureScore]] = None,
+    save_feature_scores: bool = False
 ) -> ScoringResults:
     """
     # TODO: Parallelize the scoring process for groups
@@ -57,8 +59,8 @@ def run_scoring(
         ScoringResults containing ranked groups and feature scores
     """
     try:
-        # Score individual features
-        feature_scores = score_all_features(data_x, labels, logger)
+        if feature_scores is None:
+            feature_scores = score_all_features(data_x, labels, logger)
         
         # Process groups
         processed_group_scores = []
@@ -73,16 +75,19 @@ def run_scoring(
         logger.info(f"🔍 Found {len(labels.unique())} unique labels in the dataset")
 
         logger.info("🔄 Starting group scoring process...")
+        feature_map = {col.lower(): col for col in data_x.columns}
+        data_columns_set = set(data_x.columns)
+
         for current_group in tqdm(groups, desc="📊 Scoring groups"):
-            # Try to match features by normalizing both lists (convert to lowercase)
-            feature_map = {col.lower(): col for col in data_x.columns}
             available_features = []
             
             for feature in current_group.feature_list:
-                if feature in data_x.columns:
+                if feature in data_columns_set:
                     available_features.append(feature)
-                elif feature.lower() in feature_map:
-                    available_features.append(feature_map[feature.lower()])
+                else:
+                    lower_feature = feature.lower()
+                    if lower_feature in feature_map:
+                        available_features.append(feature_map[lower_feature])
             
             # logger.info(f"🔍 Scoring group: {current_group.group_name}... Found {len(available_features)} valid features for scoring")
             # this log takes too much space in the log file...
@@ -122,8 +127,8 @@ def run_scoring(
         # Save results
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Save ranked groups
-        groups_output = output_dir / f"ranked_groups_iteration_{iteration}.xlsx"
+        # Save ranked groups (append across iterations)
+        groups_output = output_dir / "ranked_groups_all_iterations.xlsx"
         save_ranked_groups(
             str(groups_output),
             ranked_metrics,
@@ -131,15 +136,17 @@ def run_scoring(
             logger=logger
         )
 
-        # Save ranked features
-        features_output = output_dir / f"ranked_features_iteration_{iteration}.xlsx"
-        ranking_output = FeatureRankingOutput(
-            output_path=features_output,
-            feature_scores=feature_scores,
-            timestamp=timestamp,
-            model_name=model_name
-        )
-        save_ranked_features(ranking_output, logger)
+        # Save ranked features (only when requested)
+        if save_feature_scores:
+            features_output = output_dir / "ranked_features_all_iterations.xlsx"
+            ranking_output = FeatureRankingOutput(
+                output_path=features_output,
+                feature_scores=feature_scores,
+                timestamp=timestamp,
+                model_name=model_name,
+                iteration=iteration
+            )
+            save_ranked_features(ranking_output, logger)
         
         return ScoringResults(
             ranked_groups=ranked_metrics,

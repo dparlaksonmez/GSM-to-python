@@ -37,7 +37,6 @@ Notes:
 
 ##### Imports #####
 import sys
-from math import exp
 from pathlib import Path
 import logging
 import shutil
@@ -60,24 +59,21 @@ from src.workflows.GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROU
 import src.workflows.GSM_workflow_config as gsm_workflow_config
 
 import pandas as pd
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 import numpy as np
 import random
 
 # Updated imports to use correct module paths
-from src.grouping.grouping_utils import create_group_feature_mapping, GroupFeatureMappingData
 from src.grouping.run_grouping import run_grouping
-from src.scoring.run_scoring import run_scoring
-from src.modeling.run_modeling import ModelingResult, run_modeling
+from src.scoring.run_scoring import run_scoring, score_all_features
+from src.scoring.feature_scorer import FeatureScore
+from src.modeling.run_modeling import ModelingResult, run_modeling, select_features_from_top_groups
 from src.data_processing.data_loader import load_input_file, load_group_file
 from src.data_processing.data_preprocess import preprocess_data, preprocess_grouping_data
-from src.data_processing.normalization import normalize_data
 from src.data_processing.train_test_splitter import split_data
 from src.data_processing.preliminary_filtering import preliminary_ttest_filter
-from src.data_processing.train_test_splitter import TrainTestValSplitData
 from src.utils import save_results
-from src.utils.save_ranked_groups import save_ranked_groups
 from src.utils.visualization import visualize_f1_scores
 from src.utils.logger import setup_logger  # Add this import at the top with other imports
 import time
@@ -92,6 +88,30 @@ class IterationResult:
     modeling_results: List[ModelingResult]
 
 
+@dataclass
+class ConfigLogItem:
+    """Single config item for log output."""
+    name: str
+    value: str
+
+
+@dataclass
+class FeatureCountResult:
+    """Feature count result for a specific top-N group selection."""
+    top_group_count: int
+    unique_feature_count: int
+
+
+@dataclass
+class AdjustedGroupSelection:
+    """Final group selection after enforcing feature diversity."""
+    requested_top_groups: int
+    used_top_groups: int
+    requested_feature_count: int
+    used_feature_count: int
+    baseline_feature_count: int
+
+
 def copy_used_config_file(*, output_dir: Path, logger) -> None:
     """Copy the exact config module file used at runtime into the output folder."""
     try:
@@ -101,6 +121,102 @@ def copy_used_config_file(*, output_dir: Path, logger) -> None:
         logger.info(f"Copied used config file to: {config_dest_path}")
     except Exception as exc:
         logger.warning(f"Could not copy used config file: {exc}")
+
+
+def build_config_log_items() -> List[ConfigLogItem]:
+    """Build the list of important config variables for logging."""
+    return [
+        ConfigLogItem("INPUT_EXPRESSION_DATA", str(gsm_workflow_config.INPUT_EXPRESSION_DATA)),
+        ConfigLogItem("INPUT_GROUP_DATA", str(gsm_workflow_config.INPUT_GROUP_DATA)),
+        ConfigLogItem("OUTPUT_DIR", str(gsm_workflow_config.OUTPUT_DIR)),
+        ConfigLogItem("NUMBER_OF_ITERATIONS", str(gsm_workflow_config.NUMBER_OF_ITERATIONS)),
+        ConfigLogItem("TRAIN_TEST_SPLIT_RATIO", str(gsm_workflow_config.TRAIN_TEST_SPLIT_RATIO)),
+        ConfigLogItem("MODEL_NAME", str(gsm_workflow_config.MODEL_NAME)),
+        ConfigLogItem("LABEL_COLUMN_NAME", str(gsm_workflow_config.LABEL_COLUMN_NAME)),
+        ConfigLogItem("NORMALIZATION_METHOD", str(gsm_workflow_config.NORMALIZATION_METHOD)),
+        ConfigLogItem("CLASS_LABELS_POSITIVE", str(gsm_workflow_config.CLASS_LABELS_POSITIVE)),
+        ConfigLogItem("CLASS_LABELS_NEGATIVE", str(gsm_workflow_config.CLASS_LABELS_NEGATIVE)),
+        ConfigLogItem("RANDOM_SEED", str(gsm_workflow_config.RANDOM_SEED)),
+        ConfigLogItem("CROSS_VALIDATION_FOLDS", str(gsm_workflow_config.CROSS_VALIDATION_FOLDS)),
+        ConfigLogItem("INITIAL_FEATURE_FILTER_SIZE", str(gsm_workflow_config.INITIAL_FEATURE_FILTER_SIZE)),
+        ConfigLogItem("TTEST_THRESHOLD", str(gsm_workflow_config.TTEST_THRESHOLD)),
+        ConfigLogItem("BEST_GROUPS_TO_KEEP", str(gsm_workflow_config.BEST_GROUPS_TO_KEEP)),
+        ConfigLogItem("SAVE_INTERMEDIATE_RESULTS", str(gsm_workflow_config.SAVE_INTERMEDIATE_RESULTS)),
+    ]
+
+
+def log_config_values(*, logger) -> None:
+    """Log important configuration values with uppercase keys."""
+    logger.info("##### CONFIGURATION (IMPORTANT VARIABLES) #####")
+    for item in build_config_log_items():
+        logger.info(f"{item.name}={item.value}")
+
+
+def count_unique_features_for_top_groups(
+    *,
+    group_ranks,
+    group_feature_mapping,
+    top_n_groups: int,
+    data_columns,
+    logger
+) -> FeatureCountResult:
+    """Count valid unique features for the top-N groups."""
+    feature_result = select_features_from_top_groups(
+        group_ranks,
+        group_feature_mapping,
+        top_n_groups,
+        logger
+    )
+    available = [f for f in feature_result.selected_features if f in data_columns]
+    return FeatureCountResult(top_group_count=top_n_groups, unique_feature_count=len(available))
+
+
+def expand_groups_until_feature_increase(
+    *,
+    requested_top_groups: int,
+    group_ranks,
+    group_feature_mapping,
+    data_columns,
+    baseline_feature_count: int,
+    logger
+) -> AdjustedGroupSelection:
+    """Increase top-N groups until features increase vs. the baseline or groups are exhausted."""
+    max_groups = len(group_ranks)
+    base = count_unique_features_for_top_groups(
+        group_ranks=group_ranks,
+        group_feature_mapping=group_feature_mapping,
+        top_n_groups=min(requested_top_groups, max_groups),
+        data_columns=data_columns,
+        logger=logger
+    )
+    if base.unique_feature_count > baseline_feature_count:
+        return AdjustedGroupSelection(
+            requested_top_groups=base.top_group_count,
+            used_top_groups=base.top_group_count,
+            requested_feature_count=base.unique_feature_count,
+            used_feature_count=base.unique_feature_count,
+            baseline_feature_count=baseline_feature_count
+        )
+    current = base
+    while current.top_group_count < max_groups:
+        candidate = count_unique_features_for_top_groups(
+            group_ranks=group_ranks,
+            group_feature_mapping=group_feature_mapping,
+            top_n_groups=current.top_group_count + 1,
+            data_columns=data_columns,
+            logger=logger
+        )
+        if candidate.unique_feature_count > baseline_feature_count:
+            current = candidate
+            break
+        current = candidate
+    return AdjustedGroupSelection(
+        requested_top_groups=base.top_group_count,
+        used_top_groups=current.top_group_count,
+        requested_feature_count=base.unique_feature_count,
+        used_feature_count=current.unique_feature_count,
+        baseline_feature_count=baseline_feature_count
+    )
 
 def gsm_run(
     input_data: pd.DataFrame,
@@ -157,6 +273,8 @@ def gsm_run(
         f"output_dir={OUTPUT_DIR}"
     )
 
+    log_config_values(logger=logger)
+
     copy_used_config_file(output_dir=output_folder_path, logger=logger)
     
     if extra_handlers:
@@ -181,6 +299,16 @@ def gsm_run(
                                                     group_column_name=group_column,
                                                     logger=logger)
     logger.info("Grouping data preprocessing completed.")
+
+    logger.info("🎯 Scoring features once (shared across iterations)...")
+    feature_data_x = data_preprocessed.drop(columns=[label_column])
+    feature_labels = data_preprocessed[label_column]
+    precomputed_feature_scores: List[FeatureScore] = score_all_features(
+        feature_data_x,
+        feature_labels,
+        logger
+    )
+    logger.info("✅ Feature scoring completed once.")
     
     iteration_results: List[IterationResult] = []
     # Changed from range(n_iterations) to range(1, n_iterations + 1)
@@ -201,7 +329,9 @@ def gsm_run(
             iteration=i,
             logger=logger,
             gene_column=gene_column,
-            group_column=group_column
+            group_column=group_column,
+            precomputed_feature_scores=precomputed_feature_scores,
+            save_feature_scores=(i == 1)
         )
         
         iteration_results.append(IterationResult(
@@ -269,7 +399,9 @@ def gsm_main_loop(data: pd.DataFrame,
                   iteration: int,
                   logger,
                   gene_column: str = GENE_COLUMN_NAME,
-                  group_column: str = GROUP_COLUMN_NAME) -> List[ModelingResult]:
+                  group_column: str = GROUP_COLUMN_NAME,
+                  precomputed_feature_scores: Optional[List[FeatureScore]] = None,
+                  save_feature_scores: bool = False) -> List[ModelingResult]:
     """
     Executes one complete iteration of the GSM workflow.
 
@@ -339,7 +471,9 @@ def gsm_main_loop(data: pd.DataFrame,
                                 groups=group_feature_mappings,
                                 output_dir=output_dir,
                                 iteration=iteration,
-                                logger=logger)
+                                logger=logger,
+                                feature_scores=precomputed_feature_scores,
+                                save_feature_scores=save_feature_scores)
 
     # Get ranked groups from scoring results
     ranked_groups = scoring_results.ranked_groups
@@ -349,9 +483,43 @@ def gsm_main_loop(data: pd.DataFrame,
     logger.info("🤖 Training and evaluating models...")
     modeling_result_list = []
     
-    # Start with BEST_GROUPS_TO_KEEP groups and decrease to 1
-    for i in range(BEST_GROUPS_TO_KEEP, 0, -1):
-        logger.info(f"Training model with top {i} groups...")
+    # Start with top 1 group and increase to BEST_GROUPS_TO_KEEP
+    if not ranked_groups:
+        logger.warning("⚠️ No ranked groups available for modeling.")
+        return modeling_result_list
+
+    max_group_count = min(BEST_GROUPS_TO_KEEP, len(ranked_groups))
+    previous_feature_count = 0
+    for requested_groups in range(1, max_group_count + 1):
+        selection = expand_groups_until_feature_increase(
+            requested_top_groups=requested_groups,
+            group_ranks=ranked_groups,
+            group_feature_mapping=group_feature_mappings,
+            data_columns=train_test_split_data.X_train.columns,
+            baseline_feature_count=previous_feature_count,
+            logger=logger
+        )
+
+        step_label = f"Step {requested_groups}/{max_group_count}"
+        if selection.used_top_groups == selection.requested_top_groups:
+            logger.info(
+                f"{step_label}: using top {selection.used_top_groups} groups. "
+                f"Unique features: {selection.baseline_feature_count} → {selection.used_feature_count}."
+            )
+        elif selection.used_feature_count > selection.baseline_feature_count:
+            logger.info(
+                f"{step_label}: top {selection.requested_top_groups} groups added no new features "
+                f"(still {selection.baseline_feature_count}). Expanded to top "
+                f"{selection.used_top_groups} groups to reach {selection.used_feature_count} unique features."
+            )
+        else:
+            logger.warning(
+                f"{step_label}: top {selection.requested_top_groups} groups added no new features "
+                f"(still {selection.baseline_feature_count}). Even after expanding to "
+                f"{selection.used_top_groups} groups, the feature count stayed the same."
+            )
+
+        logger.info(f"Training model with top {selection.used_top_groups} groups...")
         
         # Run modeling with decreasing number of top groups
         modeling_result = run_modeling(
@@ -362,12 +530,18 @@ def gsm_main_loop(data: pd.DataFrame,
             group_ranks=ranked_groups,
             group_feature_mapping=group_feature_mappings,
             model_name=model_name,
-            top_n_groups=i,  # Use i top groups
+            top_n_groups=selection.used_top_groups,
             logger=logger
         )
         modeling_result_list.append(modeling_result)
+
+        if modeling_result.num_features_used > previous_feature_count:
+            previous_feature_count = modeling_result.num_features_used
         
-        logger.info(f"✅ Model with top {i} groups - F1 score: {modeling_result.f1_score:.4f}")
+        logger.info(
+            f"✅ Model with top {modeling_result.num_groups_used} groups - "
+            f"F1 score: {modeling_result.f1_score:.4f}"
+        )
 
     logger.info("Modeling completed successfully.")
     return modeling_result_list

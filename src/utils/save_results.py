@@ -23,6 +23,13 @@ class IterationMetadata:
     iteration: int
     random_seed: int
 
+
+@dataclass
+class IterationResultsPayload:
+    """Serializable payload for a single iteration of results."""
+    metadata: IterationMetadata
+    results: List[ModelingResult]
+
 def setup_save_directory(base_dir: Path, logger: logging.Logger) -> Path:
     """Create and verify the save directory."""
     try:
@@ -38,10 +45,10 @@ def create_modeling_statistics_all_iterations_df(results: List[List[ModelingResu
     stats_data = []
     
     for iteration_idx, result_group in enumerate(results):
-        for group_idx, result in enumerate(result_group):
+        for result in result_group:
             stats_data.append({
                 'Iteration': iteration_idx + 1,
-                'Group Count': len(result_group) - group_idx,
+                'Group Count': result.num_groups_used,
                 'Feature Count': result.num_features_used,
                 'Accuracy': result.accuracy,
                 'Precision': result.precision,
@@ -64,11 +71,11 @@ def create_modeling_statistics_averaged_df(results: List[List[ModelingResult]]) 
     stats_by_group_count = {}
     
     for iteration_results in results:
-        for group_idx, result in enumerate(iteration_results):
-            group_count = len(iteration_results) - group_idx
+        for result in iteration_results:
+            group_count = result.num_groups_used
             if group_count not in stats_by_group_count:
                 stats_by_group_count[group_count] = []
-            
+
             stats_by_group_count[group_count].append({
                 'Feature Count': result.num_features_used,
                 'Accuracy': result.accuracy,
@@ -174,34 +181,21 @@ def save_modeling_results(
     # No need to copy a separate config.py file
     
     try:
-        # Save detailed results
+        # Save detailed results in a single combined file
+        payloads = []
         for iteration_idx, result_group in enumerate(results):
-            metadata = asdict(iteration_metadata[iteration_idx])
-            
-            # Create results dictionary with just the basic metadata
-            results_dict = {
-                'metadata': {
-                    'iteration': metadata['iteration'],
-                    'random_seed': metadata['random_seed']
-                },
-                'results': {}
-            }
-            
-            # Add each group's results
-            for idx, result in enumerate(result_group):
-                group_key = f"group_count_{len(result_group)-idx}"
-                results_dict['results'][group_key] = {
-                    'ModelingResult': asdict(result),
-                    # 'groups': result.groups,
-                    # 'features': result.features
-                }
-            
-            # Save to JSON file using json module instead of pandas
-            output_file = output_path / f"{experiment_name}_iteration_{iteration_idx+1}_results.json"
-            with open(output_file, 'w') as f:
-                json.dump(results_dict, f, indent=2)
+            payloads.append(
+                IterationResultsPayload(
+                    metadata=iteration_metadata[iteration_idx],
+                    results=result_group
+                )
+            )
 
-            logger.info(f"📊 Saved results for iteration {iteration_idx+1}")
+        output_file = output_path / f"{experiment_name}_all_iterations.json"
+        with open(output_file, 'w') as f:
+            json.dump([asdict(payload) for payload in payloads], f, indent=2)
+
+        logger.info(f"📊 Saved combined results to {output_file}")
 
         # Create and save statistics summary
         stats_df = create_modeling_statistics_all_iterations_df(results)
@@ -286,6 +280,48 @@ def save_summary_report(
             f.write(f"Groups Used:    {best_result.num_groups_used}\n")
             f.write(f"Features Used:  {best_result.num_features_used}\n")
             f.write(f"Model Name:     {best_result.model_name}\n\n")
+
+            f.write("Top Configurations (Top 5 by F1):\n")
+            f.write("-------------------------------\n")
+            ranked_results = []
+            for i, iteration_results in enumerate(results):
+                meta = iteration_metadata[i]
+                for res in iteration_results:
+                    ranked_results.append({
+                        "Iteration": meta.iteration,
+                        "Random Seed": meta.random_seed,
+                        "Groups Used": res.num_groups_used,
+                        "Features Used": res.num_features_used,
+                        "Model Name": res.model_name,
+                        "F1 Score": res.f1_score,
+                        "Accuracy": res.accuracy,
+                        "Precision": res.precision,
+                        "Recall": res.recall
+                    })
+            ranked_results.sort(key=lambda x: x["F1 Score"], reverse=True)
+            for rank, entry in enumerate(ranked_results[:5], 1):
+                f.write(
+                    f"{rank}. Iter {entry['Iteration']} | Groups {entry['Groups Used']} | "
+                    f"Features {entry['Features Used']} | F1 {entry['F1 Score']:.4f} | "
+                    f"Acc {entry['Accuracy']:.4f} | Prec {entry['Precision']:.4f} | "
+                    f"Rec {entry['Recall']:.4f}\n"
+                )
+            f.write("\n")
+
+            f.write("Per-Iteration Best Configurations:\n")
+            f.write("-------------------------------\n")
+            for i, iteration_results in enumerate(results):
+                meta = iteration_metadata[i]
+                if not iteration_results:
+                    continue
+                best_iter = max(iteration_results, key=lambda r: r.f1_score)
+                f.write(
+                    f"Iter {meta.iteration} | Groups {best_iter.num_groups_used} | "
+                    f"Features {best_iter.num_features_used} | F1 {best_iter.f1_score:.4f} | "
+                    f"Acc {best_iter.accuracy:.4f} | Prec {best_iter.precision:.4f} | "
+                    f"Rec {best_iter.recall:.4f}\n"
+                )
+            f.write("\n")
             
             f.write(f"Top Features:\n")
             f.write(f"------------\n")

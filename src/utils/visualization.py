@@ -76,11 +76,26 @@ def visualize_f1_scores(results_df: pd.DataFrame, output_dir: Path, logger: Opti
     # Set style
     sns.set_theme(style="whitegrid")
     
-    # Plot 1: F1 Scores across Iterations
+    # Plot 1: F1 Scores across Iterations (scatter to avoid misleading lines)
     plt.figure(figsize=(12, 6))
-    # Convert NumGroups to categorical for better plotting if needed, but integer is fine for hue
-    sns.lineplot(data=results_df, x="Iteration", y="F1Score", hue="NumGroups", marker="o", palette="viridis")
-    plt.title("F1 Scores across Iterations for Different Number of Groups")
+    sns.scatterplot(
+        data=results_df,
+        x="Iteration",
+        y="F1Score",
+        hue="NumGroups",
+        palette="viridis",
+        s=80
+    )
+    mean_by_iteration = results_df.groupby("Iteration", as_index=False)["F1Score"].mean()
+    sns.lineplot(
+        data=mean_by_iteration,
+        x="Iteration",
+        y="F1Score",
+        color="black",
+        marker="o",
+        label="Mean F1"
+    )
+    plt.title("F1 Scores across Iterations (Points) + Mean Line")
     plt.xlabel("Iteration")
     plt.ylabel("F1 Score")
     plt.legend(title="Number of Groups", bbox_to_anchor=(1.05, 1), loc='upper left')
