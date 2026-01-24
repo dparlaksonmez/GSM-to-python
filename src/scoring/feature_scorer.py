@@ -48,6 +48,53 @@ class FeatureScore:
         if self.mutual_info < 0:
             raise ValueError(f"Mutual info cannot be negative, got {self.mutual_info}")
 
+
+##### MUTUAL INFORMATION COMPUTATION #####
+def _compute_mutual_info_fast(
+    data_x: pd.DataFrame,
+    labels: pd.Series,
+    n_neighbors: int = 3,
+    logger=None
+) -> np.ndarray:
+    """
+    Compute mutual information scores efficiently.
+    
+    Mutual Information (MI) measures how much knowing the value of a feature
+    reduces uncertainty about the target label. Higher MI = more informative feature.
+    
+    - MI = 0: Feature is independent of the target (not useful for prediction)
+    - MI > 0: Feature shares information with target (useful for classification)
+    
+    Uses k-nearest neighbors estimation which is faster with fewer neighbors.
+    
+    Args:
+        data_x: Feature matrix (samples × features)
+        labels: Target labels
+        n_neighbors: Number of neighbors for MI estimation (default: 3, lower = faster)
+        logger: Optional logger for progress messages
+        
+    Returns:
+        Array of mutual information scores for each feature
+    """
+    if logger:
+        logger.info("📖 Mutual Information measures how informative each feature is for prediction")
+        logger.info(f"   Using k={n_neighbors} neighbors (lower = faster, slightly less accurate)")
+    
+    # Convert to numpy for speed
+    X = data_x.values
+    y = labels.values
+    
+    # Compute all at once with fewer neighbors (faster than batching)
+    # n_neighbors=3 is much faster than default n_neighbors=5
+    mutual_info = mutual_info_classif(
+        X, y,
+        n_neighbors=n_neighbors,
+        random_state=42
+    )
+    
+    return mutual_info
+
+
 def score_features(
     data_x: pd.DataFrame,
     labels: pd.Series,
@@ -76,33 +123,27 @@ def score_features(
         logger.info(f"📊 Scoring {len(feature_names)} features...")
 
         logger.info("⏳ Computing mutual information scores...")
-        mutual_info = mutual_info_classif(data_x, labels)
+        mutual_info = _compute_mutual_info_fast(data_x, labels, n_neighbors=3, logger=logger)
 
         logger.info("⏳ Training random forest for feature importance...")
         rf = RandomForestClassifier(n_estimators=100, random_state=42)
         rf.fit(data_x, labels)
         importance_scores = rf.feature_importances_
 
-        # Score each feature individually
-        feature_scores = []
-        for idx, feature in tqdm(
-            enumerate(feature_names),
-            total=len(feature_names),
-            desc="📊 Scoring features",
-            unit="feature"
-        ):
-            # Calculate F1 score for binary classification based on this feature
-            feature_data = data_x.iloc[:, idx]
-            threshold = feature_data.median()
-            predictions = (feature_data > threshold).astype(int)
-            f1 = f1_score(labels, predictions, zero_division=0)
+        # Vectorized F1 score calculation for all features at once
+        logger.info("⏳ Computing F1 scores for all features...")
+        f1_scores = _compute_f1_scores_vectorized(data_x, labels)
 
-            feature_scores.append(FeatureScore(
-                feature_name=feature,
-                f1_score=float(f1),
+        # Build feature score objects
+        feature_scores = [
+            FeatureScore(
+                feature_name=feature_names[idx],
+                f1_score=float(f1_scores[idx]),
                 importance_score=float(importance_scores[idx]),
                 mutual_info=float(mutual_info[idx])
-            ))
+            )
+            for idx in range(len(feature_names))
+        ]
 
         logger.info("✅ Feature scoring completed")
         return feature_scores
@@ -110,6 +151,48 @@ def score_features(
     except Exception as e:
         logger.error(f"❌ Error during feature scoring: {str(e)}")
         raise
+
+
+def _compute_f1_scores_vectorized(data_x: pd.DataFrame, labels: pd.Series) -> np.ndarray:
+    """
+    Compute F1 scores for all features using vectorized operations.
+    
+    This replaces the slow per-feature loop with numpy broadcasting.
+    
+    Args:
+        data_x: Feature matrix (samples × features)
+        labels: Target labels (binary)
+        
+    Returns:
+        Array of F1 scores for each feature
+    """
+    # Convert to numpy for speed
+    X = data_x.values
+    y = labels.values.astype(int)
+    
+    # Compute median threshold for each feature (column-wise)
+    medians = np.median(X, axis=0)
+    
+    # Predictions: 1 if value > median, else 0 (vectorized across all features)
+    predictions = (X > medians).astype(int)
+    
+    # Compute F1 for each feature using vectorized confusion matrix components
+    # True Positives: prediction=1 and label=1
+    # False Positives: prediction=1 and label=0
+    # False Negatives: prediction=0 and label=1
+    y_expanded = y[:, np.newaxis]  # Shape: (n_samples, 1)
+    
+    tp = np.sum((predictions == 1) & (y_expanded == 1), axis=0)
+    fp = np.sum((predictions == 1) & (y_expanded == 0), axis=0)
+    fn = np.sum((predictions == 0) & (y_expanded == 1), axis=0)
+    
+    # F1 = 2 * precision * recall / (precision + recall)
+    # F1 = 2 * TP / (2*TP + FP + FN)
+    denominator = 2 * tp + fp + fn
+    f1_scores = np.where(denominator > 0, 2 * tp / denominator, 0.0)
+    
+    return f1_scores
+
 
 from typing import Union
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier

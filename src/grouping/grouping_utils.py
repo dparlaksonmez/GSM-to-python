@@ -50,6 +50,8 @@ def create_group_feature_mapping(
     """
     Create mappings between groups and their constituent features.
     
+    Uses vectorized pandas groupby for fast processing of large datasets.
+    
     Args:
         grouping_data: DataFrame with at least two columns - one for group names 
                       and one for feature/gene names
@@ -68,6 +70,7 @@ def create_group_feature_mapping(
     """
     if logger:
         logger.info("🔄 Creating group-feature mappings...")
+        logger.info(f"   Processing {len(grouping_data):,} rows...")
     
     # Validate input data
     if grouping_data.empty:
@@ -83,30 +86,18 @@ def create_group_feature_mapping(
                 logger.error(f"❌ Required column '{column}' not found in grouping data")
             return []
     
-    # Create dictionary to store group-feature mappings
-    group_mappings = {}
+    # Vectorized groupby - much faster than iterrows()
+    # This groups all features by their group name in one operation
+    grouped = grouping_data.groupby(group_column_name)[gene_column_name].apply(list)
     
-    # Process each row in the grouping data
-    for _, row in grouping_data.iterrows():
-        group_name = str(row[group_column_name])
-        feature_name = str(row[gene_column_name])
-        
-        # Skip if either is empty
-        if not group_name or not feature_name:
-            continue
-        
-        # Create new group if it doesn't exist
-        if group_name not in group_mappings:
-            group_mappings[group_name] = GroupFeatureMappingData(group_name=group_name)
-        
-        # Add feature to the group
-        group_mappings[group_name].feature_list.append(feature_name)
-    
-    # Convert dictionary to list
-    result = list(group_mappings.values())
+    # Convert to list of GroupFeatureMappingData objects
+    result = [
+        GroupFeatureMappingData(group_name=str(group_name), feature_list=features)
+        for group_name, features in grouped.items()
+    ]
     
     if logger:
-        logger.info(f"✅ Created {len(result)} group-feature mappings")
+        logger.info(f"✅ Created {len(result):,} group-feature mappings")
         
         # Log some statistics for the top 5 largest groups
         if result:

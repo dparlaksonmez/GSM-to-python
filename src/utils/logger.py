@@ -97,6 +97,43 @@ class ColoredFormatter(logging.Formatter):
         
         return super().format(record)
 
+
+class LazyErrorFileHandler(logging.Handler):
+    """A file handler that only creates the log file when the first error occurs.
+    
+    This prevents empty error.log files from being created when there are no errors.
+    """
+    
+    def __init__(self, filename: str, encoding: str = 'utf-8'):
+        super().__init__()
+        self.filename = filename
+        self.encoding = encoding
+        self._file_handler: Optional[logging.FileHandler] = None
+    
+    def _ensure_file_handler(self):
+        """Create the actual file handler on first use."""
+        if self._file_handler is None:
+            # Create parent directory if needed
+            log_path = Path(self.filename)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            self._file_handler = logging.FileHandler(self.filename, encoding=self.encoding)
+            self._file_handler.setFormatter(self.formatter)
+            self._file_handler.setLevel(self.level)
+    
+    def emit(self, record):
+        """Emit a record - creates file on first error."""
+        self._ensure_file_handler()
+        if self._file_handler:
+            self._file_handler.emit(record)
+    
+    def close(self):
+        """Close the file handler if it was created."""
+        if self._file_handler:
+            self._file_handler.close()
+        super().close()
+
+
 def setup_logger(log_file: Optional[str] = None,
                 level: int = logging.INFO,
                 logger_name: str = 'classification_pipeline') -> logging.Logger:
@@ -160,13 +197,13 @@ def setup_logger(log_file: Optional[str] = None,
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
 
-    # Error file handler (placed in same directory as main log)
+    # Lazy error file handler - only creates file when first error occurs
     if log_file:
         error_log_path = log_file_path.parent / 'error.log'
     else:
         error_log_path = Path('error.log').resolve()
         
-    error_handler = logging.FileHandler(str(error_log_path), encoding='utf-8')
+    error_handler = LazyErrorFileHandler(str(error_log_path), encoding='utf-8')
     error_handler.setLevel(logging.ERROR)
     error_formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -179,7 +216,6 @@ def setup_logger(log_file: Optional[str] = None,
     # Log system information for debugging
     logger.debug(f"🖥️ Operating System: {platform.system()} {platform.release()}")
     logger.debug(f"📝 Log file: {log_file_path}")
-    logger.debug(f"❌ Error log: {error_log_path}")
     
     return logger
 

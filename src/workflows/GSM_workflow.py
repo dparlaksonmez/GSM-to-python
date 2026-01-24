@@ -51,7 +51,9 @@ from src.workflows.GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROU
                         GENE_COLUMN_NAME, GROUP_COLUMN_NAME, INITIAL_FEATURE_FILTER_SIZE,
                         TTEST_THRESHOLD,
                         SAVE_INTERMEDIATE_RESULTS, TRAIN_TEST_SPLIT_RATIO, MODEL_NAME, LABEL_COLUMN_NAME, NORMALIZATION_METHOD,
-                        CLASS_LABELS_NEGATIVE, CLASS_LABELS_POSITIVE, BEST_GROUPS_TO_KEEP)
+                        CLASS_LABELS_NEGATIVE, CLASS_LABELS_POSITIVE, BEST_GROUPS_TO_KEEP,
+                        MAIN_DATA_FILE_SEPARATOR,
+                        GROUPING_FILE_SEPARATOR)
 
 # Import the config module itself (not only constants) so we can log where it
 # was loaded from at runtime. This is critical for debugging “wrong config file
@@ -76,6 +78,7 @@ from src.data_processing.preliminary_filtering import preliminary_ttest_filter
 from src.utils import save_results
 from src.utils.visualization import visualize_f1_scores
 from src.utils.logger import setup_logger  # Add this import at the top with other imports
+from src.utils.generate_figures import generate_all_figures
 import time
 
 
@@ -128,6 +131,8 @@ def build_config_log_items() -> List[ConfigLogItem]:
     return [
         ConfigLogItem("INPUT_EXPRESSION_DATA", str(gsm_workflow_config.INPUT_EXPRESSION_DATA)),
         ConfigLogItem("INPUT_GROUP_DATA", str(gsm_workflow_config.INPUT_GROUP_DATA)),
+        ConfigLogItem("MAIN_DATA_FILE_SEPARATOR", str(gsm_workflow_config.MAIN_DATA_FILE_SEPARATOR)),
+        ConfigLogItem("GROUPING_FILE_SEPARATOR", str(gsm_workflow_config.GROUPING_FILE_SEPARATOR)),
         ConfigLogItem("OUTPUT_DIR", str(gsm_workflow_config.OUTPUT_DIR)),
         ConfigLogItem("NUMBER_OF_ITERATIONS", str(gsm_workflow_config.NUMBER_OF_ITERATIONS)),
         ConfigLogItem("TRAIN_TEST_SPLIT_RATIO", str(gsm_workflow_config.TRAIN_TEST_SPLIT_RATIO)),
@@ -282,6 +287,17 @@ def gsm_run(
             logger.addHandler(handler)
 
     logger.info("🚀 Starting GSM pipeline...")
+    
+    # Log methodology overview for transparency
+    logger.info("=" * 70)
+    logger.info("📋 GSM METHODOLOGY OVERVIEW")
+    logger.info("-" * 70)
+    logger.info("1. FEATURE FILTERING: Welch's t-test with Benjamini-Hochberg FDR correction")
+    logger.info("2. GENE GROUPING: Pre-existing knowledge-based grouping (e.g., DisGeNET)")
+    logger.info("3. GROUP SCORING: Embedded feature selection via ML models within each group")
+    logger.info("4. MODEL TRAINING: Classification with probability outputs and AUC-ROC")
+    logger.info("5. VALIDATION: Bootstrap 95% CI, stratified K-fold cross-validation")
+    logger.info("=" * 70)
 
     # Run the GSM pipeline
     logger.info("Start data preprocessing.")
@@ -385,6 +401,18 @@ def gsm_run(
         output_dir=output_folder_path,
         logger=logger
     )
+
+    # Generate publication-quality figures
+    logger.info("📊 Generating publication figures...")
+    try:
+        results_json_path = output_folder_path / "modeling_results_all_iterations.json"
+        if results_json_path.exists():
+            figures = generate_all_figures(output_folder_path, results_json_path, logger)
+            logger.info(f"✅ Generated {len(figures)} publication figures")
+        else:
+            logger.warning("⚠️ Results JSON not found, skipping figure generation")
+    except Exception as e:
+        logger.warning(f"⚠️ Figure generation failed: {e}")
 
     logger.info("GSM pipeline completed successfully.")
     return output_folder_path
@@ -581,8 +609,8 @@ def main() -> None:
     print(f"🔗 Loading group data from: {group_file}")
     
     # Load input data
-    input_data = load_input_file(input_file)
-    group_data = load_group_file(group_file)
+    input_data = load_input_file(input_file, separator=MAIN_DATA_FILE_SEPARATOR)
+    group_data = load_group_file(group_file, separator=GROUPING_FILE_SEPARATOR)
     
     print(f"✅ Expression data loaded: {input_data.shape}")
     print(f"✅ Group data loaded: {group_data.shape}")

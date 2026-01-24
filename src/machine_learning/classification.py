@@ -61,19 +61,26 @@ def predict(model, X_test: pd.DataFrame):
     """
     return model.predict(X_test)
 
-def get_classifier_object(model_name: str):
+def get_classifier_object(model_name: str, n_estimators: int = 50):
     """
     Get the classifier object based on the model name.
 
     Args:
         model_name: The name of the machine learning model to use ('RandomForest' or 'GradientBoosting').
+        n_estimators: Number of trees/estimators (default: 50, reduced for faster scoring)
 
     Returns:
         The classifier object.
+    
+    Note:
+        No random_state is set here - the classifier will use the global 
+        np.random.seed() which is set per iteration for proper variation.
     """
     if model_name == 'RandomForest':
-        return RandomForestClassifier()
+        # Use fewer trees (50 vs 100 default) - sufficient for group ranking
+        # No random_state - relies on global seed set per iteration
+        return RandomForestClassifier(n_estimators=n_estimators)
     elif model_name == 'GradientBoosting':
-        return GradientBoostingClassifier()
+        return GradientBoostingClassifier(n_estimators=n_estimators)
     else:
         raise ValueError(f"Model '{model_name}' is not supported.")

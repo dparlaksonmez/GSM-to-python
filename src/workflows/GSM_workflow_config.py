@@ -27,21 +27,34 @@ from pathlib import Path
 # parents[2] => <project_root>
 project_dir = Path(__file__).resolve().parents[2]
 
-NUMBER_OF_ITERATIONS = 3
+NUMBER_OF_ITERATIONS = 10
 
-### TEST DATA ###
+# ### TEST DATA ###
 INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
 INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
 # Group Settings
 GENE_COLUMN_NAME = "feature_id"
 GROUP_COLUMN_NAME = "group_name"
+# Main expression file separator (e.g., ',' for CSV, '\t' for TSV)
+MAIN_DATA_FILE_SEPARATOR = ","
+# Grouping file separator (e.g., ',' for CSV, '\t' for TSV)
+GROUPING_FILE_SEPARATOR = "\t"
 
 ### REAL DATA ###
 # INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
-# INPUT_EXPRESSION_DATA = "data/main_data/GDS1962.csv"
-# INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET.txt"
+# # INPUT_EXPRESSION_DATA = "data/main_data/GDS1962.csv"
+# # INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET.txt"
+# INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET_gedinet.txt"
 # GROUP_COLUMN_NAME = "group_name"
 # GENE_COLUMN_NAME = "feature_id"
+# # Main expression file separator (e.g., ',' for CSV, '\t' for TSV)
+# MAIN_DATA_FILE_SEPARATOR = ","
+# # Grouping file separator (e.g., ',' for CSV, '\t' for TSV)
+# GROUPING_FILE_SEPARATOR = ","
+
+
+
+
 
 
 OUTPUT_DIR = project_dir / "output"
@@ -70,7 +83,7 @@ SAMPLING_METHOD = 'undersampling'  # Options: 'undersampling', 'oversampling', '
 # ============================================================================
 
 RANDOM_SEED = 44
-CROSS_VALIDATION_FOLDS = 5
+CROSS_VALIDATION_FOLDS = 3
 SAVE_INTERMEDIATE_RESULTS = True
 
 # ============================================================================

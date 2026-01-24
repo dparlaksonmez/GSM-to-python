@@ -4,14 +4,29 @@ T-test based feature selection for gene expression data.
 🧬 Purpose: This module filters important genes using statistical t-tests
 📊 Main functionality: Compares gene expression between two groups (e.g., disease vs healthy)
 
+MULTIPLE COMPARISON CORRECTION (Addressing Reviewer Line 73):
+=============================================================
+When testing thousands of genes simultaneously, the probability of false positives 
+increases dramatically. This module addresses this through:
+
+1. **Benjamini-Hochberg FDR Correction** (default): Controls the expected proportion 
+   of false discoveries among all discoveries. This is the recommended method for 
+   high-dimensional genomic data as it balances power with false positive control.
+   
+2. **Alternative methods available**: Bonferroni, Holm, Hochberg, Hommel, BY (via 
+   statsmodels.stats.multitest.multipletests)
+
+The correction method is logged explicitly during execution for transparency.
+
 Key Functions:
     🔍 perform_ttest: Runs t-test analysis
     ⚖️ filter_by_pvalue: Selects significant genes
-    📏 adjust_pvalues: Corrects for multiple testing
+    📏 adjust_pvalues: Applies multiple testing correction (FDR-BH by default)
 
 For non-Python researchers:
 - This is like doing many t-tests in Excel, but automated
 - The module handles all statistical corrections automatically
+- FDR correction ensures that ~5% of selected genes are false positives (at α=0.05)
 - You just need to provide your data and get filtered genes back
 """
 
@@ -39,13 +54,25 @@ class TTestResults:
     """Container for t-test results."""
     statistics: np.ndarray  # T-test statistics for each gene
     pvalues: np.ndarray  # Raw p-values
-    adjusted_pvalues: np.ndarray  # Corrected p-values
+    adjusted_pvalues: np.ndarray  # Corrected p-values (FDR-adjusted by default)
     selected_features: np.ndarray  # Indices of selected genes
     selected_feature_names: Optional[np.ndarray] = None  # Names of selected genes
+    correction_method: str = 'fdr_bh'  # Method used for multiple comparison correction
 
 @dataclass
 class TTestParameters:
-    """Configuration for t-test analysis."""
+    """Configuration for t-test analysis.
+    
+    Attributes:
+        threshold: P-value cutoff (default: 0.05)
+        equal_var: Whether to assume equal variances (default: False, uses Welch's t-test)
+        correction_method: Multiple testing correction method (default: 'fdr_bh')
+            - 'fdr_bh': Benjamini-Hochberg FDR (recommended for genomics)
+            - 'bonferroni': Bonferroni correction (most conservative)
+            - 'holm': Holm-Bonferroni step-down method
+            - 'fdr_by': Benjamini-Yekutieli FDR (for dependent tests)
+        initial_feature_filter_size: Max features to keep (0 = no limit)
+    """
     threshold: float = 0.05  # P-value cutoff
     equal_var: bool = False  # Whether to assume equal variances
     correction_method: str = 'fdr_bh'  # Multiple testing correction method
@@ -98,9 +125,27 @@ def adjust_pvalues(
     config: TTestParameters,
     logger
 ) -> np.ndarray:
-    """Apply multiple testing correction to p-values."""
+    """Apply multiple testing correction to p-values.
+    
+    This addresses reviewer concerns about multiple comparison adjustments (Line 73).
+    
+    Uses the Benjamini-Hochberg FDR correction by default, which controls
+    the expected proportion of false discoveries among all rejected hypotheses.
+    
+    For 12,000+ genes tested at α=0.05:
+    - Without correction: ~600 expected false positives
+    - With FDR-BH: ~5% of selected genes are expected to be false positives
+    """
     try:
-        logger.info(f"Applying {config.correction_method} correction")
+        method_descriptions = {
+            'fdr_bh': 'Benjamini-Hochberg FDR (controls false discovery rate)',
+            'bonferroni': 'Bonferroni (most conservative, controls FWER)',
+            'holm': 'Holm-Bonferroni step-down (less conservative than Bonferroni)',
+            'fdr_by': 'Benjamini-Yekutieli FDR (for dependent tests)'
+        }
+        desc = method_descriptions.get(config.correction_method, config.correction_method)
+        logger.info(f"📊 Multiple comparison correction: {desc}")
+        logger.info(f"   Applying {config.correction_method} correction to {len(pvalues)} p-values")
         return multipletests(pvalues, method=config.correction_method)[1]
     except Exception as e:
         logger.error(f"❌ Error in p-value adjustment: {str(e)}")

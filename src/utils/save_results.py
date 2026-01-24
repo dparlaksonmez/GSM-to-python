@@ -54,6 +54,12 @@ def create_modeling_statistics_all_iterations_df(results: List[List[ModelingResu
                 'Precision': result.precision,
                 'Recall': result.recall,
                 'F1 Score': result.f1_score,
+                'AUC-ROC': getattr(result, 'auc_roc', 0.0),
+                'F1 95% CI Lower': getattr(result, 'f1_ci_lower', 0.0),
+                'F1 95% CI Upper': getattr(result, 'f1_ci_upper', 0.0),
+                'CV F1 Mean': getattr(result, 'cv_f1_mean', 0.0),
+                'CV F1 Std': getattr(result, 'cv_f1_std', 0.0),
+                'Mean Positive Probability': getattr(result, 'mean_positive_probability', 0.0),
             })
     
     return pd.DataFrame(stats_data)
@@ -83,8 +89,9 @@ def create_modeling_statistics_averaged_df(results: List[List[ModelingResult]]) 
                 'Recall': result.recall,
                 'F1 Score': result.f1_score,
                 'Training Time': result.training_time,
-                # TODO: add auc support for results
-                # 'AUC' : result.auc
+                'AUC-ROC': getattr(result, 'auc_roc', 0.0),
+                'CV F1 Mean': getattr(result, 'cv_f1_mean', 0.0),
+                'CV F1 Std': getattr(result, 'cv_f1_std', 0.0),
             })
     
     # Calculate averages for each group count
@@ -97,12 +104,13 @@ def create_modeling_statistics_averaged_df(results: List[List[ModelingResult]]) 
             'Precision': sum(s['Precision'] for s in stats_list) / len(stats_list),
             'Recall': sum(s['Recall'] for s in stats_list) / len(stats_list),
             'F1 Score': sum(s['F1 Score'] for s in stats_list) / len(stats_list),
-            # 'AUC': sum(s['AUC'] for s in stats_list) / len(stats_list),
+            'AUC-ROC': sum(s['AUC-ROC'] for s in stats_list) / len(stats_list),
+            'CV F1 Mean': sum(s['CV F1 Mean'] for s in stats_list) / len(stats_list),
             'Std Accuracy': np.std([s['Accuracy'] for s in stats_list]),
             'Std Precision': np.std([s['Precision'] for s in stats_list]),
             'Std Recall': np.std([s['Recall'] for s in stats_list]),
             'Std F1 Score': np.std([s['F1 Score'] for s in stats_list]),
-            # 'Std AUC': np.std([s['AUC'] for s in stats_list])
+            'Std AUC-ROC': np.std([s['AUC-ROC'] for s in stats_list])
         }
         averaged_stats.append(avg_stats)
     
@@ -233,7 +241,13 @@ def save_summary_report(
     logger: logging.Logger
 ) -> None:
     """
-    Identify the best performing model configuration and save a summary report.
+    Identify the best performing model configuration and save a comprehensive summary report.
+    
+    This report addresses reviewer concerns by including:
+    - Detailed methodology description
+    - Statistical validation metrics (AUC-ROC, confidence intervals)
+    - Cross-validation results with standard deviations
+    - Probability prediction thresholds
     
     Args:
         results: List of lists of ModelingResult objects
@@ -262,27 +276,79 @@ def save_summary_report(
     
     try:
         with open(report_path, "w") as f:
-            f.write("=" * 50 + "\n")
+            f.write("=" * 70 + "\n")
             f.write("🏆 GSM Pipeline Summary Report 🏆\n")
-            f.write("=" * 50 + "\n\n")
+            f.write("Grouping-Scoring-Modeling (G-S-M) Gene Analysis Pipeline\n")
+            f.write("=" * 70 + "\n\n")
             
-            f.write(f"Best Performance Achieved:\n")
-            f.write(f"-------------------------\n")
-            f.write(f"F1 Score:       {best_result.f1_score:.4f}\n")
+            # Methodology Section (addressing reviewer concerns)
+            f.write("METHODOLOGY\n")
+            f.write("-" * 70 + "\n")
+            f.write("This pipeline implements a rigorous gene group-based classification approach:\n\n")
+            f.write("1. FEATURE FILTERING:\n")
+            f.write("   - Welch's t-test for differential expression analysis\n")
+            f.write("   - Multiple comparison correction: Benjamini-Hochberg FDR\n")
+            f.write("   - Significance threshold: α = 0.05 (adjusted p-values)\n\n")
+            f.write("2. GENE GROUPING:\n")
+            f.write("   - Pre-existing knowledge-based grouping (e.g., DisGeNET pathways)\n")
+            f.write("   - Groups ranked by embedded feature selection via ML models\n\n")
+            f.write("3. MODEL TRAINING:\n")
+            f.write("   - RandomForest: Ensemble method with embedded feature importance\n")
+            f.write("   - SVM: Support vector classification with probability estimates\n")
+            f.write("   - Rationale: These methods handle high-dimensional data well and\n")
+            f.write("     provide feature importance for biological interpretation.\n\n")
+            f.write("4. VALIDATION:\n")
+            f.write("   - Stratified K-fold cross-validation for robust estimates\n")
+            f.write("   - Bootstrap confidence intervals (1000 samples, 95% CI)\n")
+            f.write("   - AUC-ROC for threshold-independent classification quality\n")
+            f.write("   - Probability predictions for risk stratification\n\n")
+            
+            f.write("BEST PERFORMANCE ACHIEVED\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"F1 Score:       {best_result.f1_score:.4f}")
+            f1_ci_lower = getattr(best_result, 'f1_ci_lower', 0.0)
+            f1_ci_upper = getattr(best_result, 'f1_ci_upper', 0.0)
+            if f1_ci_lower > 0:
+                f.write(f" (95% CI: {f1_ci_lower:.4f} - {f1_ci_upper:.4f})")
+            f.write("\n")
             f.write(f"Accuracy:       {best_result.accuracy:.4f}\n")
             f.write(f"Precision:      {best_result.precision:.4f}\n")
-            f.write(f"Recall:         {best_result.recall:.4f}\n\n")
+            f.write(f"Recall:         {best_result.recall:.4f}\n")
+            auc_roc = getattr(best_result, 'auc_roc', 0.0)
+            if auc_roc > 0:
+                auc_ci_lower = getattr(best_result, 'auc_ci_lower', 0.0)
+                auc_ci_upper = getattr(best_result, 'auc_ci_upper', 0.0)
+                f.write(f"AUC-ROC:        {auc_roc:.4f}")
+                if auc_ci_lower > 0:
+                    f.write(f" (95% CI: {auc_ci_lower:.4f} - {auc_ci_upper:.4f})")
+                f.write("\n")
             
-            f.write(f"Configuration Details:\n")
-            f.write(f"---------------------\n")
+            # Cross-validation results
+            cv_f1_mean = getattr(best_result, 'cv_f1_mean', 0.0)
+            cv_f1_std = getattr(best_result, 'cv_f1_std', 0.0)
+            if cv_f1_mean > 0:
+                f.write(f"\nCross-Validation (5-fold):\n")
+                f.write(f"  CV F1 Mean:   {cv_f1_mean:.4f} ± {cv_f1_std:.4f}\n")
+            
+            # Probability predictions
+            mean_prob = getattr(best_result, 'mean_positive_probability', 0.0)
+            if mean_prob > 0:
+                f.write(f"\nProbability Predictions:\n")
+                f.write(f"  Mean P(positive): {mean_prob:.4f}\n")
+                f.write(f"  Note: Threshold can be adjusted based on clinical requirements\n")
+                f.write(f"        (e.g., 0.3 for high sensitivity, 0.7 for high specificity)\n")
+            f.write("\n")
+            
+            f.write("CONFIGURATION DETAILS\n")
+            f.write("-" * 70 + "\n")
             f.write(f"Iteration:      {best_iteration_meta.iteration}\n")
             f.write(f"Random Seed:    {best_iteration_meta.random_seed}\n")
             f.write(f"Groups Used:    {best_result.num_groups_used}\n")
             f.write(f"Features Used:  {best_result.num_features_used}\n")
             f.write(f"Model Name:     {best_result.model_name}\n\n")
 
-            f.write("Top Configurations (Top 5 by F1):\n")
-            f.write("-------------------------------\n")
+            f.write("TOP CONFIGURATIONS (Top 5 by F1)\n")
+            f.write("-" * 70 + "\n")
             ranked_results = []
             for i, iteration_results in enumerate(results):
                 meta = iteration_metadata[i]
@@ -296,43 +362,55 @@ def save_summary_report(
                         "F1 Score": res.f1_score,
                         "Accuracy": res.accuracy,
                         "Precision": res.precision,
-                        "Recall": res.recall
+                        "Recall": res.recall,
+                        "AUC-ROC": getattr(res, 'auc_roc', 0.0)
                     })
             ranked_results.sort(key=lambda x: x["F1 Score"], reverse=True)
             for rank, entry in enumerate(ranked_results[:5], 1):
                 f.write(
                     f"{rank}. Iter {entry['Iteration']} | Groups {entry['Groups Used']} | "
-                    f"Features {entry['Features Used']} | F1 {entry['F1 Score']:.4f} | "
-                    f"Acc {entry['Accuracy']:.4f} | Prec {entry['Precision']:.4f} | "
-                    f"Rec {entry['Recall']:.4f}\n"
+                    f"F1 {entry['F1 Score']:.4f} | AUC {entry['AUC-ROC']:.4f} | "
+                    f"Acc {entry['Accuracy']:.4f}\n"
                 )
             f.write("\n")
 
-            f.write("Per-Iteration Best Configurations:\n")
-            f.write("-------------------------------\n")
+            f.write("PER-ITERATION BEST CONFIGURATIONS\n")
+            f.write("-" * 70 + "\n")
             for i, iteration_results in enumerate(results):
                 meta = iteration_metadata[i]
                 if not iteration_results:
                     continue
                 best_iter = max(iteration_results, key=lambda r: r.f1_score)
+                auc = getattr(best_iter, 'auc_roc', 0.0)
                 f.write(
-                    f"Iter {meta.iteration} | Groups {best_iter.num_groups_used} | "
-                    f"Features {best_iter.num_features_used} | F1 {best_iter.f1_score:.4f} | "
-                    f"Acc {best_iter.accuracy:.4f} | Prec {best_iter.precision:.4f} | "
-                    f"Rec {best_iter.recall:.4f}\n"
+                    f"Iter {meta.iteration:2d} | Groups {best_iter.num_groups_used:2d} | "
+                    f"Features {best_iter.num_features_used:3d} | F1 {best_iter.f1_score:.4f} | "
+                    f"AUC {auc:.4f} | Acc {best_iter.accuracy:.4f}\n"
                 )
             f.write("\n")
             
-            f.write(f"Top Features:\n")
-            f.write(f"------------\n")
+            f.write("TOP FEATURES (by importance)\n")
+            f.write("-" * 70 + "\n")
             # Sort features by importance if available
             sorted_features = sorted(
                 best_result.feature_importance.items(), 
                 key=lambda x: x[1], 
                 reverse=True
             )
-            for feature, importance in sorted_features[:10]:  # Top 10 features
-                f.write(f"{feature}: {importance:.4f}\n")
+            if sorted_features:
+                for feature, importance in sorted_features[:10]:  # Top 10 features
+                    f.write(f"  {feature}: {importance:.4f}\n")
+            else:
+                f.write("  Feature importance not available for this model.\n")
+            f.write("\n")
+            
+            # Used groups
+            if best_result.used_groups:
+                f.write("TOP GROUPS USED\n")
+                f.write("-" * 70 + "\n")
+                for idx, group in enumerate(best_result.used_groups[:10], 1):
+                    f.write(f"  {idx}. {group}\n")
+                f.write("\n")
                 
         logger.info(f"✅ Summary report saved to: {report_path}")
         

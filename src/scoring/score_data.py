@@ -16,7 +16,6 @@ Example:
     metrics = score_data(params)
 """
 
-from calendar import c
 from dataclasses import dataclass
 from typing import Dict
 import logging
@@ -26,6 +25,16 @@ from src.scoring.metrics import MetricsData
 from sklearn.model_selection import cross_validate
 from src.machine_learning.classification import get_classifier_object
 from sklearn.metrics import make_scorer, f1_score, precision_score, recall_score
+
+
+##### CACHED SCORING METRICS (created once, reused) #####
+# Pre-create scorer objects to avoid recreation overhead on each call
+_SCORING_METRICS = {
+    'accuracy': 'accuracy',
+    'f1_macro': make_scorer(f1_score, average='macro', zero_division=1),
+    'precision_macro': make_scorer(precision_score, average='macro', zero_division=1),
+    'recall_macro': make_scorer(recall_score, average='macro', zero_division=1),
+}
 
 
 @dataclass
@@ -64,30 +73,21 @@ def score_data(params: ScoringParameters) -> MetricsData:
         # logger.info(f"🎬 Starting scoring process with {params.classifier_name} classifier")
         # logger.info(f"📊 Input data shape: {params.data_x.shape}")
 
-        # Get classifier object
+        # Get classifier object (with n_jobs for internal parallelism)
         classifier = get_classifier_object(params.classifier_name)
 
-        # Define scoring metrics with zero division handling
-        scoring_metrics = {
-            'accuracy': 'accuracy',
-            'f1_macro': make_scorer(f1_score, average='macro', zero_division=1),
-            'precision_macro': make_scorer(precision_score, average='macro', zero_division=1),
-            'recall_macro': make_scorer(recall_score, average='macro', zero_division=1),
-            'f1_weighted': make_scorer(f1_score, average='weighted', zero_division=1),
-            'precision_weighted': make_scorer(precision_score, average='weighted', zero_division=1),
-            'recall_weighted': make_scorer(recall_score, average='weighted', zero_division=1),
-            'balanced_accuracy': 'balanced_accuracy',
-            'roc_auc': 'roc_auc_ovo',
-            'neg_log_loss': 'neg_log_loss'
-        }
+        # Convert to numpy arrays for faster sklearn operations
+        X = params.data_x.values if hasattr(params.data_x, 'values') else params.data_x
+        y = params.labels.values if hasattr(params.labels, 'values') else params.labels
 
-        # Perform cross-validation
+        # Perform cross-validation using cached metrics
+        # Only compute metrics we actually use (4 instead of 10)
         scores = cross_validate(
             classifier,
-            params.data_x,
-            params.labels,
-            cv= params.cross_validation_folds,
-            scoring=scoring_metrics,
+            X,
+            y,
+            cv=params.cross_validation_folds,
+            scoring=_SCORING_METRICS,
             return_train_score=False,
         )
 
