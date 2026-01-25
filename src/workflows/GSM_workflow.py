@@ -240,7 +240,9 @@ def gsm_run(
     initial_seed: int = 42,
     logger_path: Optional[Path] = None,
     notebook_mode: bool = False,
-    extra_handlers: Optional[List[logging.Handler]] = None
+    extra_handlers: Optional[List[logging.Handler]] = None,
+    input_data_name: Optional[str] = None,
+    group_data_name: Optional[str] = None,
 ) -> Path:
     """
     Main entry point for the GSM pipeline execution.
@@ -256,11 +258,17 @@ def gsm_run(
         initial_seed: Starting seed for reproducibility
         logger_path: Path where log files will be stored
         notebook_mode: Enable notebook-specific optimizations
+        input_data_name: Name of input data source (for logging/output folder)
+        group_data_name: Name of grouping data source (for logging/output folder)
         
     Returns:
         Path: The directory where results were saved.
     """
-    output_folder_path = Path(OUTPUT_DIR) / f"gsm_{time.strftime('%Y_%m_%d-%H_%M_%S')}"
+    # Use provided names or fall back to config file values
+    main_data_stem = input_data_name if input_data_name else Path(INPUT_EXPRESSION_DATA).stem
+    group_data_stem = group_data_name if group_data_name else Path(INPUT_GROUP_DATA).stem
+    
+    output_folder_path = Path(OUTPUT_DIR) / f"gsm_{time.strftime('%Y_%m_%d-%H_%M_%S')}_{main_data_stem}_{group_data_stem}"
     output_folder_path.mkdir(parents=True, exist_ok=True)
     if logger_path is None:
         logger_path = output_folder_path / "gsm_workflow.log"
@@ -278,6 +286,11 @@ def gsm_run(
         f"output_dir={OUTPUT_DIR}"
     )
 
+    # Log actual data being used (not just config file values)
+    logger.info("##### ACTUAL DATA BEING PROCESSED #####")
+    logger.info(f"INPUT_DATA={main_data_stem} (shape: {input_data.shape})")
+    logger.info(f"GROUP_DATA={group_data_stem} (shape: {group_data.shape})")
+    
     log_config_values(logger=logger)
 
     copy_used_config_file(output_dir=output_folder_path, logger=logger)

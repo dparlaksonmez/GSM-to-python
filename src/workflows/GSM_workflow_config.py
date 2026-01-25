@@ -29,28 +29,24 @@ project_dir = Path(__file__).resolve().parents[2]
 
 NUMBER_OF_ITERATIONS = 10
 
-# ### TEST DATA ###
-INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
-INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
+### REAL DATA (Default) ###
+INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
+INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET_gedinet.txt"
 # Group Settings
 GENE_COLUMN_NAME = "feature_id"
 GROUP_COLUMN_NAME = "group_name"
 # Main expression file separator (e.g., ',' for CSV, '\t' for TSV)
 MAIN_DATA_FILE_SEPARATOR = ","
 # Grouping file separator (e.g., ',' for CSV, '\t' for TSV)
-GROUPING_FILE_SEPARATOR = "\t"
+GROUPING_FILE_SEPARATOR = ","
 
-### REAL DATA ###
-# INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
-# # INPUT_EXPRESSION_DATA = "data/main_data/GDS1962.csv"
-# # INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET.txt"
-# INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET_gedinet.txt"
-# GROUP_COLUMN_NAME = "group_name"
+# ### TEST DATA ###
+# INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
+# INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
 # GENE_COLUMN_NAME = "feature_id"
-# # Main expression file separator (e.g., ',' for CSV, '\t' for TSV)
+# GROUP_COLUMN_NAME = "group_name"
 # MAIN_DATA_FILE_SEPARATOR = ","
-# # Grouping file separator (e.g., ',' for CSV, '\t' for TSV)
-# GROUPING_FILE_SEPARATOR = ","
+# GROUPING_FILE_SEPARATOR = "\t"
 
 
 

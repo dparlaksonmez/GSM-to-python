@@ -97,7 +97,8 @@ def create_group_feature_mapping(
     ]
     
     if logger:
-        logger.info(f"✅ Created {len(result):,} group-feature mappings")
+        total_mappings = sum(len(g.feature_list) for g in result)
+        logger.info(f"✅ Created {len(result):,} groups with {total_mappings:,} total gene-group mappings")
         
         # Log some statistics for the top 5 largest groups
         if result:

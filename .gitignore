@@ -8,7 +8,7 @@ output/
 
 data/grouping_data/*
 data/main_data
-data/test
+data/test/*.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

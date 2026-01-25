@@ -4,11 +4,10 @@ VS Code Extensions (project-referenced)
 These extensions are referenced in the project documentation and are recommended for working on this repo:
 
 - GitHub Copilot (AI coding assistance)
-- GitHub Pull Requests and Issues (review/PR workflow)
 - Remote - WSL (work in WSL on Linux)
 - Python (Python language support, env management)
 - Rainbow CSV (CSV/TSV highlighting)
 - vscode-pdf (PDF preview)
 - TODO Highlight (highlight TODO/FIXME comments)
-
+- Excel Viewer
 If you want this list to reflect your *installed* extensions, share them and I will update this file.
