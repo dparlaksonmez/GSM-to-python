@@ -98,13 +98,13 @@ def create_group_feature_mapping(
     
     if logger:
         total_mappings = sum(len(g.feature_list) for g in result)
-        logger.info(f"✅ Created {len(result):,} groups with {total_mappings:,} total gene-group mappings")
+        logger.info(f"✅ Created {len(result):,} groups with {total_mappings:,} gene-group mappings")
         
-        # Log some statistics for the top 5 largest groups
+        # Log top 5 largest groups at DEBUG level to reduce verbosity
         if result:
             sorted_groups = sorted(result, key=lambda g: len(g.feature_list), reverse=True)
-            logger.info("📊 Top 5 largest groups:")
+            logger.debug("📊 Top 5 largest groups:")
             for i, group in enumerate(sorted_groups[:5], 1):
-                logger.info(f"  {i}. {group.group_name}: {len(group.feature_list)} features")
+                logger.debug(f"  {i}. {group.group_name}: {len(group.feature_list)} features")
     
     return result

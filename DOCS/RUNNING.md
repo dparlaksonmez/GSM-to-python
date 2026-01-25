@@ -100,6 +100,92 @@ For your own experiments, a simple approach is:
 
 ---
 
+## Option 3: Running Long Batch Jobs (Multiple Datasets)
+
+When processing multiple datasets, the pipeline can run for hours or even days. If you close your terminal or lose your SSH connection, the job will be killed. Use `screen` to keep jobs running in the background.
+
+### What is `screen`?
+
+`screen` is a terminal multiplexer that creates a **virtual terminal session** on the server. Think of it like leaving a TV playing in a room and closing the door - the TV keeps playing even though you left.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Your Terminal (SSH/WSL)                                    │
+│    │                                                        │
+│    └──► screen session (lives on server)                    │
+│              │                                              │
+│              └──► python run_all_datasets.py                │
+│                   (keeps running even if you disconnect!)   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Step-by-Step Guide
+
+#### 1. Start a new screen session
+
+```bash
+screen -S gsm_batch
+```
+
+This creates a named session called `gsm_batch`.
+
+#### 2. Activate your environment and run the job
+
+```bash
+cd ~/GSM-to-python
+source venv/bin/activate
+python run_all_datasets.py --datasets GDS2547 GDS3257 GDS3268 GDS3837 GDS4206 GDS4824 GDS5499
+```
+
+#### 3. Detach from the session (IMPORTANT!)
+
+Press these keys in sequence:
+1. `Ctrl+A`
+2. Then press `D`
+
+You'll see: `[detached from session gsm_batch]`
+
+**Now you can safely close your terminal.** The job continues running.
+
+#### 4. Reattach later to check progress
+
+```bash
+screen -r gsm_batch
+```
+
+### Quick Reference
+
+| Action | Command |
+|--------|---------|
+| Create new session | `screen -S session_name` |
+| Detach (leave running) | `Ctrl+A`, then `D` |
+| List all sessions | `screen -ls` |
+| Reattach to session | `screen -r session_name` |
+| Kill session (from inside) | `exit` or `Ctrl+A`, then `K` |
+
+### ⚠️ Common Mistakes
+
+| Mistake | Result | Solution |
+|---------|--------|----------|
+| Close terminal without detaching | ❌ Job killed | Always detach first (`Ctrl+A`, `D`) |
+| Forget session name | Can't find it | Use `screen -ls` to list all |
+| Multiple sessions with same name | Confusion | Use unique names like `gsm_batch_jan25` |
+
+### Alternative: Using `nohup` (simpler but less control)
+
+If you just want to run and forget without learning screen:
+
+```bash
+nohup python run_all_datasets.py --datasets GDS2547 GDS3257 GDS3268 > batch_run.log 2>&1 &
+```
+
+- Output saved to `batch_run.log`
+- Check progress: `tail -f batch_run.log`
+- Find process: `ps aux | grep run_all_datasets`
+- Kill process: `pkill -f run_all_datasets`
+
+---
+
 ## If the browser cannot open Streamlit
 
 Common causes:

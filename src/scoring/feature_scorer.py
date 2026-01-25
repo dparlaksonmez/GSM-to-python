@@ -77,8 +77,7 @@ def _compute_mutual_info_fast(
         Array of mutual information scores for each feature
     """
     if logger:
-        logger.info("📖 Mutual Information measures how informative each feature is for prediction")
-        logger.info(f"   Using k={n_neighbors} neighbors (lower = faster, slightly less accurate)")
+        logger.debug(f"Computing MI with k={n_neighbors} neighbors")
     
     # Convert to numpy for speed
     X = data_x.values
@@ -120,18 +119,15 @@ def score_features(
         if data_x.shape[1] != len(feature_names):
             raise ValueError("Number of features doesn't match feature names")
 
-        logger.info(f"📊 Scoring {len(feature_names)} features...")
+        logger.info(f"🎯 Scoring {len(feature_names)} features (MI + RF importance + F1)...")
 
-        logger.info("⏳ Computing mutual information scores...")
         mutual_info = _compute_mutual_info_fast(data_x, labels, n_neighbors=3, logger=logger)
 
-        logger.info("⏳ Training random forest for feature importance...")
         rf = RandomForestClassifier(n_estimators=100, random_state=42)
         rf.fit(data_x, labels)
         importance_scores = rf.feature_importances_
 
         # Vectorized F1 score calculation for all features at once
-        logger.info("⏳ Computing F1 scores for all features...")
         f1_scores = _compute_f1_scores_vectorized(data_x, labels)
 
         # Build feature score objects

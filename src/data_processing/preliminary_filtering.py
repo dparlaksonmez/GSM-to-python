@@ -49,8 +49,6 @@ def preliminary_ttest_filter(
         >>> results = preliminary_filter(X, y, threshold=0.05)
     """
     try:
-        logger.info("Starting preliminary filtering...")
-        
         # Select features using t-test
         results = select_features(X, 
                                   y, 
@@ -59,7 +57,6 @@ def preliminary_ttest_filter(
                                   initial_feature_filter_size=0,
                                   logger=logger)
         
-        logger.info(f"Preliminary filtering completed. Selected {len(results.selected_features)} features.")
         return results
 
     except Exception as e:

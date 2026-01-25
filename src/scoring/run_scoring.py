@@ -172,16 +172,9 @@ def run_scoring(
         if feature_scores is None:
             feature_scores = score_all_features(data_x, labels, logger)
 
-        logger.info("#" * 50)
-        logger.info("🔍 Found the following groups (first 10 as example):"
-                    f"{[group.group_name for group in groups[:10]]}")
-        logger.info(f"🔍 Found {len(feature_scores)} features in the dataset")
-        logger.info(f"🔍 Found {len(groups)} relevant groups in the dataset")
-        logger.info(f"🔍 Found {len(data_x)} samples in the dataset")
-        logger.info(f"🔍 Found {len(labels.unique())} unique labels in the dataset")
+        logger.info(f"📊 Scoring {len(groups)} groups ({len(data_x)} samples, {len(feature_scores)} features)")
 
         # Prepare scoring tasks (filter valid groups)
-        logger.info("🔄 Preparing group scoring tasks...")
         tasks, group_features = _prepare_group_tasks(groups, data_x, logger)
         
         if not tasks:
@@ -194,8 +187,7 @@ def run_scoring(
 
         # Determine number of jobs
         actual_n_jobs = n_jobs if n_jobs != -1 else os.cpu_count() or 1
-        logger.info(f"🚀 Starting parallel group scoring with {actual_n_jobs} workers...")
-        logger.info(f"📊 Processing {len(tasks)} groups...")
+        logger.info(f"🚀 Parallel scoring with {actual_n_jobs} workers...")
 
         # Run scoring in parallel using joblib
         # prefer="threads" would share memory but GIL limits parallelism

@@ -106,7 +106,7 @@ def perform_ttest(
         group2_data = data.expression_matrix[group2_mask]
 
         # Perform t-test
-        logger.info(f"##### Running t-test on {data.expression_matrix.shape[1]} genes #####")
+        logger.debug(f"Running t-test on {data.expression_matrix.shape[1]} genes")
         t_stats, p_vals = stats.ttest_ind(
             group1_data, 
             group2_data,
@@ -144,8 +144,7 @@ def adjust_pvalues(
             'fdr_by': 'Benjamini-Yekutieli FDR (for dependent tests)'
         }
         desc = method_descriptions.get(config.correction_method, config.correction_method)
-        logger.info(f"📊 Multiple comparison correction: {desc}")
-        logger.info(f"   Applying {config.correction_method} correction to {len(pvalues)} p-values")
+        logger.debug(f"Applying {config.correction_method} correction to {len(pvalues)} p-values")
         return multipletests(pvalues, method=config.correction_method)[1]
     except Exception as e:
         logger.error(f"❌ Error in p-value adjustment: {str(e)}")
@@ -183,10 +182,10 @@ def filter_by_pvalue(
         selected_names = (data.feature_names[final_mask] 
                          if data.feature_names is not None else None)
 
-        logger.info(f"✅ Selected {sum(significant_mask)} significant genes")
-        # TODO: mention about the p-value threshold
         if config.initial_feature_filter_size > 0:
-            logger.info(f"✅ Final selection: {sum(final_mask)} genes after size filter (initial_feature_filter_size={config.initial_feature_filter_size})")
+            logger.info(f"✅ t-test: {sum(final_mask)} genes (from {sum(significant_mask)} significant, top {config.initial_feature_filter_size})")
+        else:
+            logger.info(f"✅ t-test: {sum(significant_mask)} significant genes (p < {config.threshold})")
         
         return TTestResults(
             statistics=pvalues,

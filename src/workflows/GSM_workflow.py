@@ -65,6 +65,8 @@ from dataclasses import dataclass
 from typing import List, Optional
 import numpy as np
 import random
+import time
+from datetime import datetime, timedelta
 
 # Updated imports to use correct module paths
 from src.grouping.run_grouping import run_grouping
@@ -79,6 +81,17 @@ from src.utils import save_results
 from src.utils.visualization import visualize_f1_scores
 from src.utils.logger import setup_logger  # Add this import at the top with other imports
 from src.utils.generate_figures import generate_all_figures
+from src.utils.rank_aggregation import (
+    load_ranked_groups_from_excel,
+    load_ranked_features_from_excel,
+    aggregate_group_ranks_rra,
+    aggregate_feature_ranks_rra,
+    save_aggregated_group_ranking,
+    save_aggregated_feature_ranking,
+    compute_best_averaged_groups,
+    compute_best_averaged_features,
+    save_best_averaged_rankings
+)
 import time
 
 
@@ -340,11 +353,20 @@ def gsm_run(
     logger.info("✅ Feature scoring completed once.")
     
     iteration_results: List[IterationResult] = []
+    iteration_times: List[float] = []  # Track iteration durations for estimation
+    pipeline_start_time = time.time()
+    
     # Changed from range(n_iterations) to range(1, n_iterations + 1)
     # This ensures that for n_iterations=1, it only runs once
-    for i in range(1, n_iterations + 1):    
-        logger.info(f"=" * 50)
-        logger.info(f"Iteration {i} for gsm_main_loop started...")
+    for i in range(1, n_iterations + 1):
+        iteration_start_time = time.time()
+        
+        logger.info("")
+        logger.info("#" * 70)
+        logger.info(f"#{'':^68}#")
+        logger.info(f"#{'ITERATION ' + str(i) + ' / ' + str(n_iterations):^68}#")
+        logger.info(f"#{'':^68}#")
+        logger.info("#" * 70)
         
         # Set random seed for reproducibility
         iteration_seed = generate_iteration_seed(initial_seed, i)
@@ -368,7 +390,37 @@ def gsm_run(
             random_seed=iteration_seed,
             modeling_results=modeling_result
         ))
-        logger.info(f"Iteration {i} for gsm_main_loop completed.")
+        
+        # Calculate timing and estimate remaining time
+        iteration_duration = time.time() - iteration_start_time
+        iteration_times.append(iteration_duration)
+        
+        avg_time_per_iteration = sum(iteration_times) / len(iteration_times)
+        remaining_iterations = n_iterations - i
+        estimated_remaining_seconds = avg_time_per_iteration * remaining_iterations
+        
+        elapsed_total = time.time() - pipeline_start_time
+        estimated_finish_time = datetime.now() + timedelta(seconds=estimated_remaining_seconds)
+        
+        # Format times for display
+        def format_duration(seconds: float) -> str:
+            if seconds < 60:
+                return f"{seconds:.1f}s"
+            elif seconds < 3600:
+                return f"{seconds/60:.1f}min"
+            else:
+                hours = int(seconds // 3600)
+                mins = int((seconds % 3600) // 60)
+                return f"{hours}h {mins}min"
+        
+        logger.info(f"⏱️  Iteration {i} completed in {format_duration(iteration_duration)}")
+        if remaining_iterations > 0:
+            logger.info(
+                f"📊 Progress: {i}/{n_iterations} ({100*i/n_iterations:.0f}%) | "
+                f"Elapsed: {format_duration(elapsed_total)} | "
+                f"Remaining: ~{format_duration(estimated_remaining_seconds)} | "
+                f"ETA: {estimated_finish_time.strftime('%H:%M:%S')}"
+            )
 
     # Save results
     if SAVE_INTERMEDIATE_RESULTS:
@@ -403,6 +455,78 @@ def gsm_run(
     else:
         logger.warning("⚠️ No data available for visualization.")
 
+    # Load results JSON for aggregation
+    results_json_path = output_folder_path / "modeling_results_all_iterations.json"
+    all_results_data = None
+    aggregated_groups = None
+    aggregated_features = None
+    robust_rank_groups = None
+    robust_rank_features = None
+    
+    if results_json_path.exists():
+        import json
+        with open(results_json_path, 'r') as f:
+            all_results_data = json.load(f)
+        
+        # Compute and save best averaged groups/features
+        logger.info("📊 Computing best averaged rankings...")
+        try:
+            save_best_averaged_rankings(output_folder_path, all_results_data, logger)
+            aggregated_groups = compute_best_averaged_groups(all_results_data, logger)
+            aggregated_features = compute_best_averaged_features(all_results_data, logger)
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to compute averaged rankings: {e}")
+        
+        # Perform robust rank aggregation on groups
+        logger.info("📊 Performing robust rank aggregation...")
+        try:
+            ranked_groups_path = output_folder_path / "ranked_groups_all_iterations.xlsx"
+            ranked_groups_lists = load_ranked_groups_from_excel(ranked_groups_path, logger)
+            if ranked_groups_lists:
+                aggregated_group_ranking = aggregate_group_ranks_rra(ranked_groups_lists)
+                save_aggregated_group_ranking(
+                    aggregated_group_ranking, 
+                    output_folder_path / "aggregated_group_ranking_rra.xlsx", 
+                    logger
+                )
+                robust_rank_groups = [
+                    {
+                        'Group Name': item.group_name,
+                        'Aggregated P-Value': item.aggregated_p_value,
+                        'Aggregated Score': item.aggregated_score,
+                        'Average Rank': item.average_rank,
+                        'Occurrences': item.occurrences
+                    }
+                    for item in aggregated_group_ranking.items
+                ]
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to aggregate group rankings: {e}")
+        
+        # Perform robust rank aggregation on features
+        try:
+            ranked_features_path = output_folder_path / "ranked_features_all_iterations.xlsx"
+            ranked_features_lists = load_ranked_features_from_excel(ranked_features_path, logger)
+            if ranked_features_lists:
+                aggregated_feature_ranking = aggregate_feature_ranks_rra(ranked_features_lists)
+                save_aggregated_feature_ranking(
+                    aggregated_feature_ranking,
+                    output_folder_path / "aggregated_feature_ranking_rra.xlsx",
+                    logger
+                )
+                robust_rank_features = [
+                    {
+                        'Feature Name': item.feature_name,
+                        'Aggregated P-Value': item.aggregated_p_value,
+                        'Aggregated Score': item.aggregated_score,
+                        'Average Rank': item.average_rank,
+                        'Average Importance': item.average_importance,
+                        'Occurrences': item.occurrences
+                    }
+                    for item in aggregated_feature_ranking.items
+                ]
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to aggregate feature rankings: {e}")
+
     # Identify the best performing iteration and save a summary report to a text file
     logger.info("📝 Generating summary report...")
     save_results.save_summary_report(
@@ -412,13 +536,16 @@ def gsm_run(
             random_seed=r.random_seed
         ) for r in iteration_results],
         output_dir=output_folder_path,
-        logger=logger
+        logger=logger,
+        aggregated_groups=aggregated_groups,
+        aggregated_features=aggregated_features,
+        robust_rank_groups=robust_rank_groups,
+        robust_rank_features=robust_rank_features
     )
 
     # Generate publication-quality figures
     logger.info("📊 Generating publication figures...")
     try:
-        results_json_path = output_folder_path / "modeling_results_all_iterations.json"
         if results_json_path.exists():
             figures = generate_all_figures(output_folder_path, results_json_path, logger)
             logger.info(f"✅ Generated {len(figures)} publication figures")
@@ -468,12 +595,9 @@ def gsm_main_loop(data: pd.DataFrame,
         - Implements vectorized operations for performance
         - Supports intermediate result caching
     """
-    logger.info("##### Starting GSM Main Loop #####")
-    
     # Data Splitting
-    logger.info("📊 Splitting data into training and testing sets...")
+    logger.info("📊 Splitting data (train/test)...")
     train_test_split_data = split_data(data, LABEL_COLUMN_NAME, test_size=0.2, stratify=True)
-    logger.info("Data split completed.")
     
     # Feature Filtering
     logger.info("🔍 Applying preliminary t-test filter...")
@@ -484,7 +608,6 @@ def gsm_main_loop(data: pd.DataFrame,
                                         threshold=TTEST_THRESHOLD,
                                         initial_feature_filter_size=INITIAL_FEATURE_FILTER_SIZE,
                                         logger=logger)
-    logger.info("Preliminary filtering completed.")
 
     # Gene Grouping - Fixed to use the proper function from grouping_utils
     logger.info("🔗 Running gene grouping analysis...")
@@ -501,8 +624,6 @@ def gsm_main_loop(data: pd.DataFrame,
                                           group_column_name=group_column,
                                           filtered_features=filtered_feature_names,
                                           logger=logger)
-    
-    logger.info("Grouping completed.")
 
     # Group Scoring
     logger.info("📈 Evaluating group performance...")
@@ -543,24 +664,19 @@ def gsm_main_loop(data: pd.DataFrame,
 
         step_label = f"Step {requested_groups}/{max_group_count}"
         if selection.used_top_groups == selection.requested_top_groups:
-            logger.info(
-                f"{step_label}: using top {selection.used_top_groups} groups. "
-                f"Unique features: {selection.baseline_feature_count} → {selection.used_feature_count}."
+            logger.debug(
+                f"{step_label}: top {selection.used_top_groups} groups → "
+                f"{selection.used_feature_count} features"
             )
         elif selection.used_feature_count > selection.baseline_feature_count:
-            logger.info(
-                f"{step_label}: top {selection.requested_top_groups} groups added no new features "
-                f"(still {selection.baseline_feature_count}). Expanded to top "
-                f"{selection.used_top_groups} groups to reach {selection.used_feature_count} unique features."
+            logger.debug(
+                f"{step_label}: expanded to top {selection.used_top_groups} groups → "
+                f"{selection.used_feature_count} features"
             )
         else:
             logger.warning(
-                f"{step_label}: top {selection.requested_top_groups} groups added no new features "
-                f"(still {selection.baseline_feature_count}). Even after expanding to "
-                f"{selection.used_top_groups} groups, the feature count stayed the same."
+                f"{step_label}: top {selection.used_top_groups} groups added no new features"
             )
-
-        logger.info(f"Training model with top {selection.used_top_groups} groups...")
         
         # Run modeling with decreasing number of top groups
         modeling_result = run_modeling(
@@ -579,12 +695,20 @@ def gsm_main_loop(data: pd.DataFrame,
         if modeling_result.num_features_used > previous_feature_count:
             previous_feature_count = modeling_result.num_features_used
         
-        logger.info(
-            f"✅ Model with top {modeling_result.num_groups_used} groups - "
-            f"F1 score: {modeling_result.f1_score:.4f}"
-        )
+        # Log only best results at INFO level
+        if modeling_result.f1_score >= 0.9:
+            logger.info(
+                f"  Groups={modeling_result.num_groups_used} → "
+                f"F1={modeling_result.f1_score:.4f} "
+                f"AUC={modeling_result.auc_roc:.4f}"
+            )
+        else:
+            logger.debug(
+                f"  Groups={modeling_result.num_groups_used} → "
+                f"F1={modeling_result.f1_score:.4f}"
+            )
 
-    logger.info("Modeling completed successfully.")
+    logger.info("✅ Modeling completed.")
     return modeling_result_list
 
 def generate_iteration_seed(initial_seed: int, iteration: int) -> int:
@@ -595,7 +719,6 @@ def set_random_seed(seed: int, logger) -> None:
     """Set random seed for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
-    logger.info(f"Random seed set to: {seed}")
 
 ##### Main Execution Function #####
 def main() -> None:

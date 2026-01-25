@@ -337,8 +337,7 @@ def train_and_evaluate_model(
         logger.error(f"❌ Unsupported model type: {model_name}")
         raise ValueError(f"Unsupported model type: {model_name}")
     
-    logger.info(f"🚀 Training {model_name} model"
-                f" with {len(train_x)} samples and {len(train_x.columns)} unique features")
+    logger.debug(f"Training {model_name} with {len(train_x)} samples, {len(train_x.columns)} features")
     
     # Train model
     start_time = time.time()
@@ -415,12 +414,11 @@ def train_and_evaluate_model(
             for feature, importance in zip(train_x.columns, model.feature_importances_):
                 feature_importance[feature] = float(importance)
         elif isinstance(model, SVC):
-            logger.info("ℹ️ SVM models use embedded feature selection via support vectors")
+            logger.debug("ℹ️ SVM models use embedded feature selection via support vectors")
     except Exception as e:
         logger.warning(f"⚠️ Unable to extract feature importance: {str(e)}")
     
-    logger.info(f"✅ Model '{model_name}' trained with accuracy: {acc:.4f}")
-    logger.info(f"   📊 AUC-ROC: {auc:.4f} | F1: {f1:.4f} (95% CI: {f1_ci.lower:.4f}-{f1_ci.upper:.4f})")
+    logger.debug(f"✅ {model_name}: Acc={acc:.4f} F1={f1:.4f} AUC={auc:.4f}")
     
     return ModelTrainingResult(
         model=model,
@@ -472,8 +470,6 @@ def run_modeling(
         # Filter to only include features that exist in the data
         available_features = [f for f in features_result.selected_features if f in data_train_x.columns]
         
-        logger.info(f"✅ Found {len(available_features)} unique valid features for modeling")
-        
         if len(available_features) < len(features_result.selected_features):
             missing = len(features_result.selected_features) - len(available_features)
             logger.warning(f"⚠️ {missing} features not found in dataset")
@@ -494,8 +490,6 @@ def run_modeling(
         # Filter data to use only selected features
         train_x = data_train_x[available_features]
         test_x = data_test_x[available_features]
-        
-        logger.info(f"🔬 Training {model_name} model with {len(available_features)} unique features from {len(features_result.used_group_names)} groups")
         
         # Train and evaluate model
         training_result = train_and_evaluate_model(

@@ -8,7 +8,7 @@ Purpose:
 
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import numpy as np
 import pandas as pd
 from dataclasses import asdict, dataclass
@@ -238,7 +238,11 @@ def save_summary_report(
     results: List[List[ModelingResult]], 
     iteration_metadata: List[IterationMetadata], 
     output_dir: Path, 
-    logger: logging.Logger
+    logger: logging.Logger,
+    aggregated_groups: Optional[List[Dict]] = None,
+    aggregated_features: Optional[List[Dict]] = None,
+    robust_rank_groups: Optional[List[Dict]] = None,
+    robust_rank_features: Optional[List[Dict]] = None
 ) -> None:
     """
     Identify the best performing model configuration and save a comprehensive summary report.
@@ -248,12 +252,18 @@ def save_summary_report(
     - Statistical validation metrics (AUC-ROC, confidence intervals)
     - Cross-validation results with standard deviations
     - Probability prediction thresholds
+    - Best averaged groups and features across all iterations
+    - Robust rank aggregation results
     
     Args:
         results: List of lists of ModelingResult objects
         iteration_metadata: Metadata for each iteration
         output_dir: Directory to save the report
         logger: Logger instance
+        aggregated_groups: Optional list of best averaged groups
+        aggregated_features: Optional list of best averaged features
+        robust_rank_groups: Optional list of RRA-aggregated groups
+        robust_rank_features: Optional list of RRA-aggregated features
     """
     best_f1 = -1.0
     best_result = None
@@ -411,6 +421,93 @@ def save_summary_report(
                 for idx, group in enumerate(best_result.used_groups[:10], 1):
                     f.write(f"  {idx}. {group}\n")
                 f.write("\n")
+            
+            # Best Averaged Groups (across all iterations)
+            if aggregated_groups:
+                f.write("=" * 70 + "\n")
+                f.write("BEST AVERAGED GROUPS (across all iterations)\n")
+                f.write("-" * 70 + "\n")
+                f.write("Groups ranked by average F1 score when used in modeling:\n\n")
+                for idx, group in enumerate(aggregated_groups[:15], 1):
+                    avg_f1 = group.get('Average F1 Score', 0.0)
+                    std_f1 = group.get('Std F1 Score', 0.0)
+                    occurrences = group.get('Occurrences', 0)
+                    f.write(f"  {idx:2d}. {group['Group Name'][:50]:<50} "
+                            f"Avg F1: {avg_f1:.4f} ± {std_f1:.4f} (n={occurrences})\n")
+                f.write("\n")
+            
+            # Best Averaged Features (across all iterations)
+            if aggregated_features:
+                f.write("BEST AVERAGED FEATURES (across all iterations)\n")
+                f.write("-" * 70 + "\n")
+                f.write("Features ranked by average importance score:\n\n")
+                for idx, feature in enumerate(aggregated_features[:20], 1):
+                    avg_imp = feature.get('Average Importance', 0.0)
+                    std_imp = feature.get('Std Importance', 0.0)
+                    occurrences = feature.get('Occurrences', 0)
+                    f.write(f"  {idx:2d}. {feature['Feature Name']:<20} "
+                            f"Avg Importance: {avg_imp:.4f} ± {std_imp:.4f} (n={occurrences})\n")
+                f.write("\n")
+            
+            # Robust Rank Aggregation Results - Groups
+            if robust_rank_groups:
+                f.write("=" * 70 + "\n")
+                f.write("ROBUST RANK AGGREGATION - GROUPS\n")
+                f.write("-" * 70 + "\n")
+                f.write("Groups ranked using Robust Rank Aggregation (RRA) method.\n")
+                f.write("Lower p-value = more consistently top-ranked across iterations.\n\n")
+                f.write(f"{'Rank':<6}{'Group Name':<45}{'RRA Score':>12}{'Avg Rank':>10}{'N':>6}\n")
+                f.write("-" * 70 + "\n")
+                for idx, group in enumerate(robust_rank_groups[:15], 1):
+                    name = group.get('Group Name', group.get('group_name', ''))[:42]
+                    score = group.get('Aggregated Score', group.get('aggregated_score', 0.0))
+                    avg_rank = group.get('Average Rank', group.get('average_rank', 0.0))
+                    occ = group.get('Occurrences', group.get('occurrences', 0))
+                    f.write(f"  {idx:<4}{name:<45}{score:>10.4f}{avg_rank:>10.2f}{occ:>6}\n")
+                f.write("\n")
+            
+            # Robust Rank Aggregation Results - Features
+            if robust_rank_features:
+                f.write("ROBUST RANK AGGREGATION - FEATURES\n")
+                f.write("-" * 70 + "\n")
+                f.write("Features ranked using Robust Rank Aggregation (RRA) method.\n")
+                f.write("Higher RRA score = more consistently top-ranked.\n\n")
+                f.write(f"{'Rank':<6}{'Feature Name':<25}{'RRA Score':>12}{'Avg Rank':>10}{'Avg Imp':>10}{'N':>6}\n")
+                f.write("-" * 70 + "\n")
+                for idx, feature in enumerate(robust_rank_features[:25], 1):
+                    name = feature.get('Feature Name', feature.get('feature_name', ''))[:22]
+                    score = feature.get('Aggregated Score', feature.get('aggregated_score', 0.0))
+                    avg_rank = feature.get('Average Rank', feature.get('average_rank', 0.0))
+                    avg_imp = feature.get('Average Importance', feature.get('average_importance', 0.0))
+                    occ = feature.get('Occurrences', feature.get('occurrences', 0))
+                    f.write(f"  {idx:<4}{name:<25}{score:>10.4f}{avg_rank:>10.2f}{avg_imp:>10.4f}{occ:>6}\n")
+                f.write("\n")
+            
+            # Summary statistics section
+            f.write("=" * 70 + "\n")
+            f.write("SUMMARY STATISTICS\n")
+            f.write("-" * 70 + "\n")
+            
+            # Collect all F1 scores
+            all_f1_scores = []
+            all_auc_scores = []
+            for iteration_results in results:
+                for res in iteration_results:
+                    all_f1_scores.append(res.f1_score)
+                    all_auc_scores.append(getattr(res, 'auc_roc', 0.0))
+            
+            if all_f1_scores:
+                f.write(f"Total Configurations Tested: {len(all_f1_scores)}\n")
+                f.write(f"F1 Score Range: {min(all_f1_scores):.4f} - {max(all_f1_scores):.4f}\n")
+                f.write(f"F1 Score Mean ± Std: {np.mean(all_f1_scores):.4f} ± {np.std(all_f1_scores):.4f}\n")
+                if all_auc_scores:
+                    f.write(f"AUC-ROC Mean ± Std: {np.mean(all_auc_scores):.4f} ± {np.std(all_auc_scores):.4f}\n")
+            
+            f.write("\n")
+            f.write("=" * 70 + "\n")
+            f.write("📊 Full results saved in accompanying Excel files.\n")
+            f.write("📈 Visualizations saved in figures/ directory.\n")
+            f.write("=" * 70 + "\n")
                 
         logger.info(f"✅ Summary report saved to: {report_path}")
         

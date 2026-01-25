@@ -4,7 +4,7 @@
 Purpose:
     Generate publication-quality figures for manuscript preparation.
     Creates ROC curves, confusion matrices, feature importance plots,
-    and performance comparison charts.
+    performance comparison charts, and aggregated ranking visualizations.
 
 Key Functions:
     - generate_all_figures: Main entry point to create all figures
@@ -12,6 +12,10 @@ Key Functions:
     - plot_confusion_matrix: Heatmap of classification results
     - plot_feature_importance: Bar chart of top features
     - plot_performance_boxplot: F1 stability across iterations
+    - plot_aggregated_group_ranking: Best averaged groups visualization
+    - plot_aggregated_feature_ranking: Best averaged features visualization
+    - plot_iteration_performance_summary: Per-iteration performance overview
+    - plot_group_count_optimization: Optimal group count analysis
 
 Example Usage:
     >>> from src.utils.generate_figures import generate_all_figures
@@ -130,6 +134,49 @@ def generate_all_figures(
         generated_figures['group_heatmap'] = path
     except Exception as e:
         logger.warning(f"⚠️ Could not generate group heatmap: {e}")
+    
+    # New figures added
+    try:
+        path = plot_best_averaged_groups(all_results, config, logger)
+        generated_figures['best_averaged_groups'] = path
+    except Exception as e:
+        logger.warning(f"⚠️ Could not generate best averaged groups plot: {e}")
+    
+    try:
+        path = plot_best_averaged_features(all_results, config, logger)
+        generated_figures['best_averaged_features'] = path
+    except Exception as e:
+        logger.warning(f"⚠️ Could not generate best averaged features plot: {e}")
+    
+    try:
+        path = plot_iteration_performance_summary(all_results, config, logger)
+        generated_figures['iteration_summary'] = path
+    except Exception as e:
+        logger.warning(f"⚠️ Could not generate iteration summary plot: {e}")
+    
+    try:
+        path = plot_group_count_optimization(all_results, config, logger)
+        generated_figures['group_count_optimization'] = path
+    except Exception as e:
+        logger.warning(f"⚠️ Could not generate group count optimization plot: {e}")
+    
+    try:
+        path = plot_feature_occurrence_frequency(all_results, config, logger)
+        generated_figures['feature_frequency'] = path
+    except Exception as e:
+        logger.warning(f"⚠️ Could not generate feature frequency plot: {e}")
+    
+    try:
+        path = plot_group_usage_frequency(all_results, config, logger)
+        generated_figures['group_frequency'] = path
+    except Exception as e:
+        logger.warning(f"⚠️ Could not generate group frequency plot: {e}")
+    
+    try:
+        path = plot_metrics_correlation(all_results, config, logger)
+        generated_figures['metrics_correlation'] = path
+    except Exception as e:
+        logger.warning(f"⚠️ Could not generate metrics correlation plot: {e}")
     
     logger.info(f"✅ Generated {len(generated_figures)} figures in {figures_dir}")
     return generated_figures
@@ -416,27 +463,52 @@ def plot_cv_stability(
                 test_scores.append(result.get('f1_score', 0))
                 iterations.append(i + 1)
     
-    fig, ax = plt.subplots(figsize=config.figsize_single)
+    n_iterations = len(iterations)
     
-    x = np.arange(len(iterations))
-    width = 0.35
-    
-    bars1 = ax.bar(x - width/2, cv_means, width, label='CV F1 Mean', color='steelblue', alpha=0.8)
-    bars2 = ax.bar(x + width/2, test_scores, width, label='Test F1', color='coral', alpha=0.8)
-    
-    ax.set_xlabel('Iteration')
-    ax.set_ylabel('F1 Score')
-    ax.set_title('Cross-Validation vs Test Performance Stability')
-    ax.set_xticks(x)
-    ax.set_xticklabels(iterations)
-    ax.legend()
-    ax.set_ylim(0, 1.1)
+    # For many iterations, use line plot instead of bar chart
+    if n_iterations > 30:
+        fig, ax = plt.subplots(figsize=(14, 6))
+        
+        ax.plot(iterations, cv_means, 'o-', color='steelblue', 
+                linewidth=1.5, markersize=4, alpha=0.8, label='CV F1 Mean')
+        ax.plot(iterations, test_scores, 's-', color='coral', 
+                linewidth=1.5, markersize=4, alpha=0.8, label='Test F1')
+        
+        ax.set_xlabel('Iteration')
+        ax.set_ylabel('F1 Score')
+        ax.set_title('Cross-Validation vs Test Performance Stability')
+        
+        # Set x-ticks to show every Nth iteration
+        tick_step = max(1, n_iterations // 20)
+        ax.set_xticks(iterations[::tick_step])
+        ax.set_xticklabels(iterations[::tick_step], rotation=45)
+        
+        ax.legend(loc='lower right')
+        ax.set_ylim(0, 1.1)
+        ax.grid(True, alpha=0.3)
+    else:
+        fig, ax = plt.subplots(figsize=config.figsize_single)
+        
+        x = np.arange(len(iterations))
+        width = 0.35
+        
+        bars1 = ax.bar(x - width/2, cv_means, width, label='CV F1 Mean', color='steelblue', alpha=0.8)
+        bars2 = ax.bar(x + width/2, test_scores, width, label='Test F1', color='coral', alpha=0.8)
+        
+        ax.set_xlabel('Iteration')
+        ax.set_ylabel('F1 Score')
+        ax.set_title('Cross-Validation vs Test Performance Stability')
+        ax.set_xticks(x)
+        ax.set_xticklabels(iterations)
+        ax.legend()
+        ax.set_ylim(0, 1.1)
     
     # Add correlation coefficient
-    correlation = np.corrcoef(cv_means, test_scores)[0, 1]
-    ax.text(0.02, 0.98, f'Correlation: {correlation:.3f}', 
-            transform=ax.transAxes, fontsize=10, verticalalignment='top',
-            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    if len(cv_means) > 1:
+        correlation = np.corrcoef(cv_means, test_scores)[0, 1]
+        ax.text(0.02, 0.98, f'Correlation: {correlation:.3f}', 
+                transform=ax.transAxes, fontsize=10, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
     plt.tight_layout()
     
@@ -475,18 +547,43 @@ def plot_group_performance_heatmap(
     df.index.name = 'Iteration'
     df.columns.name = 'Groups'
     
-    fig, ax = plt.subplots(figsize=config.figsize_wide)
+    # Determine figure size and annotation based on number of iterations
+    n_iterations = len(df)
+    n_groups = len(df.columns)
     
-    sns.heatmap(
-        df, 
-        annot=True, 
-        fmt='.2f',
-        cmap='RdYlGn',
-        center=0.7,
-        linewidths=0.5,
-        ax=ax,
-        cbar_kws={'label': 'F1 Score'}
-    )
+    # For many iterations, use a larger figure and smaller/no annotations
+    if n_iterations > 30:
+        # Large heatmap without annotations for clarity
+        fig_height = max(10, n_iterations * 0.15)
+        fig, ax = plt.subplots(figsize=(12, fig_height))
+        
+        sns.heatmap(
+            df, 
+            annot=False,  # No annotations for many iterations
+            cmap='RdYlGn',
+            center=0.7,
+            linewidths=0.1,
+            ax=ax,
+            cbar_kws={'label': 'F1 Score', 'shrink': 0.5}
+        )
+        
+        # Show only every Nth y-tick label for readability
+        tick_step = max(1, n_iterations // 20)
+        ax.set_yticks(ax.get_yticks()[::tick_step])
+    else:
+        fig, ax = plt.subplots(figsize=config.figsize_wide)
+        
+        sns.heatmap(
+            df, 
+            annot=True, 
+            fmt='.2f',
+            cmap='RdYlGn',
+            center=0.7,
+            linewidths=0.5,
+            ax=ax,
+            annot_kws={'fontsize': 8},
+            cbar_kws={'label': 'F1 Score'}
+        )
     
     ax.set_title('F1 Score Heatmap: Iterations × Group Counts')
     ax.set_xlabel('Number of Groups')
@@ -495,6 +592,443 @@ def plot_group_performance_heatmap(
     plt.tight_layout()
     
     output_path = config.output_dir / f'performance_heatmap.{config.format}'
+    fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
+    plt.close(fig)
+    
+    logger.info(f"   ✓ Saved: {output_path.name}")
+    return output_path
+
+
+##### BEST AVERAGED GROUPS PLOT #####
+def plot_best_averaged_groups(
+    all_results: List[Dict],
+    config: FigureConfig,
+    logger: logging.Logger,
+    top_n: int = 15
+) -> Path:
+    """Create horizontal bar chart of best averaged groups."""
+    logger.info("📊 Generating best averaged groups plot...")
+    
+    # Collect group usage and F1 scores
+    group_stats = {}
+    for iteration_data in all_results:
+        for result in iteration_data.get('results', []):
+            used_groups = result.get('used_groups', [])
+            f1_score = result.get('f1_score', 0.0)
+            
+            for group_name in used_groups:
+                if group_name not in group_stats:
+                    group_stats[group_name] = {'f1_scores': [], 'count': 0}
+                group_stats[group_name]['f1_scores'].append(f1_score)
+                group_stats[group_name]['count'] += 1
+    
+    # Calculate statistics
+    groups_data = []
+    for name, stats in group_stats.items():
+        groups_data.append({
+            'Group': name[:40] + '...' if len(name) > 40 else name,
+            'Avg F1': np.mean(stats['f1_scores']),
+            'Std': np.std(stats['f1_scores']),
+            'Count': stats['count']
+        })
+    
+    df = pd.DataFrame(groups_data)
+    df = df.sort_values('Avg F1', ascending=False).head(top_n)
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    colors = plt.cm.RdYlGn(np.linspace(0.3, 0.9, len(df)))
+    
+    bars = ax.barh(
+        df['Group'], 
+        df['Avg F1'], 
+        xerr=df['Std'],
+        color=colors,
+        edgecolor='black',
+        linewidth=0.5,
+        capsize=3
+    )
+    
+    ax.set_xlabel('Average F1 Score (when group is used)')
+    ax.set_ylabel('Group Name')
+    ax.set_title(f'Top {top_n} Groups by Average F1 Score\n(Mean ± SD across configurations)')
+    ax.invert_yaxis()
+    ax.set_xlim(0, 1.0)
+    
+    # Add count labels showing how many times the group was used
+    for bar, count in zip(bars, df['Count']):
+        ax.text(bar.get_width() + 0.01, bar.get_y() + bar.get_height()/2, 
+                f'Used {count}x', va='center', fontsize=8, color='gray')
+    
+    plt.tight_layout()
+    
+    output_path = config.output_dir / f'best_averaged_groups.{config.format}'
+    fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
+    plt.close(fig)
+    
+    logger.info(f"   ✓ Saved: {output_path.name}")
+    return output_path
+
+
+##### BEST AVERAGED FEATURES PLOT #####
+def plot_best_averaged_features(
+    all_results: List[Dict],
+    config: FigureConfig,
+    logger: logging.Logger,
+    top_n: int = 25
+) -> Path:
+    """Create lollipop chart of best averaged features by importance."""
+    logger.info("📊 Generating best averaged features plot...")
+    
+    # Collect feature importance scores
+    feature_stats = {}
+    for iteration_data in all_results:
+        for result in iteration_data.get('results', []):
+            importance = result.get('feature_importance', {})
+            for name, score in importance.items():
+                if name not in feature_stats:
+                    feature_stats[name] = []
+                feature_stats[name].append(score)
+    
+    # Calculate statistics
+    features_data = []
+    for name, scores in feature_stats.items():
+        features_data.append({
+            'Feature': name,
+            'Avg Importance': np.mean(scores),
+            'Std': np.std(scores),
+            'Count': len(scores)
+        })
+    
+    df = pd.DataFrame(features_data)
+    df = df.sort_values('Avg Importance', ascending=False).head(top_n)
+    
+    fig, ax = plt.subplots(figsize=(10, 10))
+    
+    # Lollipop chart
+    y_pos = np.arange(len(df))
+    colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(df)))
+    
+    ax.hlines(y=y_pos, xmin=0, xmax=df['Avg Importance'], color='gray', alpha=0.7, linewidth=1)
+    ax.scatter(df['Avg Importance'], y_pos, color=colors, s=100, zorder=3)
+    
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(df['Feature'])
+    ax.set_xlabel('Average Importance Score')
+    ax.set_ylabel('Feature Name')
+    ax.set_title(f'Top {top_n} Features by Average Importance\n(Across all iterations)')
+    ax.invert_yaxis()
+    
+    # Add error bars as horizontal lines
+    for i, (idx, row) in enumerate(df.iterrows()):
+        ax.plot([row['Avg Importance'] - row['Std'], row['Avg Importance'] + row['Std']], 
+                [i, i], color='red', alpha=0.5, linewidth=2)
+    
+    plt.tight_layout()
+    
+    output_path = config.output_dir / f'best_averaged_features.{config.format}'
+    fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
+    plt.close(fig)
+    
+    logger.info(f"   ✓ Saved: {output_path.name}")
+    return output_path
+
+
+##### ITERATION PERFORMANCE SUMMARY #####
+def plot_iteration_performance_summary(
+    all_results: List[Dict],
+    config: FigureConfig,
+    logger: logging.Logger
+) -> Path:
+    """Create line plot showing best performance per iteration."""
+    logger.info("📈 Generating iteration performance summary...")
+    
+    # Collect best F1 per iteration
+    best_per_iter = []
+    for i, iteration_data in enumerate(all_results):
+        results = iteration_data.get('results', [])
+        if results:
+            best_f1 = max(r.get('f1_score', 0) for r in results)
+            best_auc = max(r.get('auc_roc', 0) for r in results)
+            avg_f1 = np.mean([r.get('f1_score', 0) for r in results])
+            best_per_iter.append({
+                'Iteration': i + 1,
+                'Best F1': best_f1,
+                'Best AUC': best_auc,
+                'Avg F1': avg_f1
+            })
+    
+    df = pd.DataFrame(best_per_iter)
+    
+    fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    
+    # Top plot: F1 scores
+    ax1 = axes[0]
+    ax1.plot(df['Iteration'], df['Best F1'], 'o-', color='steelblue', 
+             linewidth=2, markersize=6, label='Best F1')
+    ax1.plot(df['Iteration'], df['Avg F1'], 's--', color='coral', 
+             linewidth=1.5, markersize=5, alpha=0.7, label='Avg F1')
+    ax1.axhline(df['Best F1'].mean(), color='steelblue', linestyle=':', alpha=0.5)
+    ax1.fill_between(df['Iteration'], df['Best F1'].min(), df['Best F1'], alpha=0.2)
+    ax1.set_ylabel('F1 Score')
+    ax1.set_title('Performance Across Iterations')
+    ax1.legend(loc='lower right')
+    ax1.set_ylim(0, 1.0)
+    
+    # Bottom plot: AUC-ROC
+    ax2 = axes[1]
+    ax2.plot(df['Iteration'], df['Best AUC'], 'o-', color='green', 
+             linewidth=2, markersize=6, label='Best AUC-ROC')
+    ax2.axhline(df['Best AUC'].mean(), color='green', linestyle=':', alpha=0.5)
+    ax2.fill_between(df['Iteration'], df['Best AUC'].min(), df['Best AUC'], 
+                     alpha=0.2, color='green')
+    ax2.set_xlabel('Iteration')
+    ax2.set_ylabel('AUC-ROC Score')
+    ax2.legend(loc='lower right')
+    ax2.set_ylim(0, 1.0)
+    
+    plt.tight_layout()
+    
+    output_path = config.output_dir / f'iteration_performance_summary.{config.format}'
+    fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
+    plt.close(fig)
+    
+    logger.info(f"   ✓ Saved: {output_path.name}")
+    return output_path
+
+
+##### GROUP COUNT OPTIMIZATION PLOT #####
+def plot_group_count_optimization(
+    all_results: List[Dict],
+    config: FigureConfig,
+    logger: logging.Logger
+) -> Path:
+    """Create plot showing optimal number of groups analysis."""
+    logger.info("📊 Generating group count optimization plot...")
+    
+    # Collect metrics by group count
+    metrics_by_groups = {}
+    
+    for iteration_data in all_results:
+        for result in iteration_data.get('results', []):
+            n_groups = result.get('num_groups_used', 0)
+            if n_groups not in metrics_by_groups:
+                metrics_by_groups[n_groups] = {'f1': [], 'auc': [], 'features': []}
+            metrics_by_groups[n_groups]['f1'].append(result.get('f1_score', 0))
+            metrics_by_groups[n_groups]['auc'].append(result.get('auc_roc', 0))
+            metrics_by_groups[n_groups]['features'].append(result.get('num_features_used', 0))
+    
+    group_counts = sorted(metrics_by_groups.keys())
+    f1_means = [np.mean(metrics_by_groups[g]['f1']) for g in group_counts]
+    f1_stds = [np.std(metrics_by_groups[g]['f1']) for g in group_counts]
+    auc_means = [np.mean(metrics_by_groups[g]['auc']) for g in group_counts]
+    feature_means = [np.mean(metrics_by_groups[g]['features']) for g in group_counts]
+    
+    fig, axes = plt.subplots(2, 1, figsize=(10, 8))
+    
+    # Top: F1 and AUC by group count
+    ax1 = axes[0]
+    x = np.arange(len(group_counts))
+    width = 0.35
+    
+    bars1 = ax1.bar(x - width/2, f1_means, width, yerr=f1_stds, 
+                    label='F1 Score', color='steelblue', capsize=3)
+    bars2 = ax1.bar(x + width/2, auc_means, width, 
+                    label='AUC-ROC', color='coral', capsize=3)
+    
+    ax1.set_ylabel('Score')
+    ax1.set_title('Performance Metrics by Number of Groups')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(group_counts)
+    ax1.legend()
+    ax1.set_ylim(0, 1.0)
+    
+    # Highlight optimal
+    best_idx = np.argmax(f1_means)
+    ax1.axvline(best_idx, color='green', linestyle='--', alpha=0.5, label='Optimal')
+    
+    # Bottom: Total feature count by group count
+    ax2 = axes[1]
+    feature_totals = [sum(metrics_by_groups[g]['features']) for g in group_counts]
+    ax2.bar(x, feature_totals, color='purple', alpha=0.7)
+    ax2.set_xlabel('Number of Groups')
+    ax2.set_ylabel('Total Feature Count (across all configs)')
+    ax2.set_title('Total Features Used by Number of Groups')
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(group_counts)
+    
+    # Add value labels on bars
+    for i, v in enumerate(feature_totals):
+        ax2.text(i, v + max(feature_totals)*0.01, f'{v:,}', ha='center', fontsize=8)
+    
+    plt.tight_layout()
+    
+    output_path = config.output_dir / f'group_count_optimization.{config.format}'
+    fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
+    plt.close(fig)
+    
+    logger.info(f"   ✓ Saved: {output_path.name}")
+    return output_path
+
+
+##### FEATURE OCCURRENCE FREQUENCY #####
+def plot_feature_occurrence_frequency(
+    all_results: List[Dict],
+    config: FigureConfig,
+    logger: logging.Logger,
+    top_n: int = 30
+) -> Path:
+    """Create bar chart showing how often features appear across iterations."""
+    logger.info("📊 Generating feature occurrence frequency plot...")
+    
+    feature_counts = {}
+    total_results = 0
+    
+    for iteration_data in all_results:
+        for result in iteration_data.get('results', []):
+            total_results += 1
+            importance = result.get('feature_importance', {})
+            for name in importance.keys():
+                feature_counts[name] = feature_counts.get(name, 0) + 1
+    
+    # Convert to DataFrame
+    df = pd.DataFrame([
+        {'Feature': name, 'Occurrences': count, 'Frequency': count / total_results * 100}
+        for name, count in feature_counts.items()
+    ])
+    df = df.sort_values('Occurrences', ascending=False).head(top_n)
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    colors = plt.cm.Blues(np.linspace(0.4, 0.9, len(df)))
+    
+    bars = ax.barh(df['Feature'], df['Frequency'], color=colors, edgecolor='black', linewidth=0.5)
+    
+    ax.set_xlabel('Occurrence Frequency (%)')
+    ax.set_ylabel('Feature Name')
+    ax.set_title(f'Top {top_n} Most Frequently Selected Features\n(Across all configurations)')
+    ax.invert_yaxis()
+    
+    # Add percentage labels
+    for bar, freq in zip(bars, df['Frequency']):
+        ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2, 
+                f'{freq:.1f}%', va='center', fontsize=8)
+    
+    plt.tight_layout()
+    
+    output_path = config.output_dir / f'feature_occurrence_frequency.{config.format}'
+    fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
+    plt.close(fig)
+    
+    logger.info(f"   ✓ Saved: {output_path.name}")
+    return output_path
+
+
+##### GROUP USAGE FREQUENCY #####
+def plot_group_usage_frequency(
+    all_results: List[Dict],
+    config: FigureConfig,
+    logger: logging.Logger,
+    top_n: int = 20
+) -> Path:
+    """Create bar chart showing how often groups are used across iterations."""
+    logger.info("📊 Generating group usage frequency plot...")
+    
+    group_counts = {}
+    total_results = 0
+    
+    for iteration_data in all_results:
+        for result in iteration_data.get('results', []):
+            total_results += 1
+            used_groups = result.get('used_groups', [])
+            for name in used_groups:
+                group_counts[name] = group_counts.get(name, 0) + 1
+    
+    # Convert to DataFrame
+    df = pd.DataFrame([
+        {'Group': name[:35] + '...' if len(name) > 35 else name, 
+         'Occurrences': count, 
+         'Frequency': count / total_results * 100}
+        for name, count in group_counts.items()
+    ])
+    df = df.sort_values('Occurrences', ascending=False).head(top_n)
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    colors = plt.cm.Greens(np.linspace(0.4, 0.9, len(df)))
+    
+    bars = ax.barh(df['Group'], df['Frequency'], color=colors, edgecolor='black', linewidth=0.5)
+    
+    ax.set_xlabel('Usage Frequency (%)')
+    ax.set_ylabel('Group Name')
+    ax.set_title(f'Top {top_n} Most Frequently Used Groups\n(Across all configurations)')
+    ax.invert_yaxis()
+    
+    # Add percentage labels
+    for bar, freq in zip(bars, df['Frequency']):
+        ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2, 
+                f'{freq:.1f}%', va='center', fontsize=8)
+    
+    plt.tight_layout()
+    
+    output_path = config.output_dir / f'group_usage_frequency.{config.format}'
+    fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
+    plt.close(fig)
+    
+    logger.info(f"   ✓ Saved: {output_path.name}")
+    return output_path
+
+
+##### METRICS CORRELATION PLOT #####
+def plot_metrics_correlation(
+    all_results: List[Dict],
+    config: FigureConfig,
+    logger: logging.Logger
+) -> Path:
+    """Create scatter matrix showing correlations between metrics."""
+    logger.info("📊 Generating metrics correlation plot...")
+    
+    # Collect all metrics
+    data = []
+    for iteration_data in all_results:
+        for result in iteration_data.get('results', []):
+            data.append({
+                'F1 Score': result.get('f1_score', 0),
+                'AUC-ROC': result.get('auc_roc', 0),
+                'Accuracy': result.get('accuracy', 0),
+                'Precision': result.get('precision', 0),
+                'Recall': result.get('recall', 0),
+                'Groups': result.get('num_groups_used', 0),
+                'Features': result.get('num_features_used', 0)
+            })
+    
+    df = pd.DataFrame(data)
+    
+    # Calculate correlation matrix
+    corr_matrix = df.corr()
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Create heatmap
+    mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+    sns.heatmap(
+        corr_matrix, 
+        mask=mask,
+        annot=True, 
+        fmt='.2f',
+        cmap='RdBu_r',
+        center=0,
+        square=True,
+        linewidths=0.5,
+        ax=ax,
+        cbar_kws={'label': 'Correlation', 'shrink': 0.8}
+    )
+    
+    ax.set_title('Correlation Matrix of Performance Metrics')
+    
+    plt.tight_layout()
+    
+    output_path = config.output_dir / f'metrics_correlation.{config.format}'
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
