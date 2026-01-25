@@ -6,8 +6,8 @@ ARCHIVE/
 output/
 *ARCHIVE*/
 
-data/grouping_data
-data/main_data
+# data/grouping_data/
+# data/main_data
 data/test/*.py
 
 # Byte-compiled / optimized / DLL files
