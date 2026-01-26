@@ -48,13 +48,21 @@ def save_ranked_groups(
         output_dir = Path(output_path).parent
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Check if file exists and load existing data
-        if Path(output_path).exists():
-            existing_df = pd.read_excel(output_path)
-            df = pd.concat([existing_df, df], ignore_index=True)
-            
-        df.to_excel(output_path, index=False)
-        logger.info(f"✅ Successfully saved ranked groups to: {output_path}")
+        output_p = Path(output_path)
+        # If CSV requested, use CSV writing (better for very large files)
+        if output_p.suffix.lower() == '.csv':
+            if output_p.exists():
+                existing_df = pd.read_csv(output_p)
+                df = pd.concat([existing_df, df], ignore_index=True)
+            df.to_csv(output_p, index=False)
+            logger.info(f"✅ Successfully saved ranked groups to CSV: {output_p}")
+        else:
+            # Excel behavior (append if exists)
+            if output_p.exists():
+                existing_df = pd.read_excel(output_p)
+                df = pd.concat([existing_df, df], ignore_index=True)
+            df.to_excel(output_p, index=False)
+            logger.info(f"✅ Successfully saved ranked groups to: {output_p}")
         
     except Exception as e:
         logger.error(f"❌ Error saving ranked groups: {str(e)}")

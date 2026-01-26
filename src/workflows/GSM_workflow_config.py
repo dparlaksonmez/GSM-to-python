@@ -1,110 +1,223 @@
 """
-Configuration settings for the GSM Bioinformatics Pipeline.
-
-This module contains all configuration parameters used throughout the pipeline,
-organized by processing stage. Each section contains related parameters with
-detailed documentation.
-
-Key Configuration Sections:
-- Input/Output: Data file paths and formats
-- Pipeline Control: High-level pipeline behavior settings
-- Model Settings: ML model configuration
-- Feature Selection: Parameters for feature filtering and selection
-- Data Processing: Data normalization and sampling parameters
-- Performance: Execution settings like parallelization
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    GSM PIPELINE CONFIGURATION FILE                           ║
+║                                                                              ║
+║  This is the MAIN configuration file for the GSM Bioinformatics Pipeline.   ║
+║  Edit the values below to customize your analysis.                          ║
+║                                                                              ║
+║  📖 For detailed documentation, see: DOCS/RUNNING.md                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 """
-# TODO: Should I keep config file as .py or convert to .yaml?
 
 from typing import Literal
-from dataclasses import dataclass
 from pathlib import Path
 
-# ============================================================================
-# Input/Output Configuration
-# ============================================================================
-
-# Get the project directory. This assumes the config file is located at src/workflows/....
-# parents[2] => <project_root>
+# Auto-detect project directory (do not modify)
 project_dir = Path(__file__).resolve().parents[2]
 
-NUMBER_OF_ITERATIONS = 10
 
-### REAL DATA (Default) ###
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                         1. INPUT DATA SETTINGS                             ║
+# ║                                                                            ║
+# ║  Configure your input files here. The pipeline requires:                   ║
+# ║    • Expression data: Gene expression matrix (samples × genes)             ║
+# ║    • Grouping data: Gene-to-group mappings (e.g., from DisGeNET)           ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  EXPRESSION DATA FILE                                                    │
+# │  Format: CSV or TSV with samples as rows, genes as columns               │
+# │  Must include a class label column (see LABEL_COLUMN_NAME below)         │
+# └──────────────────────────────────────────────────────────────────────────┘
 INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
+MAIN_DATA_FILE_SEPARATOR = ","          # Use "," for CSV, "\t" for TSV
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  GROUPING DATA FILE                                                      │
+# │  Format: Two columns - gene identifiers and group names                  │
+# │  Example sources: DisGeNET, KEGG, GO, custom gene sets                   │
+# └──────────────────────────────────────────────────────────────────────────┘
 INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET_gedinet.txt"
-# Group Settings
-GENE_COLUMN_NAME = "feature_id"
-GROUP_COLUMN_NAME = "group_name"
-# Main expression file separator (e.g., ',' for CSV, '\t' for TSV)
-MAIN_DATA_FILE_SEPARATOR = ","
-# Grouping file separator (e.g., ',' for CSV, '\t' for TSV)
-GROUPING_FILE_SEPARATOR = ","
+GROUPING_FILE_SEPARATOR = ","           # Use "," for CSV, "\t" for TSV
 
-# ### TEST DATA ###
-# INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
-# INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
-# GENE_COLUMN_NAME = "feature_id"
-# GROUP_COLUMN_NAME = "group_name"
-# MAIN_DATA_FILE_SEPARATOR = ","
-# GROUPING_FILE_SEPARATOR = "\t"
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  COLUMN NAMES                                                            │
+# │  Specify the column names in your grouping file                          │
+# └──────────────────────────────────────────────────────────────────────────┘
+GENE_COLUMN_NAME = "feature_id"         # Column containing gene identifiers
+GROUP_COLUMN_NAME = "group_name"        # Column containing group/pathway names
 
-
-
-
-
-
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  OUTPUT DIRECTORY                                                        │
+# │  Results will be saved in timestamped subfolders                         │
+# └──────────────────────────────────────────────────────────────────────────┘
 OUTPUT_DIR = project_dir / "output"
 
 
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                      2. PIPELINE CONTROL SETTINGS                          ║
+# ║                                                                            ║
+# ║  Control how the pipeline runs: iterations, reproducibility, outputs       ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
 
-# MIN_GENES_PER_GROUP = 10 #TODO: should I keep it?
-# MAX_GENES_PER_GROUP = 1000
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  ITERATIONS                                                              │
+# │  More iterations = more robust results, but longer runtime               │
+# │  Recommended: 50-100 for publication, 10 for testing                     │
+# └──────────────────────────────────────────────────────────────────────────┘
+NUMBER_OF_ITERATIONS = 10
 
-# ============================================================================
-# Data Processing Settings
-# ============================================================================
-
-LABEL_COLUMN_NAME = 'class'
-NORMALIZATION_METHOD = 'zscore'  # Options: 'minmax', 'zscore', 'robust'
-TRAIN_TEST_SPLIT_RATIO = 0.7
-CLASS_LABELS_POSITIVE = "pos"
-CLASS_LABELS_NEGATIVE = "neg"
-MIN_CLASS_BALANCE_RATIO = 0.5  # Minimum acceptable ratio between minority and majority classes 
-    # (0.5 means classes can be at most 1:2)
-SAMPLING_METHOD = 'undersampling'  # Options: 'undersampling', 'oversampling', 'hybrid'
-# TODO: implement sampling methods
-
-# ============================================================================
-# Pipeline Control
-# ============================================================================
-
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  REPRODUCIBILITY                                                         │
+# │  Set random seed for reproducible results                                │
+# └──────────────────────────────────────────────────────────────────────────┘
 RANDOM_SEED = 44
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  CROSS-VALIDATION                                                        │
+# │  Number of folds for K-fold cross-validation during group scoring        │
+# └──────────────────────────────────────────────────────────────────────────┘
 CROSS_VALIDATION_FOLDS = 3
-SAVE_INTERMEDIATE_RESULTS = True
 
-# ============================================================================
-# Model Configuration
-# ============================================================================
-
-# Supported model types
-ModelType = Literal['DecisionTree', 'RandomForest', 'SVM', 'KNN', 'MLP']
-
-MODEL_NAME : ModelType = 'RandomForest'
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  SAVE OPTIONS                                                            │
+# └──────────────────────────────────────────────────────────────────────────┘
+SAVE_INTERMEDIATE_RESULTS = True        # Save detailed JSON results
 
 
-# ============================================================================
-# Feature Selection Settings
-# ============================================================================
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                      3. DATA PROCESSING SETTINGS                           ║
+# ║                                                                            ║
+# ║  Configure how your data is processed and split                            ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
 
-INITIAL_FEATURE_FILTER_SIZE = 0  # 0 to disable initial filtering
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  CLASS LABELS                                                            │
+# │  Specify the column and values used for classification                   │
+# └──────────────────────────────────────────────────────────────────────────┘
+LABEL_COLUMN_NAME = "class"             # Column containing class labels
+CLASS_LABELS_POSITIVE = "pos"           # Label for positive class (e.g., disease)
+CLASS_LABELS_NEGATIVE = "neg"           # Label for negative class (e.g., control)
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  NORMALIZATION                                                           │
+# │  Options: 'zscore' (recommended), 'minmax', 'robust'                     │
+# └──────────────────────────────────────────────────────────────────────────┘
+NORMALIZATION_METHOD = "zscore"
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  TRAIN/TEST SPLIT                                                        │
+# │  Proportion of data used for training (rest used for testing)            │
+# └──────────────────────────────────────────────────────────────────────────┘
+TRAIN_TEST_SPLIT_RATIO = 0.7            # 70% train, 30% test
+
+
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                      4. FEATURE SELECTION SETTINGS                         ║
+# ║                                                                            ║
+# ║  Control how genes are filtered and groups are selected                    ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  T-TEST FILTERING                                                        │
+# │  Genes with p-value above threshold are excluded                         │
+# │  Lower = more stringent filtering                                        │
+# └──────────────────────────────────────────────────────────────────────────┘
+TTEST_THRESHOLD = 0.05                  # P-value threshold (0.05 = 95% confidence)
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  INITIAL FEATURE FILTER                                                  │
+# │  Optional: Limit to top N features before grouping                       │
+# │  Set to 0 to disable (use all genes passing t-test)                      │
+# └──────────────────────────────────────────────────────────────────────────┘
+INITIAL_FEATURE_FILTER_SIZE = 0         # 0 = disabled
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  GROUP SELECTION                                                         │
+# │  Number of top-ranked groups to use for final model                      │
+# │  Higher = more features, potentially better but risking overfitting      │
+# └──────────────────────────────────────────────────────────────────────────┘
 BEST_GROUPS_TO_KEEP = 10
-# MIN_VARIANCE_THRESHOLD = 0.01 #TODO: should I keep it?
-SELECTION_METHOD = 't_test'  # Options: 't_test', 'f_test', 'mutual_info'
-TTEST_THRESHOLD = 0.05  # P-value threshold for t-test feature selection
-# ============================================================================
-# Logging Configuration
-# ============================================================================
 
-LOGGING_LEVEL = 'INFO'
-LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-LOGGING_OUTPUT_FILE = 'pipeline.log'
+
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                      5. MACHINE LEARNING MODEL                             ║
+# ║                                                                            ║
+# ║  Select and configure the classification model                             ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  MODEL SELECTION                                                         │
+# │  Available options:                                                      │
+# │    • 'RandomForest'  - Recommended for most cases                        │
+# │    • 'DecisionTree'  - Simple, interpretable                             │
+# │    • 'SVM'           - Support Vector Machine                            │
+# │    • 'KNN'           - K-Nearest Neighbors                               │
+# │    • 'MLP'           - Neural Network (Multi-Layer Perceptron)           │
+# └──────────────────────────────────────────────────────────────────────────┘
+ModelType = Literal['DecisionTree', 'RandomForest', 'SVM', 'KNN', 'MLP']
+MODEL_NAME: ModelType = "RandomForest"
+
+
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                      6. BIOLOGICAL VALIDATION (Optional)                   ║
+# ║                                                                            ║
+# ║  Query external databases to validate your top genes biologically          ║
+# ║  This adds ~30-60 seconds to runtime due to API calls                      ║
+# ║                                                                            ║
+# ║  Databases queried:                                                        ║
+# ║    • Enrichr: Pathway enrichment (KEGG, GO, Reactome, WikiPathways)        ║
+# ║    • STRING-db: Protein-protein interaction networks                       ║
+# ║    • DisGeNET: Gene-disease associations (requires free API key)           ║
+# ║                                                                            ║
+# ║  Output files saved in: output/<run>/biological_validation/                ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  ENABLE/DISABLE                                                          │
+# │  Set to True to run biological validation after pipeline completes       │
+# └──────────────────────────────────────────────────────────────────────────┘
+RUN_BIOLOGICAL_VALIDATION = True
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  VALIDATION SETTINGS                                                     │
+# └──────────────────────────────────────────────────────────────────────────┘
+BIOLOGICAL_VALIDATION_TOP_GENES = 20    # Number of top genes to validate
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  DisGeNET API KEY (Optional)                                             │
+# │  Get your free key at: https://www.disgenet.org/api/#/Authorization      │
+# │  Leave empty ("") to skip DisGeNET queries                               │
+# └──────────────────────────────────────────────────────────────────────────┘
+DISGENET_API_KEY = ""
+
+
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                      7. LOGGING SETTINGS                                   ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+
+LOGGING_LEVEL = "INFO"                  # Options: 'DEBUG', 'INFO', 'WARNING'
+LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+LOGGING_OUTPUT_FILE = "pipeline.log"
+
+
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                      QUICK START PRESETS                                   ║
+# ║                                                                            ║
+# ║  Uncomment ONE of the presets below to quickly switch configurations       ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+
+# ────────────────────────────────────────────────────────────────────────────
+# PRESET: Quick Test (for debugging/development)
+# ────────────────────────────────────────────────────────────────────────────
+# INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
+# INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
+# NUMBER_OF_ITERATIONS = 3
+# BEST_GROUPS_TO_KEEP = 5
+
+# ────────────────────────────────────────────────────────────────────────────
+# PRESET: Full Publication Run (robust results)
+# ────────────────────────────────────────────────────────────────────────────
+# NUMBER_OF_ITERATIONS = 100
+# CROSS_VALIDATION_FOLDS = 5
+# RUN_BIOLOGICAL_VALIDATION = True

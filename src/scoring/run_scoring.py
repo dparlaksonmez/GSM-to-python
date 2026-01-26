@@ -19,7 +19,13 @@ DEFAULT_CROSS_VALIDATION_FOLDS = 5
 # Default number of parallel jobs (-1 = use all CPUs)
 DEFAULT_N_JOBS = -1
 
-from src.utils.save_ranked_features import save_ranked_features, FeatureRankingOutput
+from src.utils.save_ranked_features import (
+    save_ranked_features, 
+    FeatureRankingOutput,
+    compute_group_derived_feature_scores,
+    save_group_derived_features,
+    GroupDerivedRankingOutput,
+)
 from src.utils.save_ranked_groups import save_ranked_groups
 from src.scoring.score_data import ScoringParameters, score_data
 from src.scoring.metrics import MetricsData, rank_by_score
@@ -169,8 +175,10 @@ def run_scoring(
         ScoringResults containing ranked groups and feature scores
     """
     try:
+        # Only score features that passed t-test filtering
+        filtered_feature_names = list(data_x.columns)
         if feature_scores is None:
-            feature_scores = score_all_features(data_x, labels, logger)
+            feature_scores = score_all_features(data_x[filtered_feature_names], labels, logger)
 
         logger.info(f"📊 Scoring {len(groups)} groups ({len(data_x)} samples, {len(feature_scores)} features)")
 
@@ -228,8 +236,10 @@ def run_scoring(
         # Save results
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Save ranked groups (append across iterations)
-        groups_output = output_dir / "ranked_groups_all_iterations.xlsx"
+        # Save ranked groups per-iteration to a subfolder to avoid large single files
+        groups_dir = output_dir / "ranked_groups"
+        groups_dir.mkdir(parents=True, exist_ok=True)
+        groups_output = groups_dir / f"iter_{iteration:03d}_groups.csv"
         save_ranked_groups(
             str(groups_output),
             ranked_metrics,
@@ -239,7 +249,10 @@ def run_scoring(
 
         # Save ranked features (only when requested)
         if save_feature_scores:
-            features_output = output_dir / "ranked_features_all_iterations.xlsx"
+            # 1. Save individual feature scores (ranked by ML importance) to a subfolder
+            features_dir = output_dir / "ranked_features_individual"
+            features_dir.mkdir(parents=True, exist_ok=True)
+            features_output = features_dir / f"iter_{iteration:03d}_individual_features.csv"
             ranking_output = FeatureRankingOutput(
                 output_path=features_output,
                 feature_scores=feature_scores,
@@ -248,6 +261,26 @@ def run_scoring(
                 iteration=iteration
             )
             save_ranked_features(ranking_output, logger)
+
+            # 2. Save group-derived feature scores (ranked by group F1) to a subfolder
+            if ranked_metrics:  # Only if we have ranked groups
+                group_derived_scores = compute_group_derived_feature_scores(
+                    ranked_groups=ranked_metrics,
+                    group_feature_mapping=group_features,
+                    logger=logger
+                )
+                if group_derived_scores:
+                    group_derived_dir = output_dir / "ranked_features_group_derived"
+                    group_derived_dir.mkdir(parents=True, exist_ok=True)
+                    group_derived_output = group_derived_dir / f"iter_{iteration:03d}_group_derived_features.csv"
+                    group_derived_ranking = GroupDerivedRankingOutput(
+                        output_path=group_derived_output,
+                        feature_scores=group_derived_scores,
+                        timestamp=timestamp,
+                        model_name=model_name,
+                        iteration=iteration
+                    )
+                    save_group_derived_features(group_derived_ranking, logger)
         
         return ScoringResults(
             ranked_groups=ranked_metrics,
@@ -266,12 +299,12 @@ def score_all_features(
     logger
 ) -> List[FeatureScore]:
     """Score all features in the dataset."""
-    logger.info("🎯 Starting feature scoring...")
+    logger.info(f"🎯 Starting feature scoring on {len(data_x.columns)} filtered features...")
     feature_scores = score_features(
         data_x=data_x,
         labels=labels,
         feature_names=list(data_x.columns),
         logger=logger
     )
-    logger.info(f"✅ Completed scoring {len(feature_scores)} features")
+    logger.info(f"✅ Completed scoring {len(feature_scores)} filtered features")
     return feature_scores

@@ -1,9 +1,33 @@
 # Running the GSM Project
 
-This project can be run in two main ways:
+This project can be run in multiple ways:
 
-1. **Web UI (recommended for most users)** using Streamlit
-2. **Command line workflow** (useful for reproducible runs / automation)
+1. **Quick Test** - Verify the pipeline works (recommended first!)
+2. **Web UI (Streamlit)** - Interactive interface for single runs
+3. **Command Line** - Full run with config file settings
+4. **Batch Runner** - Process multiple datasets automatically
+
+---
+
+## Quick Test (Start Here!)
+
+Before running on real data, verify everything works:
+
+```bash
+cd ~/GSM-to-python
+source venv/bin/activate
+
+# Quick test with sample data (3 iterations, ~1-2 minutes)
+python run_test.py
+
+# Test with more iterations
+python run_test.py --iterations 5
+
+# Test with real data (small run)
+python run_test.py --real-data --iterations 3
+```
+
+If the test passes, you're ready for full runs!
 
 ---
 
@@ -134,7 +158,7 @@ This creates a named session called `gsm_batch`.
 ```bash
 cd ~/GSM-to-python
 source venv/bin/activate
-python run_all_datasets.py --datasets GDS2547 GDS3257 GDS3268 GDS3837 GDS4206 GDS4824 GDS5499
+python run_all_datasets.py --datasets GDS2545 GDS2547 GDS3257 GDS3268 GDS3837 GDS4206 GDS4824 GDS5499
 ```
 
 #### 3. Detach from the session (IMPORTANT!)

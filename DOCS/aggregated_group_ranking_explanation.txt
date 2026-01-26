@@ -42,3 +42,21 @@ Notes
 -----
 - Ties are resolved by lower Aggregated P-Value, then lower Average Rank.
 - Missing groups are penalized by assigning the worst rank for that list.
+
+Biological Validation Integration
+---------------------------------
+When biological validation is enabled (RUN_BIOLOGICAL_VALIDATION=True), the top
+groups from aggregated_group_ranking_rra.xlsx are automatically validated:
+
+1) The top 5 groups (by RRA ranking) are extracted
+2) All genes within each group are collected from the original grouping file
+3) For each group, biological databases are queried:
+   - Enrichr: Pathway enrichment (KEGG, GO, Reactome)
+   - STRING-db: Protein-protein interaction network
+4) Results are saved to:
+   - group_validation_summary.xlsx: Detailed per-group results
+   - group_validation_report.txt: Human-readable summary
+   - README_BIOLOGICAL_VALIDATION.txt: Interpretation guide
+
+This connects your best-performing groups (from the ML analysis) to known biological
+pathways and networks, helping you understand WHY these groups are predictive.

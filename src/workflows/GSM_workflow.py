@@ -55,6 +55,19 @@ from src.workflows.GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROU
                         MAIN_DATA_FILE_SEPARATOR,
                         GROUPING_FILE_SEPARATOR)
 
+# Import biological validation config
+try:
+    from src.workflows.GSM_workflow_config import (
+        RUN_BIOLOGICAL_VALIDATION, 
+        BIOLOGICAL_VALIDATION_TOP_GENES,
+        DISGENET_API_KEY
+    )
+except ImportError:
+    # Fallback defaults if config doesn't have these (backward compatibility)
+    RUN_BIOLOGICAL_VALIDATION = False
+    BIOLOGICAL_VALIDATION_TOP_GENES = 20
+    DISGENET_API_KEY = ""
+
 # Import the config module itself (not only constants) so we can log where it
 # was loaded from at runtime. This is critical for debugging “wrong config file
 # / stale notebook kernel / wrong checkout” issues.
@@ -70,7 +83,7 @@ from datetime import datetime, timedelta
 
 # Updated imports to use correct module paths
 from src.grouping.run_grouping import run_grouping
-from src.scoring.run_scoring import run_scoring, score_all_features
+from src.scoring.run_scoring import run_scoring
 from src.scoring.feature_scorer import FeatureScore
 from src.modeling.run_modeling import ModelingResult, run_modeling, select_features_from_top_groups
 from src.data_processing.data_loader import load_input_file, load_group_file
@@ -84,14 +97,25 @@ from src.utils.generate_figures import generate_all_figures
 from src.utils.rank_aggregation import (
     load_ranked_groups_from_excel,
     load_ranked_features_from_excel,
+    load_group_derived_features_from_excel,
     aggregate_group_ranks_rra,
     aggregate_feature_ranks_rra,
+    aggregate_group_derived_feature_ranks_rra,
     save_aggregated_group_ranking,
     save_aggregated_feature_ranking,
+    save_aggregated_group_derived_feature_ranking,
     compute_best_averaged_groups,
     compute_best_averaged_features,
     save_best_averaged_rankings
 )
+from src.utils.save_ranked_features import (
+    save_ranked_features,
+    FeatureRankingOutput,
+    compute_group_derived_feature_scores,
+    save_group_derived_features,
+    GroupDerivedRankingOutput,
+)
+from src.utils.biological_validation import run_biological_validation
 import time
 
 
@@ -128,15 +152,81 @@ class AdjustedGroupSelection:
     baseline_feature_count: int
 
 
-def copy_used_config_file(*, output_dir: Path, logger) -> None:
-    """Copy the exact config module file used at runtime into the output folder."""
+
+
+def save_actual_run_parameters(
+    *,
+    output_dir: Path,
+    input_data_name: str,
+    group_data_name: str,
+    n_iterations: int,
+    sample_ratio: float,
+    model_name: str,
+    label_column: str,
+    normalization_method: str,
+    positive_class_label: str,
+    negative_class_label: str,
+    gene_column: str,
+    group_column: str,
+    initial_feature_filter_size: int,
+    initial_seed: int,
+    logger
+) -> None:
+    """Save the actual parameters used for this specific run.
+    
+    This is more useful than config_used.py when running via run_all_datasets.py
+    because it shows the actual values passed to gsm_run(), not the base config.
+    """
     try:
-        config_source_path = Path(gsm_workflow_config.__file__).resolve()
-        config_dest_path = output_dir / "config_used.py"
-        shutil.copy2(config_source_path, config_dest_path)
-        logger.info(f"Copied used config file to: {config_dest_path}")
+        params_path = output_dir / "run_parameters.txt"
+        with open(params_path, 'w') as f:
+            f.write("=" * 70 + "\n")
+            f.write("GSM PIPELINE - ACTUAL RUN PARAMETERS\n")
+            f.write("=" * 70 + "\n\n")
+            f.write("These are the actual parameter values used for THIS specific run.\n")
+            f.write("Values may differ from GSM_workflow_config.py if overridden.\n\n")
+            f.write("-" * 70 + "\n")
+            f.write("INPUT DATA\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"Expression Data: {input_data_name}\n")
+            f.write(f"Grouping Data: {group_data_name}\n")
+            f.write(f"Gene Column: {gene_column}\n")
+            f.write(f"Group Column: {group_column}\n")
+            f.write("\n")
+            f.write("-" * 70 + "\n")
+            f.write("PIPELINE SETTINGS\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"Number of Iterations: {n_iterations}\n")
+            f.write(f"Train/Test Split Ratio: {sample_ratio}\n")
+            f.write(f"Initial Random Seed: {initial_seed}\n")
+            f.write("\n")
+            f.write("-" * 70 + "\n")
+            f.write("DATA PROCESSING\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"Label Column: {label_column}\n")
+            f.write(f"Positive Class: {positive_class_label}\n")
+            f.write(f"Negative Class: {negative_class_label}\n")
+            f.write(f"Normalization: {normalization_method}\n")
+            f.write("\n")
+            f.write("-" * 70 + "\n")
+            f.write("MODEL & FEATURE SELECTION\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"Model: {model_name}\n")
+            f.write(f"Initial Feature Filter Size: {initial_feature_filter_size}\n")
+            f.write(f"T-test Threshold: {TTEST_THRESHOLD}\n")
+            f.write(f"Best Groups to Keep: {BEST_GROUPS_TO_KEEP}\n")
+            f.write(f"Cross-Validation Folds: {CROSS_VALIDATION_FOLDS}\n")
+            f.write("\n")
+            f.write("-" * 70 + "\n")
+            f.write("BIOLOGICAL VALIDATION\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"Enabled: {RUN_BIOLOGICAL_VALIDATION}\n")
+            f.write(f"Top Genes to Validate: {BIOLOGICAL_VALIDATION_TOP_GENES}\n")
+            f.write("\n")
+            f.write("=" * 70 + "\n")
+        logger.info(f"Saved run parameters to: {params_path}")
     except Exception as exc:
-        logger.warning(f"Could not copy used config file: {exc}")
+        logger.warning(f"Could not save run parameters: {exc}")
 
 
 def build_config_log_items() -> List[ConfigLogItem]:
@@ -160,6 +250,8 @@ def build_config_log_items() -> List[ConfigLogItem]:
         ConfigLogItem("TTEST_THRESHOLD", str(gsm_workflow_config.TTEST_THRESHOLD)),
         ConfigLogItem("BEST_GROUPS_TO_KEEP", str(gsm_workflow_config.BEST_GROUPS_TO_KEEP)),
         ConfigLogItem("SAVE_INTERMEDIATE_RESULTS", str(gsm_workflow_config.SAVE_INTERMEDIATE_RESULTS)),
+        ConfigLogItem("RUN_BIOLOGICAL_VALIDATION", str(RUN_BIOLOGICAL_VALIDATION)),
+        ConfigLogItem("BIOLOGICAL_VALIDATION_TOP_GENES", str(BIOLOGICAL_VALIDATION_TOP_GENES)),
     ]
 
 
@@ -256,6 +348,7 @@ def gsm_run(
     extra_handlers: Optional[List[logging.Handler]] = None,
     input_data_name: Optional[str] = None,
     group_data_name: Optional[str] = None,
+    grouping_file_path: Optional[Path] = None,
 ) -> Path:
     """
     Main entry point for the GSM pipeline execution.
@@ -273,6 +366,7 @@ def gsm_run(
         notebook_mode: Enable notebook-specific optimizations
         input_data_name: Name of input data source (for logging/output folder)
         group_data_name: Name of grouping data source (for logging/output folder)
+        grouping_file_path: Path to grouping file (for biological validation)
         
     Returns:
         Path: The directory where results were saved.
@@ -306,7 +400,26 @@ def gsm_run(
     
     log_config_values(logger=logger)
 
-    copy_used_config_file(output_dir=output_folder_path, logger=logger)
+    # Removed copying of config_used.py; run_parameters.txt is sufficient
+    
+    # Save actual run parameters (more useful than config file when using run_all_datasets.py)
+    save_actual_run_parameters(
+        output_dir=output_folder_path,
+        input_data_name=main_data_stem,
+        group_data_name=group_data_stem,
+        n_iterations=n_iterations,
+        sample_ratio=sample_ratio,
+        model_name=model_name,
+        label_column=label_column,
+        normalization_method=normalization_method,
+        positive_class_label=positive_class_label,
+        negative_class_label=negative_class_label,
+        gene_column=gene_column,
+        group_column=group_column,
+        initial_feature_filter_size=initial_feature_filter_size,
+        initial_seed=initial_seed,
+        logger=logger
+    )
     
     if extra_handlers:
         for handler in extra_handlers:
@@ -342,15 +455,8 @@ def gsm_run(
                                                     logger=logger)
     logger.info("Grouping data preprocessing completed.")
 
-    logger.info("🎯 Scoring features once (shared across iterations)...")
-    feature_data_x = data_preprocessed.drop(columns=[label_column])
-    feature_labels = data_preprocessed[label_column]
-    precomputed_feature_scores: List[FeatureScore] = score_all_features(
-        feature_data_x,
-        feature_labels,
-        logger
-    )
-    logger.info("✅ Feature scoring completed once.")
+    # Note: Feature scoring now happens INSIDE each iteration using that iteration's
+    # training data. This ensures proper evaluation since train/test splits differ.
     
     iteration_results: List[IterationResult] = []
     iteration_times: List[float] = []  # Track iteration durations for estimation
@@ -367,23 +473,35 @@ def gsm_run(
         logger.info(f"#{'ITERATION ' + str(i) + ' / ' + str(n_iterations):^68}#")
         logger.info(f"#{'':^68}#")
         logger.info("#" * 70)
-        
-        # Set random seed for reproducibility
+
+        # Set random seed for reproducibility and log the seed (visible even when INFO is suppressed)
         iteration_seed = generate_iteration_seed(initial_seed, i)
-        set_random_seed(iteration_seed, logger)
-        
-        modeling_result = gsm_main_loop(
-            data=data_preprocessed, 
-            grouping_data=group_data_processed, 
-            model_name=model_name,
-            output_dir=output_folder_path,
-            iteration=i,
-            logger=logger,
-            gene_column=gene_column,
-            group_column=group_column,
-            precomputed_feature_scores=precomputed_feature_scores,
-            save_feature_scores=(i == 1)
-        )
+
+        # Decide verbosity: full logs for first, every 10th, and last iteration
+        verbose_iteration = (i == 1) or (i % 10 == 0) or (i == n_iterations)
+        original_level = logger.level
+        try:
+            if not verbose_iteration:
+                logger.setLevel(logging.WARNING)
+
+            set_random_seed(iteration_seed, logger)
+            logger.warning(f"🔢 Iteration seed: {iteration_seed}")
+
+            modeling_result = gsm_main_loop(
+                data=data_preprocessed, 
+                grouping_data=group_data_processed, 
+                model_name=model_name,
+                output_dir=output_folder_path,
+                iteration=i,
+                logger=logger,
+                gene_column=gene_column,
+                group_column=group_column,
+                precomputed_feature_scores=None,  # Compute fresh each iteration on training data
+                save_feature_scores=True  # Save feature scores for ALL iterations
+            )
+        finally:
+            # Restore logger level so summary and other messages remain consistent
+            logger.setLevel(original_level)
         
         iteration_results.append(IterationResult(
             iteration=i,
@@ -480,8 +598,8 @@ def gsm_run(
         # Perform robust rank aggregation on groups
         logger.info("📊 Performing robust rank aggregation...")
         try:
-            ranked_groups_path = output_folder_path / "ranked_groups_all_iterations.xlsx"
-            ranked_groups_lists = load_ranked_groups_from_excel(ranked_groups_path, logger)
+            ranked_groups_folder = output_folder_path / "ranked_groups"
+            ranked_groups_lists = load_ranked_groups_from_excel(ranked_groups_folder, logger)
             if ranked_groups_lists:
                 aggregated_group_ranking = aggregate_group_ranks_rra(ranked_groups_lists)
                 save_aggregated_group_ranking(
@@ -502,15 +620,15 @@ def gsm_run(
         except Exception as e:
             logger.warning(f"⚠️ Failed to aggregate group rankings: {e}")
         
-        # Perform robust rank aggregation on features
+        # Perform robust rank aggregation on individual features (by ML importance)
         try:
-            ranked_features_path = output_folder_path / "ranked_features_all_iterations.xlsx"
-            ranked_features_lists = load_ranked_features_from_excel(ranked_features_path, logger)
+            ranked_features_folder = output_folder_path / "ranked_features_individual"
+            ranked_features_lists = load_ranked_features_from_excel(ranked_features_folder, logger)
             if ranked_features_lists:
                 aggregated_feature_ranking = aggregate_feature_ranks_rra(ranked_features_lists)
                 save_aggregated_feature_ranking(
                     aggregated_feature_ranking,
-                    output_folder_path / "aggregated_feature_ranking_rra.xlsx",
+                    output_folder_path / "aggregated_feature_ranking_individual_rra.xlsx",
                     logger
                 )
                 robust_rank_features = [
@@ -525,7 +643,35 @@ def gsm_run(
                     for item in aggregated_feature_ranking.items
                 ]
         except Exception as e:
-            logger.warning(f"⚠️ Failed to aggregate feature rankings: {e}")
+            logger.warning(f"⚠️ Failed to aggregate individual feature rankings: {e}")
+        
+        # Perform robust rank aggregation on group-derived features (by group F1)
+        robust_rank_group_derived_features = []
+        try:
+            group_derived_folder = output_folder_path / "ranked_features_group_derived"
+            group_derived_lists = load_group_derived_features_from_excel(group_derived_folder, logger)
+            if group_derived_lists:
+                aggregated_group_derived = aggregate_group_derived_feature_ranks_rra(group_derived_lists)
+                save_aggregated_group_derived_feature_ranking(
+                    aggregated_group_derived,
+                    output_folder_path / "aggregated_feature_ranking_group_derived_rra.xlsx",
+                    logger
+                )
+                robust_rank_group_derived_features = [
+                    {
+                        'Feature Name': item.feature_name,
+                        'Most Common Group': item.most_common_group,
+                        'Average Group F1': item.average_group_f1,
+                        'Aggregated P-Value': item.aggregated_p_value,
+                        'Aggregated Score': item.aggregated_score,
+                        'Average Rank': item.average_rank,
+                        'Occurrences': item.occurrences
+                    }
+                    for item in aggregated_group_derived.items
+                ]
+                logger.info(f"✅ Aggregated {len(robust_rank_group_derived_features)} group-derived feature rankings")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to aggregate group-derived feature rankings: {e}")
 
     # Identify the best performing iteration and save a summary report to a text file
     logger.info("📝 Generating summary report...")
@@ -542,6 +688,9 @@ def gsm_run(
         robust_rank_groups=robust_rank_groups,
         robust_rank_features=robust_rank_features
     )
+    
+    # Save README explaining all output files
+    save_results.save_output_readme(output_folder_path, logger)
 
     # Generate publication-quality figures
     logger.info("📊 Generating publication figures...")
@@ -553,6 +702,60 @@ def gsm_run(
             logger.warning("⚠️ Results JSON not found, skipping figure generation")
     except Exception as e:
         logger.warning(f"⚠️ Figure generation failed: {e}")
+
+    # Biological Validation (optional - controlled by config)
+    if RUN_BIOLOGICAL_VALIDATION:
+        logger.info("")
+        logger.info("=" * 70)
+        logger.info("🧬 BIOLOGICAL VALIDATION")
+        logger.info("=" * 70)
+        logger.info("Querying external databases for biological relevance...")
+        logger.info(f"   • Enrichr: Pathway enrichment (KEGG, GO, Reactome, WikiPathways)")
+        logger.info(f"   • STRING-db: Protein-protein interactions")
+        if DISGENET_API_KEY:
+            logger.info(f"   • DisGeNET: Gene-disease associations")
+        else:
+            logger.info(f"   • DisGeNET: Skipped (no API key provided)")
+        logger.info(f"   • Top genes to validate: {BIOLOGICAL_VALIDATION_TOP_GENES}")
+        if grouping_file_path:
+            logger.info(f"   • Top groups to validate: 5 (from RRA ranking)")
+        logger.info("-" * 70)
+        
+        try:
+            if results_json_path.exists():
+                validation_report = run_biological_validation(
+                    output_dir=output_folder_path,
+                    results_json_path=results_json_path,
+                    logger=logger,
+                    disgenet_api_key=DISGENET_API_KEY if DISGENET_API_KEY else None,
+                    top_n_genes=BIOLOGICAL_VALIDATION_TOP_GENES,
+                    grouping_data_path=grouping_file_path,
+                    top_n_groups=5,
+                    gene_column=gene_column,
+                    group_column=group_column,
+                )
+                logger.info(f"✅ Biological validation complete:")
+                logger.info(f"   • Enrichment results: {len(validation_report.enrichr_results)}")
+                logger.info(f"   • Protein interactions: {len(validation_report.string_interactions)}")
+                logger.info(f"   • Disease associations: {len(validation_report.disease_associations)}")
+                if validation_report.string_network_url:
+                    logger.info(f"   • STRING network: {validation_report.string_network_url}")
+            else:
+                logger.warning("⚠️ Results JSON not found, skipping biological validation")
+        except Exception as e:
+            logger.warning(f"⚠️ Biological validation failed: {e}")
+            logger.info("   This may be due to network issues or API rate limits.")
+            logger.info("   You can run validation manually later using:")
+            logger.info(f"   python src/utils/biological_validation.py {output_folder_path}")
+    else:
+        # Warn the user that biological validation is disabled and explain briefly
+        logger.warning("⚠️ Biological validation is disabled (RUN_BIOLOGICAL_VALIDATION=False)")
+        logger.warning(
+            "Biological validation runs external enrichment and disease-association checks "
+            "(e.g., Enrichr, STRING, DisGeNET) on top-ranked genes to provide biological "
+            "context for the results. It may require network access and API keys."
+        )
+        logger.info("   To enable, set RUN_BIOLOGICAL_VALIDATION=True in config file and provide any required API keys (e.g., DisGeNET).")
 
     logger.info("GSM pipeline completed successfully.")
     return output_folder_path
@@ -627,7 +830,8 @@ def gsm_main_loop(data: pd.DataFrame,
 
     # Group Scoring
     logger.info("📈 Evaluating group performance...")
-    scoring_results = run_scoring(data_x=train_test_split_data.X_train, 
+    # Pass only the t-test filtered features to scoring to save time
+    scoring_results = run_scoring(data_x=train_test_split_data.X_train[filtered_feature_names], 
                                 labels=train_test_split_data.y_train,
                                 model_name=model_name, 
                                 groups=group_feature_mappings,
@@ -644,6 +848,7 @@ def gsm_main_loop(data: pd.DataFrame,
     # Model Training with decreasing numbers of top groups
     logger.info("🤖 Training and evaluating models...")
     modeling_result_list = []
+    modeling_summaries: List[str] = []
     
     # Start with top 1 group and increase to BEST_GROUPS_TO_KEEP
     if not ranked_groups:
@@ -652,6 +857,8 @@ def gsm_main_loop(data: pd.DataFrame,
 
     max_group_count = min(BEST_GROUPS_TO_KEEP, len(ranked_groups))
     previous_feature_count = 0
+    last_modeling_result = None  # Cache the last result for duplication
+    
     for requested_groups in range(1, max_group_count + 1):
         selection = expand_groups_until_feature_increase(
             requested_top_groups=requested_groups,
@@ -663,51 +870,90 @@ def gsm_main_loop(data: pd.DataFrame,
         )
 
         step_label = f"Step {requested_groups}/{max_group_count}"
-        if selection.used_top_groups == selection.requested_top_groups:
-            logger.debug(
-                f"{step_label}: top {selection.used_top_groups} groups → "
-                f"{selection.used_feature_count} features"
-            )
-        elif selection.used_feature_count > selection.baseline_feature_count:
-            logger.debug(
-                f"{step_label}: expanded to top {selection.used_top_groups} groups → "
-                f"{selection.used_feature_count} features"
-            )
-        else:
-            logger.warning(
-                f"{step_label}: top {selection.used_top_groups} groups added no new features"
-            )
         
-        # Run modeling with decreasing number of top groups
-        modeling_result = run_modeling(
-            data_train_x=train_test_split_data.X_train,
-            data_train_y=train_test_split_data.y_train, 
-            data_test_x=train_test_split_data.X_test,
-            data_test_y=train_test_split_data.y_test,
-            group_ranks=ranked_groups,
-            group_feature_mapping=group_feature_mappings,
-            model_name=model_name,
-            top_n_groups=selection.used_top_groups,
-            logger=logger
-        )
-        modeling_result_list.append(modeling_result)
-
-        if modeling_result.num_features_used > previous_feature_count:
+        # Check if this group count adds new features
+        features_increased = selection.used_feature_count > previous_feature_count
+        
+        if features_increased:
+            # New features added - run actual modeling
+            modeling_result = run_modeling(
+                data_train_x=train_test_split_data.X_train,
+                data_train_y=train_test_split_data.y_train, 
+                data_test_x=train_test_split_data.X_test,
+                data_test_y=train_test_split_data.y_test,
+                group_ranks=ranked_groups,
+                group_feature_mapping=group_feature_mappings,
+                model_name=model_name,
+                top_n_groups=requested_groups,
+                logger=logger
+            )
+            last_modeling_result = modeling_result
             previous_feature_count = modeling_result.num_features_used
-        
-        # Log only best results at INFO level
-        if modeling_result.f1_score >= 0.9:
-            logger.info(
-                f"  Groups={modeling_result.num_groups_used} → "
-                f"F1={modeling_result.f1_score:.4f} "
-                f"AUC={modeling_result.auc_roc:.4f}"
+            
+            logger.debug(
+                f"{step_label}: top {requested_groups} groups → "
+                f"{modeling_result.num_features_used} features"
             )
         else:
-            logger.debug(
-                f"  Groups={modeling_result.num_groups_used} → "
-                f"F1={modeling_result.f1_score:.4f}"
-            )
+            # No new features - duplicate the last result with updated group count
+            if last_modeling_result is not None:
+                # Create a copy with updated group count
+                modeling_result = ModelingResult(
+                    model_name=last_modeling_result.model_name,
+                    num_groups_used=requested_groups,  # Use requested, not actual
+                    num_features_used=last_modeling_result.num_features_used,
+                    accuracy=last_modeling_result.accuracy,
+                    precision=last_modeling_result.precision,
+                    recall=last_modeling_result.recall,
+                    f1_score=last_modeling_result.f1_score,
+                    auc_roc=last_modeling_result.auc_roc,
+                    accuracy_ci_lower=last_modeling_result.accuracy_ci_lower,
+                    accuracy_ci_upper=last_modeling_result.accuracy_ci_upper,
+                    f1_ci_lower=last_modeling_result.f1_ci_lower,
+                    f1_ci_upper=last_modeling_result.f1_ci_upper,
+                    auc_ci_lower=last_modeling_result.auc_ci_lower,
+                    auc_ci_upper=last_modeling_result.auc_ci_upper,
+                    cv_accuracy_mean=last_modeling_result.cv_accuracy_mean,
+                    cv_accuracy_std=last_modeling_result.cv_accuracy_std,
+                    cv_f1_mean=last_modeling_result.cv_f1_mean,
+                    cv_f1_std=last_modeling_result.cv_f1_std,
+                    mean_positive_probability=last_modeling_result.mean_positive_probability,
+                    feature_importance=last_modeling_result.feature_importance,
+                    training_time=0.0,  # No training time for duplicated result
+                    used_features=last_modeling_result.used_features,
+                    used_groups=last_modeling_result.used_groups,
+                )
+                logger.debug(
+                    f"{step_label}: top {requested_groups} groups → "
+                    f"no new features (duplicating results from {last_modeling_result.num_groups_used} groups)"
+                )
+            else:
+                # Shouldn't happen, but fallback to running modeling
+                modeling_result = run_modeling(
+                    data_train_x=train_test_split_data.X_train,
+                    data_train_y=train_test_split_data.y_train, 
+                    data_test_x=train_test_split_data.X_test,
+                    data_test_y=train_test_split_data.y_test,
+                    group_ranks=ranked_groups,
+                    group_feature_mapping=group_feature_mappings,
+                    model_name=model_name,
+                    top_n_groups=requested_groups,
+                    logger=logger
+                )
+                last_modeling_result = modeling_result
+        
+        modeling_result_list.append(modeling_result)
+        # Collect a compact summary for this modeling step
+        try:
+            summary = f"Groups={modeling_result.num_groups_used}:F1={modeling_result.f1_score:.4f},AUC={modeling_result.auc_roc:.4f}"
+        except Exception:
+            # Fallback if some metrics are missing
+            summary = f"Groups={getattr(modeling_result, 'num_groups_used', requested_groups)}:F1={getattr(modeling_result, 'f1_score', 'NA')},AUC={getattr(modeling_result, 'auc_roc', 'NA')}"
+        modeling_summaries.append(summary)
 
+    # Emit a single-line modeling summary (compact) to reduce log noise
+    if modeling_summaries:
+        logger.info("Modeling steps: " + " | ".join(modeling_summaries))
     logger.info("✅ Modeling completed.")
     return modeling_result_list
 
@@ -753,7 +999,7 @@ def main() -> None:
     
     # Execute GSM pipeline
     print("🚀 Starting GSM workflow execution...")
-    gsm_run(input_data, group_data)
+    gsm_run(input_data, group_data, grouping_file_path=group_file)
     print("🎉 GSM workflow completed successfully!")
 
 ##### Script Execution Entry Point #####
