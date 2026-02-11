@@ -54,7 +54,7 @@ def preliminary_ttest_filter(
                                   y, 
                                   threshold=threshold, 
                                   equal_var=equal_var, 
-                                  initial_feature_filter_size=0,
+                                  initial_feature_filter_size=initial_feature_filter_size,
                                   logger=logger)
         
         return results

@@ -92,7 +92,7 @@ def visualize_f1_scores(results_df: pd.DataFrame, output_dir: Path, logger: Opti
         logger: Optional logger.
     """
     if logger:
-        logger.info("📊 Generating F1 score visualizations...")
+        logger.debug("Generating F1 plots")
     
     # Save figures to figures/ subfolder
     figures_dir = output_dir / "figures"
@@ -174,4 +174,4 @@ def visualize_f1_scores(results_df: pd.DataFrame, output_dir: Path, logger: Opti
     plt.close(fig)
     
     if logger:
-        logger.info(f"✅ Plots saved to {figures_dir}")
+        logger.debug(f"F1 plots saved")

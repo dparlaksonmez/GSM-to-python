@@ -93,42 +93,6 @@ class AggregatedFeatureRanking:
     items: List[AggregatedFeatureRank]
 
 
-##### DATACLASSES FOR GROUP-DERIVED FEATURES #####
-@dataclass
-class GroupDerivedFeatureItem:
-    """Single group-derived feature item within a list."""
-    feature_name: str
-    rank: int
-    list_size: int
-    group_name: str
-    group_f1_score: float = 0.0
-
-
-@dataclass
-class GroupDerivedFeatureList:
-    """A group-derived feature list from a single iteration."""
-    source_id: str
-    items: List[GroupDerivedFeatureItem]
-
-
-@dataclass
-class AggregatedGroupDerivedFeatureRank:
-    """Aggregated rank output for a group-derived feature."""
-    feature_name: str
-    aggregated_p_value: float
-    aggregated_score: float
-    average_rank: float
-    average_group_f1: float
-    most_common_group: str
-    occurrences: int
-
-
-@dataclass
-class AggregatedGroupDerivedFeatureRanking:
-    """Container for aggregated group-derived feature rankings."""
-    items: List[AggregatedGroupDerivedFeatureRank]
-
-
 def aggregate_group_ranks_rra(
     ranked_lists: List[RankedGroupList]
 ) -> AggregatedGroupRanking:
@@ -212,7 +176,7 @@ def save_aggregated_group_ranking(
             for idx, item in enumerate(ranking.items)
         ])
         df.to_excel(output_path, index=False)
-        logger.info(f"✅ Saved aggregated group rankings to: {output_path}")
+        logger.debug(f"Saved aggregated groups: {output_path.name}")
     except Exception as exc:
         logger.error(f"❌ Failed to save aggregated group rankings: {exc}")
         raise
@@ -307,123 +271,9 @@ def save_aggregated_feature_ranking(
             for idx, item in enumerate(ranking.items)
         ])
         df.to_excel(output_path, index=False)
-        logger.info(f"✅ Saved aggregated feature rankings to: {output_path}")
+        logger.debug(f"Saved aggregated features: {output_path.name}")
     except Exception as exc:
         logger.error(f"❌ Failed to save aggregated feature rankings: {exc}")
-        raise
-
-
-##### GROUP-DERIVED FEATURE AGGREGATION #####
-def aggregate_group_derived_feature_ranks_rra(
-    ranked_lists: List[GroupDerivedFeatureList]
-) -> AggregatedGroupDerivedFeatureRanking:
-    """
-    Aggregate group-derived feature rankings using Robust Rank Aggregation (RRA).
-    
-    Features are ranked based on their best group's F1 score in each iteration.
-    This provides a ranking that directly reflects group performance.
-    
-    Args:
-        ranked_lists: List of GroupDerivedFeatureList from each iteration
-    
-    Returns:
-        AggregatedGroupDerivedFeatureRanking with RRA-aggregated features
-    """
-    if not ranked_lists:
-        return AggregatedGroupDerivedFeatureRanking(items=[])
-
-    total_lists = len(ranked_lists)
-    feature_names = set()
-    rank_maps: List[Dict[str, GroupDerivedFeatureItem]] = []
-    list_sizes = []
-
-    for ranked_list in ranked_lists:
-        mapping = {}
-        for item in ranked_list.items:
-            mapping[item.feature_name] = item
-            feature_names.add(item.feature_name)
-        rank_maps.append(mapping)
-        list_sizes.append(len(ranked_list.items))
-
-    aggregated_items: List[AggregatedGroupDerivedFeatureRank] = []
-
-    for feature_name in sorted(feature_names):
-        normalized_ranks = []
-        raw_ranks = []
-        group_f1_scores = []
-        group_counts: Dict[str, int] = {}
-        occurrences = 0
-
-        for rank_map, list_size in zip(rank_maps, list_sizes):
-            item = rank_map.get(feature_name)
-            if item is None:
-                rank = list_size + 1 if list_size > 0 else 1
-            else:
-                rank = item.rank
-                group_f1_scores.append(item.group_f1_score)
-                group_counts[item.group_name] = group_counts.get(item.group_name, 0) + 1
-                occurrences += 1
-
-            raw_ranks.append(rank)
-            normalized_ranks.append(rank / list_size if list_size > 0 else 1.0)
-
-        # RRA calculation
-        normalized_ranks.sort()
-        p_values = []
-        for k, r in enumerate(normalized_ranks, start=1):
-            p_values.append(beta.cdf(r, k, total_lists - k + 1))
-        aggregated_p = min(p_values) if p_values else 1.0
-        aggregated_score = -np.log10(aggregated_p) if aggregated_p > 0 else float("inf")
-        average_rank = sum(raw_ranks) / len(raw_ranks) if raw_ranks else 0.0
-        average_group_f1 = np.mean(group_f1_scores) if group_f1_scores else 0.0
-        
-        # Find most common group
-        most_common_group = max(group_counts.items(), key=lambda x: x[1])[0] if group_counts else ""
-
-        aggregated_items.append(
-            AggregatedGroupDerivedFeatureRank(
-                feature_name=feature_name,
-                aggregated_p_value=aggregated_p,
-                aggregated_score=aggregated_score,
-                average_rank=average_rank,
-                average_group_f1=average_group_f1,
-                most_common_group=most_common_group,
-                occurrences=occurrences
-            )
-        )
-
-    aggregated_items.sort(
-        key=lambda x: (x.aggregated_p_value, x.average_rank)
-    )
-
-    return AggregatedGroupDerivedFeatureRanking(items=aggregated_items)
-
-
-def save_aggregated_group_derived_feature_ranking(
-    ranking: AggregatedGroupDerivedFeatureRanking,
-    output_path: Path,
-    logger: logging.Logger
-) -> None:
-    """Save aggregated group-derived feature ranking to an Excel file."""
-    try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        df = pd.DataFrame([
-            {
-                "Rank": idx + 1,
-                "Feature Name": item.feature_name,
-                "Most Common Group": item.most_common_group,
-                "Average Group F1": item.average_group_f1,
-                "Aggregated P-Value": item.aggregated_p_value,
-                "Aggregated Score": item.aggregated_score,
-                "Average Rank": item.average_rank,
-                "Occurrences": item.occurrences
-            }
-            for idx, item in enumerate(ranking.items)
-        ])
-        df.to_excel(output_path, index=False)
-        logger.info(f"✅ Saved aggregated group-derived feature rankings to: {output_path}")
-    except Exception as exc:
-        logger.error(f"❌ Failed to save aggregated group-derived feature rankings: {exc}")
         raise
 
 
@@ -442,52 +292,23 @@ def load_ranked_groups_from_excel(
     Returns:
         List of RankedGroupList objects, one per iteration
     """
-    # If a directory is provided, load all per-iteration files
-    if excel_path.is_dir():
-        files = list(excel_path.glob("iter_*_groups.csv")) + list(excel_path.glob("iteration_*.csv")) + list(excel_path.glob("iteration_*.xlsx")) + list(excel_path.glob("iter_*_groups.xlsx"))
-        files = sorted(files)
-        if not files:
-            logger.warning(f"⚠️ No ranked group files found in: {excel_path}")
-            return []
-        ranked_lists = []
-        for file in files:
-            try:
-                df = pd.read_excel(file)
-                if df.empty:
-                    continue
-                df = df.sort_values('Rank', ascending=True)
-                list_size = len(df)
-                items = [
-                    RankedGroupItem(
-                        group_name=str(row['Group Name']),
-                        rank=int(row['Rank']),
-                        list_size=list_size
-                    )
-                    for _, row in df.iterrows()
-                ]
-                ranked_lists.append(
-                    RankedGroupList(
-                        source_id=file.stem,
-                        items=items
-                    )
-                )
-            except Exception as e:
-                logger.warning(f"⚠️ Could not load {file}: {e}")
-        logger.info(f"📊 Loaded {len(ranked_lists)} ranked group lists from folder {excel_path}")
-        return ranked_lists
-    # Otherwise, fallback to old single-file logic
     if not excel_path.exists():
-        logger.warning(f"⚠️ Ranked groups file not found: {excel_path}")
+        logger.warning(f"Ranked groups file missing: {excel_path.name}")
         return []
+    
     try:
         df = pd.read_excel(excel_path)
+        
         if df.empty:
-            logger.warning("⚠️ Ranked groups file is empty")
+            logger.warning("Ranked groups file is empty")
             return []
+        
         ranked_lists = []
+        
         for iteration in df['Iteration'].unique():
             iter_df = df[df['Iteration'] == iteration].copy()
             iter_df = iter_df.sort_values('Rank', ascending=True)
+            
             list_size = len(iter_df)
             items = [
                 RankedGroupItem(
@@ -497,14 +318,17 @@ def load_ranked_groups_from_excel(
                 )
                 for _, row in iter_df.iterrows()
             ]
+            
             ranked_lists.append(
                 RankedGroupList(
                     source_id=f"iteration_{iteration}",
                     items=items
                 )
             )
-        logger.info(f"📊 Loaded {len(ranked_lists)} ranked group lists from Excel")
+        
+        logger.debug(f"Loaded {len(ranked_lists)} group lists")
         return ranked_lists
+        
     except Exception as e:
         logger.error(f"❌ Failed to load ranked groups from Excel: {e}")
         return []
@@ -524,53 +348,24 @@ def load_ranked_features_from_excel(
     Returns:
         List of RankedFeatureList objects, one per iteration
     """
-    # If a directory is provided, load all per-iteration files
-    if excel_path.is_dir():
-        files = list(excel_path.glob("iter_*_individual_features.csv")) + list(excel_path.glob("iter_*_individual_features.xlsx")) + list(excel_path.glob("iteration_*.csv")) + list(excel_path.glob("iteration_*.xlsx"))
-        files = sorted(files)
-        if not files:
-            logger.warning(f"⚠️ No ranked feature files found in: {excel_path}")
-            return []
-        ranked_lists = []
-        for file in files:
-            try:
-                df = pd.read_excel(file)
-                if df.empty:
-                    continue
-                list_size = len(df)
-                items = [
-                    RankedFeatureItem(
-                        feature_name=str(row['feature_name']),
-                        rank=int(idx + 1),
-                        list_size=list_size,
-                        importance_score=float(row.get('importance_score', 0.0))
-                    )
-                    for idx, row in df.iterrows()
-                ]
-                ranked_lists.append(
-                    RankedFeatureList(
-                        source_id=file.stem,
-                        items=items
-                    )
-                )
-            except Exception as e:
-                logger.warning(f"⚠️ Could not load {file}: {e}")
-        logger.info(f"📊 Loaded {len(ranked_lists)} ranked feature lists from folder {excel_path}")
-        return ranked_lists
-    # Otherwise, fallback to old single-file logic
     if not excel_path.exists():
-        logger.warning(f"⚠️ Ranked features file not found: {excel_path}")
+        logger.warning(f"Ranked features file missing: {excel_path.name}")
         return []
+    
     try:
         df = pd.read_excel(excel_path)
+        
         if df.empty:
-            logger.warning("⚠️ Ranked features file is empty")
+            logger.warning("Ranked features file is empty")
             return []
+        
         ranked_lists = []
+        
         for iteration in df['iteration'].unique():
             iter_df = df[df['iteration'] == iteration].copy()
             iter_df = iter_df.sort_values('importance_score', ascending=False)
             iter_df['rank'] = range(1, len(iter_df) + 1)
+            
             list_size = len(iter_df)
             items = [
                 RankedFeatureItem(
@@ -581,102 +376,19 @@ def load_ranked_features_from_excel(
                 )
                 for _, row in iter_df.iterrows()
             ]
+            
             ranked_lists.append(
                 RankedFeatureList(
                     source_id=f"iteration_{iteration}",
                     items=items
                 )
             )
-        logger.info(f"📊 Loaded {len(ranked_lists)} ranked feature lists from Excel")
+        
+        logger.debug(f"Loaded {len(ranked_lists)} feature lists")
         return ranked_lists
+        
     except Exception as e:
         logger.error(f"❌ Failed to load ranked features from Excel: {e}")
-        return []
-
-
-def load_group_derived_features_from_excel(
-    excel_path: Path,
-    logger: logging.Logger
-) -> List[GroupDerivedFeatureList]:
-    """
-    Load group-derived feature rankings from Excel file.
-    
-    Args:
-        excel_path: Path to ranked_features_group_derived_all_iterations.xlsx
-        logger: Logger instance
-    
-    Returns:
-        List of GroupDerivedFeatureList objects, one per iteration
-    """
-    # If a directory is provided, load all per-iteration files
-    if excel_path.is_dir():
-        files = list(excel_path.glob("iter_*_group_derived_features.csv")) + list(excel_path.glob("iter_*_group_derived_features.xlsx")) + list(excel_path.glob("iteration_*.csv")) + list(excel_path.glob("iteration_*.xlsx"))
-        files = sorted(files)
-        if not files:
-            logger.warning(f"⚠️ No group-derived feature files found in: {excel_path}")
-            return []
-        ranked_lists = []
-        for file in files:
-            try:
-                df = pd.read_excel(file)
-                if df.empty:
-                    continue
-                list_size = len(df)
-                items = [
-                    GroupDerivedFeatureItem(
-                        feature_name=str(row['feature_name']),
-                        rank=int(idx + 1),
-                        list_size=list_size,
-                        group_name=str(row['best_group_name']),
-                        group_f1_score=float(row.get('group_f1_score', 0.0))
-                    )
-                    for idx, row in df.iterrows()
-                ]
-                ranked_lists.append(
-                    GroupDerivedFeatureList(
-                        source_id=file.stem,
-                        items=items
-                    )
-                )
-            except Exception as e:
-                logger.warning(f"⚠️ Could not load {file}: {e}")
-        logger.info(f"📊 Loaded {len(ranked_lists)} group-derived feature lists from folder {excel_path}")
-        return ranked_lists
-    # Otherwise, fallback to old single-file logic
-    if not excel_path.exists():
-        logger.warning(f"⚠️ Group-derived features file not found: {excel_path}")
-        return []
-    try:
-        df = pd.read_excel(excel_path)
-        if df.empty:
-            logger.warning("⚠️ Group-derived features file is empty")
-            return []
-        ranked_lists = []
-        for iteration in df['iteration'].unique():
-            iter_df = df[df['iteration'] == iteration].copy()
-            iter_df = iter_df.sort_values('group_f1_score', ascending=False)
-            iter_df['rank'] = range(1, len(iter_df) + 1)
-            list_size = len(iter_df)
-            items = [
-                GroupDerivedFeatureItem(
-                    feature_name=str(row['feature_name']),
-                    rank=int(row['rank']),
-                    list_size=list_size,
-                    group_name=str(row['best_group_name']),
-                    group_f1_score=float(row.get('group_f1_score', 0.0))
-                )
-                for _, row in iter_df.iterrows()
-            ]
-            ranked_lists.append(
-                GroupDerivedFeatureList(
-                    source_id=f"iteration_{iteration}",
-                    items=items
-                )
-            )
-        logger.info(f"📊 Loaded {len(ranked_lists)} group-derived feature lists from Excel")
-        return ranked_lists
-    except Exception as e:
-        logger.error(f"❌ Failed to load group-derived features from Excel: {e}")
         return []
 
 
@@ -726,7 +438,7 @@ def compute_best_averaged_groups(
         })
     
     best_groups.sort(key=lambda x: x['Average F1 Score'], reverse=True)
-    logger.info(f"📊 Computed statistics for {len(best_groups)} groups")
+    logger.debug(f"Stats for {len(best_groups)} groups")
     return best_groups
 
 
@@ -771,7 +483,7 @@ def compute_best_averaged_features(
         })
     
     best_features.sort(key=lambda x: x['Average Importance'], reverse=True)
-    logger.info(f"📊 Computed statistics for {len(best_features)} features")
+    logger.debug(f"Stats for {len(best_features)} features")
     return best_features
 
 
@@ -795,7 +507,7 @@ def save_best_averaged_rankings(
         groups_df.insert(0, 'Rank', range(1, len(groups_df) + 1))
         groups_path = output_dir / "best_averaged_groups.xlsx"
         groups_df.to_excel(groups_path, index=False)
-        logger.info(f"✅ Saved best averaged groups to: {groups_path}")
+        logger.debug(f"Saved averaged groups: {groups_path.name}")
     
     # Compute and save best averaged features
     best_features = compute_best_averaged_features(all_results, logger)
@@ -804,4 +516,4 @@ def save_best_averaged_rankings(
         features_df.insert(0, 'Rank', range(1, len(features_df) + 1))
         features_path = output_dir / "best_averaged_features.xlsx"
         features_df.to_excel(features_path, index=False)
-        logger.info(f"✅ Saved best averaged features to: {features_path}")
+        logger.debug(f"Saved averaged features: {features_path.name}")

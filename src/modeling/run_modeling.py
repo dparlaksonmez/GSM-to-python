@@ -135,7 +135,7 @@ def compute_bootstrap_confidence_interval(
         y_pred: Predicted labels
         y_proba: Predicted probabilities (for AUC-ROC)
         metric_name: One of 'accuracy', 'f1', 'precision', 'recall', 'auc_roc'
-        n_bootstrap: Number of bootstrap samples (default: 1000)
+        n_bootstrap: Number of bootstrap samples (default: 100, reduced for speed)
         confidence: Confidence level (default: 0.95 for 95% CI)
     
     Returns:
@@ -144,9 +144,11 @@ def compute_bootstrap_confidence_interval(
     n_samples = len(y_true)
     bootstrap_scores = []
     
-    for _ in range(n_bootstrap):
-        # Bootstrap sample with replacement
-        indices = np.random.choice(n_samples, size=n_samples, replace=True)
+    # Pre-generate all bootstrap index arrays at once (vectorized)
+    all_indices = np.random.randint(0, n_samples, size=(n_bootstrap, n_samples))
+    
+    for i in range(n_bootstrap):
+        indices = all_indices[i]
         y_true_boot = y_true[indices]
         y_pred_boot = y_pred[indices]
         
@@ -208,7 +210,8 @@ def perform_cross_validation(
     from sklearn.model_selection import cross_validate as sklearn_cv
     from sklearn.base import clone
     
-    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True)
+    # Use global random state for reproducible CV folds within each iteration
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=np.random.randint(0, 2**31))
     
     # Single cross_validate call for all metrics (more efficient than 4 separate calls)
     scoring = ['accuracy', 'f1', 'precision', 'recall']
@@ -265,7 +268,7 @@ def select_features_from_top_groups(
             # logger.info(f"  - Group {i+1}: '{group_name}' with {len(group_features)} features")
             selected_features.extend(group_features)
         else:
-            logger.warning(f"⚠️ Group '{group_name}' not found in group-feature mappings")
+            logger.warning(f"Group '{group_name}' not in mappings")
     
     # Remove duplicate features
     unique_features = list(set(selected_features))
@@ -329,12 +332,13 @@ def train_and_evaluate_model(
         - AUC-ROC provides classification quality independent of threshold choice
     """
     # Select model type (no random_state - uses global seed per iteration)
+    # n_jobs=-1 for final modeling RF to use all cores (this is NOT nested inside joblib)
     if model_name == "RandomForest":
-        model = RandomForestClassifier(n_estimators=100)
+        model = RandomForestClassifier(n_estimators=100, n_jobs=-1)
     elif model_name == "SVM":
         model = SVC(probability=True)  # Enable probability estimates
     else:
-        logger.error(f"❌ Unsupported model type: {model_name}")
+        logger.error(f"Unsupported model: {model_name}")
         raise ValueError(f"Unsupported model type: {model_name}")
     
     logger.debug(f"Training {model_name} with {len(train_x)} samples, {len(train_x.columns)} features")
@@ -367,7 +371,7 @@ def train_and_evaluate_model(
         try:
             auc = roc_auc_score(test_y, y_proba)
         except ValueError as e:
-            logger.warning(f"⚠️ Could not compute AUC-ROC: {e}")
+            logger.warning(f"AUC-ROC unavailable: {e}")
     
     # Compute 95% confidence intervals via bootstrapping
     test_y_arr = np.array(test_y)
@@ -405,7 +409,7 @@ def train_and_evaluate_model(
             metrics["cv_f1_mean"] = cv_metrics.f1_mean
             metrics["cv_f1_std"] = cv_metrics.f1_std
         except Exception as e:
-            logger.warning(f"⚠️ Cross-validation failed: {e}")
+            logger.warning(f"CV failed: {e}")
     
     # Get feature importance if available
     feature_importance = {}
@@ -416,7 +420,7 @@ def train_and_evaluate_model(
         elif isinstance(model, SVC):
             logger.debug("ℹ️ SVM models use embedded feature selection via support vectors")
     except Exception as e:
-        logger.warning(f"⚠️ Unable to extract feature importance: {str(e)}")
+        logger.warning(f"Cannot extract feature importance: {str(e)}")
     
     logger.debug(f"✅ {model_name}: Acc={acc:.4f} F1={f1:.4f} AUC={auc:.4f}")
     
@@ -472,10 +476,10 @@ def run_modeling(
         
         if len(available_features) < len(features_result.selected_features):
             missing = len(features_result.selected_features) - len(available_features)
-            logger.warning(f"⚠️ {missing} features not found in dataset")
+            logger.warning(f"{missing} features missing from dataset")
         
         if not available_features:
-            logger.error("❌ No valid features available for modeling")
+            logger.error("No valid features for modeling")
             # Return empty result with zeros
             return ModelingResult(
                 model_name=model_name,
@@ -529,6 +533,6 @@ def run_modeling(
         )
         
     except Exception as e:
-        logger.error(f"❌ Error in modeling: {str(e)}")
+        logger.error(f"Modeling error: {str(e)}")
         raise
 

@@ -34,7 +34,7 @@ def setup_save_directory(base_dir: Path, logger: logging.Logger) -> Path:
     """Create and verify the save directory."""
     try:
         base_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"📁 Created results directory: {base_dir}")
+        logger.debug(f"Created output dir: {base_dir}")
         return base_dir
     except Exception as e:
         logger.error(f"❌ Failed to create directory: {str(e)}")
@@ -160,7 +160,7 @@ def save_config_file(output_dir: Path, logger: logging.Logger) -> None:
             
         # Copy the file to the output directory
         shutil.copy(config_path, output_dir / "config.txt")
-        logger.info(f"📄 Copied config.py to results directory: {output_dir}")
+        logger.debug("Config copied to output dir")
     except Exception as e:
         logger.error(f"❌ Failed to copy config file: {str(e)}")
 
@@ -203,7 +203,7 @@ def save_modeling_results(
         with open(output_file, 'w') as f:
             json.dump([asdict(payload) for payload in payloads], f, indent=2)
 
-        logger.info(f"📊 Saved combined results to {output_file}")
+        logger.debug(f"Saved results: {output_file}")
 
         # Create and save statistics summary
         stats_df = create_modeling_statistics_all_iterations_df(results)
@@ -228,7 +228,7 @@ def save_modeling_results(
             agg_by_iteration.to_excel(writer, sheet_name='By Iteration')
             adjust_column_width(writer.sheets['By Iteration'])
         
-        logger.info(f"📊 Saved statistics summary to {excel_path}")
+        logger.debug(f"Saved stats: {excel_path}")
         
     except Exception as e:
         logger.error(f"❌ Failed to save results: {str(e)}")
@@ -262,9 +262,9 @@ def save_summary_report(
         logger: Logger instance
         aggregated_groups: Optional list of best averaged groups
         aggregated_features: Optional list of best averaged features
-                                f.write("ranked_groups/iter_XXX_groups.csv\n")
-                                f.write("    Per-iteration group rankings (CSV files, one per iteration).\n")
-                                f.write("    Columns: Rank, Group Name, Accuracy, F1 Score, Iteration\n\n")
+        robust_rank_groups: Optional list of RRA-aggregated groups
+        robust_rank_features: Optional list of RRA-aggregated features
+    """
     best_f1 = -1.0
     best_result = None
     best_iteration_meta = None
@@ -509,198 +509,7 @@ def save_summary_report(
             f.write("📈 Visualizations saved in figures/ directory.\n")
             f.write("=" * 70 + "\n")
                 
-        logger.info(f"✅ Summary report saved to: {report_path}")
+        logger.info(f"Summary report saved: {report_path.name}")
         
     except Exception as e:
         logger.error(f"❌ Failed to save summary report: {str(e)}")
-
-
-def save_output_readme(output_dir: Path, logger: logging.Logger) -> None:
-    """
-    Save a README file explaining all output files in the results folder.
-    
-    Args:
-        output_dir: Path to the output directory
-        logger: Logger instance
-    """
-    readme_path = output_dir / "README_OUTPUT_FILES.txt"
-    
-    try:
-        with open(readme_path, 'w') as f:
-            f.write("=" * 80 + "\n")
-            f.write("GSM PIPELINE OUTPUT FILES GUIDE\n")
-            f.write("=" * 80 + "\n\n")
-            
-            f.write("This folder contains the results of a GSM (Grouping-Scoring-Modeling) pipeline run.\n")
-            f.write("Below is an explanation of each output file.\n\n")
-            
-            # Core Results Section
-            f.write("-" * 80 + "\n")
-            f.write("📊 CORE RESULTS\n")
-            f.write("-" * 80 + "\n\n")
-            
-            f.write("summary_report.txt\n")
-            f.write("    Human-readable summary of the best results.\n")
-            f.write("    START HERE to see the best performing configuration.\n\n")
-            
-            f.write("modeling_results_all_iterations.json\n")
-            f.write("    Complete JSON file with all modeling results across all iterations.\n")
-            f.write("    Contains: F1, AUC, accuracy, precision, recall, feature importance,\n")
-            f.write("    used groups, used features, confidence intervals, and more.\n\n")
-            
-            f.write("modeling_results_statistics.xlsx\n")
-            f.write("    Excel file with performance metrics for each group count configuration.\n")
-            f.write("    Columns: Iteration, Groups Used, Features Used, F1, AUC, Accuracy, etc.\n\n")
-            
-            # Group Rankings Section
-            f.write("-" * 80 + "\n")
-            f.write("📁 GROUP RANKINGS\n")
-            f.write("-" * 80 + "\n\n")
-            
-            f.write("ranked_groups_all_iterations.xlsx\n")
-            f.write("    Group rankings for each iteration, sorted by F1 score (descending).\n")
-            f.write("    Groups that classify samples better are ranked higher.\n\n")
-            
-            f.write("aggregated_group_ranking_rra.xlsx  ⭐ RECOMMENDED\n")
-            f.write("    Robust Rank Aggregation (RRA) of group rankings across all iterations.\n")
-            f.write("    Groups consistently ranked high get low p-values.\n")
-            f.write("    Columns:\n")
-            f.write("      - Rank: Final aggregated rank (1 = best)\n")
-            f.write("      - Aggregated P-Value: Lower = more consistently high-ranked\n")
-            f.write("      - Aggregated Score: -log10(p-value), higher = better\n")
-            f.write("      - Average Rank: Mean rank across iterations\n")
-            f.write("      - Occurrences: How many iterations the group appeared in\n\n")
-            
-            f.write("best_averaged_groups.xlsx\n")
-            f.write("    Simple average ranking of groups across iterations.\n\n")
-            
-            # Feature Rankings Section
-            f.write("-" * 80 + "\n")
-            f.write("🧬 FEATURE RANKINGS (Two Methods)\n")
-            f.write("-" * 80 + "\n\n")
-            
-            f.write("The pipeline provides TWO different ways to rank features:\n\n")
-            
-            f.write("METHOD 1: Individual Feature Scoring (ML-based)\n")
-            f.write("    Features ranked by their own machine learning importance.\n\n")
-            
-            f.write("    ranked_features_individual/iteration_XXX.xlsx\n")
-            f.write("        Per-iteration individual feature scores. One file per iteration.\n")
-            f.write("        Columns: feature_name, f1_score, importance_score, mutual_info\n\n")
-            
-            f.write("    aggregated_feature_ranking_individual_rra.xlsx\n")
-            f.write("        RRA aggregation of individual feature rankings.\n\n")
-            
-            f.write("METHOD 2: Group-Derived Feature Scoring ⭐ RECOMMENDED\n")
-            f.write("    Features ranked by their BEST GROUP's F1 score.\n")
-            f.write("    This aligns with GSM methodology where groups are the key unit.\n\n")
-            
-            f.write("    ranked_features_group_derived/iteration_XXX.xlsx\n")
-            f.write("        Per-iteration group-derived feature scores. One file per iteration.\n")
-            f.write("        Columns: feature_name, best_group_name, group_f1_score, group_rank\n\n")
-            
-            f.write("    aggregated_feature_ranking_group_derived_rra.xlsx  ⭐ USE THIS\n")
-            f.write("        RRA aggregation of group-derived feature rankings.\n")
-            f.write("        Features from consistently top-performing groups rank highest.\n")
-            f.write("        Columns:\n")
-            f.write("          - Rank: Final aggregated rank (1 = best)\n")
-            f.write("          - Most Common Group: Group this feature was most often in\n")
-            f.write("          - Average Group F1: Mean F1 of the feature's best groups\n")
-            f.write("          - Aggregated P-Value: RRA p-value (lower = better)\n\n")
-            
-            f.write("best_averaged_features.xlsx\n")
-            f.write("    Simple average feature ranking.\n\n")
-            
-            # Figures Section
-            f.write("-" * 80 + "\n")
-            f.write("📈 FIGURES (in figures/ subfolder)\n")
-            f.write("-" * 80 + "\n\n")
-            
-            f.write("Performance Visualizations:\n")
-            f.write("    performance_by_groups_boxplot.png - F1/AUC distribution by group count\n")
-            f.write("    performance_comparison_heatmap.png - Metrics heatmap across groups\n")
-            f.write("    confidence_intervals_comparison.png - CI comparison plot\n")
-            f.write("    group_count_optimization.png - Optimal group count analysis\n\n")
-            
-            f.write("Feature Analysis:\n")
-            f.write("    feature_importance_*.png - Top feature importance plots\n")
-            f.write("    feature_frequency_*.png - Feature selection frequency\n\n")
-            
-            f.write("Iteration Analysis:\n")
-            f.write("    iteration_performance_trend.png - Performance across iterations\n")
-            f.write("    iteration_variability.png - Stability analysis\n\n")
-            
-            f.write("Statistics Excel Files (in figures/):\n")
-            f.write("    statistics_performance_by_groups.xlsx - Metrics by group count\n")
-            f.write("    statistics_feature_importance.xlsx - Feature importance data\n")
-            f.write("    statistics_iteration_summary.xlsx - Per-iteration stats\n\n")
-            
-            # Configuration Section
-            f.write("-" * 80 + "\n")
-            f.write("⚙️ CONFIGURATION & LOGS\n")
-            f.write("-" * 80 + "\n\n")
-            
-            f.write("run_parameters.txt\n")
-            f.write("    The ACTUAL parameters used for this specific run.\n")
-            f.write("    Shows input files, iterations, model, normalization, etc.\n\n")
-            
-            # config_used.py removed; run_parameters.txt is the authoritative record
-            
-            f.write("gsm_workflow.log\n")
-            f.write("    Detailed log of the entire pipeline execution.\n")
-            f.write("    Useful for debugging or understanding the process.\n\n")
-            
-            # Biological Validation Section
-            f.write("-" * 80 + "\n")
-            f.write("🧬 BIOLOGICAL VALIDATION (if enabled)\n")
-            f.write("-" * 80 + "\n\n")
-            
-            f.write("biological_validation/ subfolder contains:\n\n")
-            
-            f.write("    README_BIOLOGICAL_VALIDATION.txt\n")
-            f.write("        Detailed explanation of biological validation results.\n\n")
-            
-            f.write("    enrichr_results.xlsx\n")
-            f.write("        Pathway enrichment analysis (KEGG, GO, Reactome, WikiPathways).\n")
-            f.write("        Shows which biological pathways your top genes are involved in.\n\n")
-            
-            f.write("    string_interactions.xlsx\n")
-            f.write("        Protein-protein interaction network from STRING-db.\n\n")
-            
-            f.write("    disgenet_results.xlsx (if API key provided)\n")
-            f.write("        Gene-disease associations from DisGeNET.\n\n")
-            
-            f.write("    validation_summary.txt\n")
-            f.write("        Summary of all validation results.\n\n")
-            
-            f.write("    group_validation_summary.xlsx\n")
-            f.write("        Validation results for top-ranked groups.\n\n")
-            
-            # Quick Start Section
-            f.write("-" * 80 + "\n")
-            f.write("🚀 QUICK START: WHERE TO LOOK FIRST\n")
-            f.write("-" * 80 + "\n\n")
-            
-            f.write("1. summary_report.txt\n")
-            f.write("   → See best F1 score, best configuration, top groups & features\n\n")
-            
-            f.write("2. aggregated_group_ranking_rra.xlsx\n")
-            f.write("   → Your most important biological groups/pathways\n\n")
-            
-            f.write("3. aggregated_feature_ranking_group_derived_rra.xlsx\n")
-            f.write("   → Your most important genes (ranked by group performance)\n\n")
-            
-            f.write("4. figures/group_count_optimization.png\n")
-            f.write("   → How many groups to use for best performance\n\n")
-            
-            f.write("5. biological_validation/ (if enabled)\n")
-            f.write("   → External database validation of your findings\n\n")
-            
-            f.write("=" * 80 + "\n")
-            f.write("For more details, see DOCS/feature_ranking_methods_explanation.txt\n")
-            f.write("=" * 80 + "\n")
-        
-        logger.info(f"📄 Saved output README to: {readme_path}")
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to save output README: {str(e)}")

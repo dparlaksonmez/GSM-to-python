@@ -43,9 +43,7 @@ def run_grouping(
     Raises:
         ValueError: If input validation fails
     """
-    logger.info(f"#" * 50)
-    logger.info(f"🔄 Starting grouping process...")
-    logger.info(f"📊 Total filtered features available: {len(filtered_features)}")
+    logger.info(f"Grouping: {len(filtered_features)} filtered features")
 
     # Create initial group mappings from all grouping data
     all_group_mappings = create_group_feature_mapping(grouping_data, 
@@ -54,8 +52,10 @@ def run_grouping(
                                                       logger=logger)
     
     # Filter groups to only include features that passed preliminary filtering
+    # Save original feature lists for fallback if t-test is too aggressive
     filtered_set = set(filtered_features)
     group_feature_mappings = []
+    original_feature_lists = {group.group_name: list(group.feature_list) for group in all_group_mappings}
     
     for group in all_group_mappings:
         # Keep only features that are in the filtered set
@@ -66,24 +66,35 @@ def run_grouping(
             group.feature_list = filtered_feature_list
             group_feature_mappings.append(group)
     
-    logger.info(f"📊 Groups after filtering: {len(group_feature_mappings)} (from {len(all_group_mappings)} original)")
-        
-    # Log information about the groups
+    # Fallback: if no groups survived filtering (t-test was too strict or
+    # the few surviving features don't overlap with any group), fall back
+    # to using ALL features present in the grouping data (bypass t-test).
+    if not group_feature_mappings:
+        logger.warning(
+            f"⚠️ No groups survived after t-test filtering "
+            f"({len(filtered_features)} filtered features matched 0 groups). "
+            "Falling back to using all features from grouping data (no t-test filter)."
+        )
+        # Restore original feature lists and use all groups
+        for group in all_group_mappings:
+            group.feature_list = original_feature_lists[group.group_name]
+        group_feature_mappings = [
+            group for group in all_group_mappings if group.feature_list
+        ]
+    
     total_features = sum(len(group.feature_list) for group in group_feature_mappings)
     avg_group_size = total_features / len(group_feature_mappings) if group_feature_mappings else 0
-    logger.info(f"📊 Total features in groups: {total_features}")
-    logger.info(f"📊 Average group size: {avg_group_size:.2f} features")
+    logger.info(f"Groups: {len(group_feature_mappings)}/{len(all_group_mappings)} | avg {avg_group_size:.1f} features")
     try:
         validate_grouping_data(grouping_data, logger)
         
         if not group_feature_mappings:
-            raise ValueError("❌ No valid feature groups provided")
+            raise ValueError("No valid feature groups provided")
         
-        logger.info(f"✅ Successfully processed {len(group_feature_mappings)} feature groups")
         return group_feature_mappings
         
     except Exception as e:
-        logger.error(f"❌ Error in grouping process: {str(e)}")
+        logger.error(f"Grouping error: {str(e)}")
         raise
 
 
@@ -111,4 +122,4 @@ def validate_grouping_data(
     # if missing_cols:
     #     raise ValueError(f"❌ Missing required columns: {', '.join(missing_cols)}")
     
-    logger.info("✅ Grouping data validation successful")
+    logger.debug("Grouping data validated")

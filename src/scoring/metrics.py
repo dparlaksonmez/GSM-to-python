@@ -141,22 +141,24 @@ def calculate_average_scores(scores: List[MetricsData], logger: logging.Logger) 
         # Initialize result MetricsData
         result = MetricsData()
         
-        # Calculate means and standard deviations for each metric
-        for field in MetricsData.__dataclass_fields__:
-            if not field.startswith('_'):  # Skip private fields
-                values = [getattr(score, field) for score in scores 
-                         if getattr(score, field) is not None]
+        # Calculate means and standard deviations for each numeric metric
+        # Skip non-numeric fields like 'name' (which is a string)
+        numeric_fields = [f for f in MetricsData.__dataclass_fields__
+                         if f != 'name' and not f.startswith('_')]
+        for field in numeric_fields:
+            values = [getattr(score, field) for score in scores 
+                     if getattr(score, field) is not None]
+            
+            if values:
+                # Calculate mean
+                mean_value = float(np.mean(values))
+                setattr(result, field, mean_value)
                 
-                if values:
-                    # Calculate mean
-                    mean_value = float(np.mean(values))
-                    setattr(result, field, mean_value)
-                    
-                    # Calculate standard deviation if applicable
-                    std_field = f"{field}_std"
-                    if std_field in MetricsData.__dataclass_fields__:
-                        std_value = float(np.std(values))
-                        setattr(result, std_field, std_value)
+                # Calculate standard deviation if applicable
+                std_field = f"{field}_std"
+                if std_field in MetricsData.__dataclass_fields__:
+                    std_value = float(np.std(values))
+                    setattr(result, std_field, std_value)
         
         logger.debug(f"✅ Average metrics calculated successfully: {result}")
         return result
@@ -201,7 +203,7 @@ def rank_by_score(
             raise ValueError("Empty metrics list provided")
             
         if logger:
-            logger.info(f"🏆 Ranking metrics by {score_type}...")
+            logger.debug(f"Ranking {len(metrics_list)} items by {score_type}")
         
         # Extract scores and create index-score pairs
         score_pairs = [

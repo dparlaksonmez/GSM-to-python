@@ -98,7 +98,6 @@ def run_single_dataset(
             normalization_method=NORMALIZATION_METHOD,
             input_data_name=dataset_path.stem,
             group_data_name=grouping_path.stem,
-            grouping_file_path=grouping_path,
         )
         
         elapsed = time.time() - start_time

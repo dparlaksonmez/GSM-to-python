@@ -133,7 +133,6 @@ def run_test(
             normalization_method=NORMALIZATION_METHOD,
             input_data_name=expression_file.stem,
             group_data_name=grouping_file.stem,
-            grouping_file_path=grouping_file,
         )
         
         elapsed = time.time() - start_time

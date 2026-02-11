@@ -10,8 +10,6 @@ import pandas as pd
 import logging
 from pathlib import Path
 
-from sklearn.metrics import f1_score
-
 from src.scoring.metrics import MetricsData
 
 
@@ -32,7 +30,7 @@ def save_ranked_groups(
         logger: Logger instance
     """
     try:
-        logger.info("🔄 Starting to save ranked groups to Excel...")
+        logger.debug("Saving ranked groups...")
         
         df = pd.DataFrame({
             'Group Name': [m.name for m in group_list],
@@ -55,15 +53,15 @@ def save_ranked_groups(
                 existing_df = pd.read_csv(output_p)
                 df = pd.concat([existing_df, df], ignore_index=True)
             df.to_csv(output_p, index=False)
-            logger.info(f"✅ Successfully saved ranked groups to CSV: {output_p}")
+            logger.debug(f"Saved ranked groups: {output_p.name}")
         else:
             # Excel behavior (append if exists)
             if output_p.exists():
                 existing_df = pd.read_excel(output_p)
                 df = pd.concat([existing_df, df], ignore_index=True)
             df.to_excel(output_p, index=False)
-            logger.info(f"✅ Successfully saved ranked groups to: {output_p}")
+            logger.debug(f"Saved ranked groups: {output_p.name}")
         
     except Exception as e:
-        logger.error(f"❌ Error saving ranked groups: {str(e)}")
+        logger.error(f"Failed to save ranked groups: {str(e)}")
         raise

@@ -52,7 +52,7 @@ class ScoringResults:
 def _score_single_group(
     group_data: pd.DataFrame,
     group_name: str,
-    labels: pd.Series,
+    labels,  # np.ndarray or pd.Series — pre-converted for speed
     model_name: str,
     cross_validation_folds: int
 ) -> Optional[MetricsData]:
@@ -150,7 +150,7 @@ def run_scoring(
     logger,
     cross_validation_folds: int = DEFAULT_CROSS_VALIDATION_FOLDS,
     feature_scores: Optional[List[FeatureScore]] = None,
-    save_feature_scores: bool = False,
+    should_save_group_features: bool = False,
     n_jobs: int = DEFAULT_N_JOBS
 ) -> ScoringResults:
     """
@@ -168,25 +168,25 @@ def run_scoring(
         logger: Logger instance
         cross_validation_folds: Number of CV folds (default: 5)
         feature_scores: Pre-computed feature scores (optional)
-        save_feature_scores: Whether to save feature scores to file
+        should_save_group_features: Whether to save group-derived feature scores
         n_jobs: Number of parallel jobs (-1 = all CPUs, 1 = sequential)
         
     Returns:
         ScoringResults containing ranked groups and feature scores
     """
     try:
-        # Only score features that passed t-test filtering
-        filtered_feature_names = list(data_x.columns)
+        # Feature scoring is done once before the iteration loop (in gsm_run).
+        # Here we only need group-level scoring.
         if feature_scores is None:
-            feature_scores = score_all_features(data_x[filtered_feature_names], labels, logger)
+            feature_scores = []
 
-        logger.info(f"📊 Scoring {len(groups)} groups ({len(data_x)} samples, {len(feature_scores)} features)")
+        logger.info(f"Scoring {len(groups)} groups ({len(data_x)} samples)")
 
         # Prepare scoring tasks (filter valid groups)
         tasks, group_features = _prepare_group_tasks(groups, data_x, logger)
         
         if not tasks:
-            logger.warning("⚠️ No valid groups to score")
+            logger.warning("No valid groups to score")
             return ScoringResults(
                 ranked_groups=[],
                 feature_scores=feature_scores,
@@ -195,21 +195,26 @@ def run_scoring(
 
         # Determine number of jobs
         actual_n_jobs = n_jobs if n_jobs != -1 else os.cpu_count() or 1
-        logger.info(f"🚀 Parallel scoring with {actual_n_jobs} workers...")
+        logger.debug(f"Parallel scoring with {actual_n_jobs} workers")
 
         # Run scoring in parallel using joblib
         # prefer="threads" would share memory but GIL limits parallelism
         # prefer="processes" (default) gives true parallelism for CPU-bound work
-        results = list(Parallel(n_jobs=n_jobs, verbose=0)(
+        # NOTE: tqdm wraps a pre-built list (not the generator) to avoid
+        # interfering with joblib's lazy dispatch
+        # Pre-convert labels to numpy once to avoid serializing a pandas Series per task
+        labels_np = labels.values if hasattr(labels, 'values') else labels
+        scoring_tasks = [
             delayed(_score_single_group)(
                 group_data=data_x[task.available_features],
                 group_name=task.group_name,
-                labels=labels,
+                labels=labels_np,
                 model_name=model_name,
                 cross_validation_folds=cross_validation_folds
             )
-            for task in tqdm(tasks, desc="📊 Scoring groups")
-        ))
+            for task in tasks
+        ]
+        results = list(Parallel(n_jobs=n_jobs, verbose=0)(tqdm(scoring_tasks, desc="📊 Scoring groups")))
         
         # Filter out failed results (keep only successful MetricsData)
         processed_group_scores: List[MetricsData] = [r for r in results if r is not None]
@@ -217,13 +222,13 @@ def run_scoring(
         total_count = len(results)
         failed_count = total_count - len(processed_group_scores)
         if failed_count > 0:
-            logger.warning(f"⚠️ {failed_count} groups failed scoring")
+            logger.warning(f"{failed_count}/{total_count} groups failed scoring")
         
-        logger.info(f"✅ Successfully scored {len(processed_group_scores)} groups")
+        logger.info(f"Scored {len(processed_group_scores)}/{total_count} groups")
         
         # Check if we have any valid group scores before ranking
         if not processed_group_scores:
-            logger.warning("⚠️ No valid groups to rank - all groups were skipped due to missing features")
+            logger.warning("All groups failed scoring (missing features)")
             ranked_metrics = []
         else:
             ranked_groups = rank_by_score(
@@ -247,40 +252,23 @@ def run_scoring(
             logger=logger
         )
 
-        # Save ranked features (only when requested)
-        if save_feature_scores:
-            # 1. Save individual feature scores (ranked by ML importance) to a subfolder
-            features_dir = output_dir / "ranked_features_individual"
-            features_dir.mkdir(parents=True, exist_ok=True)
-            features_output = features_dir / f"iter_{iteration:03d}_individual_features.csv"
-            ranking_output = FeatureRankingOutput(
-                output_path=features_output,
-                feature_scores=feature_scores,
-                timestamp=timestamp,
-                model_name=model_name,
-                iteration=iteration
+        # Save group-derived feature scores (cheap — only on iteration 1)
+        if should_save_group_features and ranked_metrics:
+            group_derived_scores = compute_group_derived_feature_scores(
+                ranked_groups=ranked_metrics,
+                group_feature_mapping=group_features,
+                logger=logger
             )
-            save_ranked_features(ranking_output, logger)
-
-            # 2. Save group-derived feature scores (ranked by group F1) to a subfolder
-            if ranked_metrics:  # Only if we have ranked groups
-                group_derived_scores = compute_group_derived_feature_scores(
-                    ranked_groups=ranked_metrics,
-                    group_feature_mapping=group_features,
-                    logger=logger
+            if group_derived_scores:
+                group_derived_output = output_dir / "group_derived_feature_scores.csv"
+                group_derived_ranking = GroupDerivedRankingOutput(
+                    output_path=group_derived_output,
+                    feature_scores=group_derived_scores,
+                    timestamp=timestamp,
+                    model_name=model_name,
+                    iteration=iteration
                 )
-                if group_derived_scores:
-                    group_derived_dir = output_dir / "ranked_features_group_derived"
-                    group_derived_dir.mkdir(parents=True, exist_ok=True)
-                    group_derived_output = group_derived_dir / f"iter_{iteration:03d}_group_derived_features.csv"
-                    group_derived_ranking = GroupDerivedRankingOutput(
-                        output_path=group_derived_output,
-                        feature_scores=group_derived_scores,
-                        timestamp=timestamp,
-                        model_name=model_name,
-                        iteration=iteration
-                    )
-                    save_group_derived_features(group_derived_ranking, logger)
+                save_group_derived_features(group_derived_ranking, logger)
         
         return ScoringResults(
             ranked_groups=ranked_metrics,
@@ -289,7 +277,7 @@ def run_scoring(
         )
 
     except Exception as e:
-        logger.error(f"❌ Scoring pipeline failed: {str(e)}")
+        logger.error(f"Scoring pipeline failed: {str(e)}")
         raise
 
 
@@ -299,12 +287,10 @@ def score_all_features(
     logger
 ) -> List[FeatureScore]:
     """Score all features in the dataset."""
-    logger.info(f"🎯 Starting feature scoring on {len(data_x.columns)} filtered features...")
     feature_scores = score_features(
         data_x=data_x,
         labels=labels,
         feature_names=list(data_x.columns),
         logger=logger
     )
-    logger.info(f"✅ Completed scoring {len(feature_scores)} filtered features")
     return feature_scores

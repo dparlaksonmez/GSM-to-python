@@ -85,7 +85,7 @@ def generate_all_figures(
     Returns:
         Dictionary mapping figure names to their file paths
     """
-    logger.info("📊 Starting figure generation for publication...")
+    logger.info("Generating figures...")
     
     figures_dir = output_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -178,14 +178,7 @@ def generate_all_figures(
     except Exception as e:
         logger.warning(f"⚠️ Could not generate metrics correlation plot: {e}")
     
-    # Export detailed Excel tables for all statistics
-    try:
-        excel_paths = export_figure_statistics_to_excel(all_results, config, logger)
-        generated_figures.update(excel_paths)
-    except Exception as e:
-        logger.warning(f"⚠️ Could not export statistics to Excel: {e}")
-    
-    logger.info(f"✅ Generated {len(generated_figures)} figures in {figures_dir}")
+    logger.info(f"Generated {len(generated_figures)} figures")
     return generated_figures
 
 
@@ -200,7 +193,7 @@ def plot_feature_importance_aggregated(
     
     Combines feature importances from all iterations and shows mean ± std.
     """
-    logger.info("📈 Generating aggregated feature importance plot...")
+    logger.debug("Plotting feature importance...")
     
     # Collect feature importances across all iterations
     feature_scores = {}
@@ -257,7 +250,7 @@ def plot_feature_importance_aggregated(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -268,7 +261,7 @@ def plot_performance_boxplot(
     logger: logging.Logger
 ) -> Path:
     """Create boxplot showing metric distributions across iterations."""
-    logger.info("📦 Generating performance boxplot...")
+    logger.debug("Plotting performance boxplot...")
     
     # Collect metrics for best configuration (2 groups based on earlier analysis)
     metrics_data = {
@@ -325,7 +318,7 @@ def plot_performance_boxplot(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -336,7 +329,7 @@ def plot_auc_roc_comparison(
     logger: logging.Logger
 ) -> Path:
     """Create bar chart comparing AUC-ROC across different group counts."""
-    logger.info("📊 Generating AUC-ROC comparison plot...")
+    logger.debug("Plotting AUC-ROC comparison...")
     
     # Collect AUC by group count
     auc_by_groups = {}
@@ -387,7 +380,7 @@ def plot_auc_roc_comparison(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -398,7 +391,7 @@ def plot_confidence_interval_forest(
     logger: logging.Logger
 ) -> Path:
     """Create forest plot showing F1 scores with 95% CI for each iteration."""
-    logger.info("🌲 Generating confidence interval forest plot...")
+    logger.debug("Plotting CI forest...")
     
     # Collect F1 scores and CIs for 2-group configuration
     iterations = []
@@ -446,7 +439,7 @@ def plot_confidence_interval_forest(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -457,7 +450,7 @@ def plot_cv_stability(
     logger: logging.Logger
 ) -> Path:
     """Create plot showing CV mean vs test performance across iterations."""
-    logger.info("📈 Generating cross-validation stability plot...")
+    logger.debug("Plotting CV stability...")
     
     cv_means = []
     test_scores = []
@@ -523,7 +516,7 @@ def plot_cv_stability(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -534,7 +527,7 @@ def plot_group_performance_heatmap(
     logger: logging.Logger
 ) -> Path:
     """Create heatmap showing metrics across iterations and group counts."""
-    logger.info("🔥 Generating group performance heatmap...")
+    logger.debug("Plotting group heatmap...")
     
     # Build matrix: rows = iterations, columns = group counts
     data = {}
@@ -602,7 +595,7 @@ def plot_group_performance_heatmap(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -614,7 +607,7 @@ def plot_best_averaged_groups(
     top_n: int = 15
 ) -> Path:
     """Create horizontal bar chart of best averaged groups."""
-    logger.info("📊 Generating best averaged groups plot...")
+    logger.debug("Plotting averaged groups...")
     
     # Collect group usage and F1 scores
     group_stats = {}
@@ -673,7 +666,7 @@ def plot_best_averaged_groups(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -685,7 +678,7 @@ def plot_best_averaged_features(
     top_n: int = 25
 ) -> Path:
     """Create lollipop chart of best averaged features by importance."""
-    logger.info("📊 Generating best averaged features plot...")
+    logger.debug("Plotting averaged features...")
     
     # Collect feature importance scores
     feature_stats = {}
@@ -737,7 +730,7 @@ def plot_best_averaged_features(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -748,7 +741,7 @@ def plot_iteration_performance_summary(
     logger: logging.Logger
 ) -> Path:
     """Create line plot showing best performance per iteration."""
-    logger.info("📈 Generating iteration performance summary...")
+    logger.debug("Plotting iteration summary...")
     
     # Collect best F1 per iteration
     best_per_iter = []
@@ -800,7 +793,7 @@ def plot_iteration_performance_summary(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -811,7 +804,7 @@ def plot_group_count_optimization(
     logger: logging.Logger
 ) -> Path:
     """Create plot showing optimal number of groups analysis."""
-    logger.info("📊 Generating group count optimization plot...")
+    logger.debug("Plotting group optimization...")
     
     # Collect metrics by group count
     metrics_by_groups = {}
@@ -854,21 +847,19 @@ def plot_group_count_optimization(
     best_idx = np.argmax(f1_means)
     ax1.axvline(best_idx, color='green', linestyle='--', alpha=0.5, label='Optimal')
     
-    # Bottom: Mean feature count by group count (with std)
+    # Bottom: Total feature count by group count
     ax2 = axes[1]
-    feature_stds = [np.std(metrics_by_groups[g]['features']) for g in group_counts]
-    
-    bars = ax2.bar(x, feature_means, color='purple', alpha=0.7, yerr=feature_stds, capsize=3)
+    feature_totals = [sum(metrics_by_groups[g]['features']) for g in group_counts]
+    ax2.bar(x, feature_totals, color='purple', alpha=0.7)
     ax2.set_xlabel('Number of Groups')
-    ax2.set_ylabel('Mean Feature Count')
-    ax2.set_title('Average Features Used by Number of Groups\n(Note: Top-N groups differ per iteration due to different rankings)')
+    ax2.set_ylabel('Total Feature Count (across all configs)')
+    ax2.set_title('Total Features Used by Number of Groups')
     ax2.set_xticks(x)
     ax2.set_xticklabels(group_counts)
     
     # Add value labels on bars
-    for i, (mean_val, std_val) in enumerate(zip(feature_means, feature_stds)):
-        ax2.text(i, mean_val + std_val + max(feature_means)*0.02, 
-                 f'{mean_val:.0f}±{std_val:.0f}', ha='center', fontsize=7)
+    for i, v in enumerate(feature_totals):
+        ax2.text(i, v + max(feature_totals)*0.01, f'{v:,}', ha='center', fontsize=8)
     
     plt.tight_layout()
     
@@ -876,7 +867,7 @@ def plot_group_count_optimization(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -888,7 +879,7 @@ def plot_feature_occurrence_frequency(
     top_n: int = 30
 ) -> Path:
     """Create bar chart showing how often features appear across iterations."""
-    logger.info("📊 Generating feature occurrence frequency plot...")
+    logger.debug("Plotting feature frequency...")
     
     feature_counts = {}
     total_results = 0
@@ -929,7 +920,7 @@ def plot_feature_occurrence_frequency(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -941,7 +932,7 @@ def plot_group_usage_frequency(
     top_n: int = 20
 ) -> Path:
     """Create bar chart showing how often groups are used across iterations."""
-    logger.info("📊 Generating group usage frequency plot...")
+    logger.debug("Plotting group frequency...")
     
     group_counts = {}
     total_results = 0
@@ -984,7 +975,7 @@ def plot_group_usage_frequency(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
 
 
@@ -995,7 +986,7 @@ def plot_metrics_correlation(
     logger: logging.Logger
 ) -> Path:
     """Create scatter matrix showing correlations between metrics."""
-    logger.info("📊 Generating metrics correlation plot...")
+    logger.debug("Plotting metrics correlation...")
     
     # Collect all metrics
     data = []
@@ -1041,245 +1032,8 @@ def plot_metrics_correlation(
     fig.savefig(output_path, dpi=config.dpi, bbox_inches='tight')
     plt.close(fig)
     
-    logger.info(f"   ✓ Saved: {output_path.name}")
+    logger.debug(f"Saved {output_path.name}")
     return output_path
-
-
-##### EXCEL EXPORT FOR FIGURE STATISTICS #####
-def export_figure_statistics_to_excel(
-    all_results: List[Dict],
-    config: FigureConfig,
-    logger: logging.Logger
-) -> Dict[str, Path]:
-    """Export detailed statistics from figures as Excel tables.
-    
-    Creates comprehensive Excel files with the underlying data used in figures,
-    allowing researchers to perform additional analysis or include in manuscripts.
-    """
-    logger.info("📊 Exporting figure statistics to Excel...")
-    
-    output_paths = {}
-    
-    # 1. Performance by Group Count (group_count_optimization data)
-    try:
-        group_performance_data = []
-        for iteration_data in all_results:
-            iteration = iteration_data.get('iteration', 0)
-            for result in iteration_data.get('results', []):
-                group_performance_data.append({
-                    'Iteration': iteration,
-                    'Num Groups': result.get('num_groups_used', 0),
-                    'Num Features': result.get('num_features_used', 0),
-                    'F1 Score': result.get('f1_score', 0),
-                    'Accuracy': result.get('accuracy', 0),
-                    'Precision': result.get('precision', 0),
-                    'Recall': result.get('recall', 0),
-                    'AUC-ROC': result.get('auc_roc', 0),
-                    'F1 CI Lower': result.get('f1_ci_lower', 0),
-                    'F1 CI Upper': result.get('f1_ci_upper', 0),
-                    'CV F1 Mean': result.get('cv_f1_mean', 0),
-                    'CV F1 Std': result.get('cv_f1_std', 0),
-                })
-        
-        if group_performance_data:
-            df = pd.DataFrame(group_performance_data)
-            path = config.output_dir / 'statistics_performance_by_groups.xlsx'
-            
-            # Create summary statistics
-            summary = df.groupby('Num Groups').agg({
-                'Num Features': ['mean', 'std', 'min', 'max'],
-                'F1 Score': ['mean', 'std', 'min', 'max'],
-                'Accuracy': ['mean', 'std', 'min', 'max'],
-                'Precision': ['mean', 'std', 'min', 'max'],
-                'Recall': ['mean', 'std', 'min', 'max'],
-                'AUC-ROC': ['mean', 'std', 'min', 'max'],
-            }).round(4)
-            
-            with pd.ExcelWriter(path, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Raw Data', index=False)
-                summary.to_excel(writer, sheet_name='Summary by Groups')
-            
-            output_paths['excel_performance_by_groups'] = path
-            logger.info(f"   ✓ Saved: {path.name}")
-    except Exception as e:
-        logger.warning(f"   ⚠️ Could not export performance by groups: {e}")
-    
-    # 2. Feature Importance Statistics
-    try:
-        feature_scores = {}
-        for iteration_data in all_results:
-            iteration = iteration_data.get('iteration', 0)
-            for result in iteration_data.get('results', []):
-                importance = result.get('feature_importance', {})
-                for gene, score in importance.items():
-                    if gene not in feature_scores:
-                        feature_scores[gene] = {'scores': [], 'iterations': []}
-                    feature_scores[gene]['scores'].append(score)
-                    feature_scores[gene]['iterations'].append(iteration)
-        
-        if feature_scores:
-            feature_stats = []
-            for gene, data in feature_scores.items():
-                scores = data['scores']
-                feature_stats.append({
-                    'Gene': gene,
-                    'Mean Importance': np.mean(scores),
-                    'Std Importance': np.std(scores),
-                    'Min Importance': np.min(scores),
-                    'Max Importance': np.max(scores),
-                    'Occurrence Count': len(scores),
-                    'Iterations Appeared': len(set(data['iterations']))
-                })
-            
-            df = pd.DataFrame(feature_stats)
-            df = df.sort_values('Mean Importance', ascending=False)
-            
-            path = config.output_dir / 'statistics_feature_importance.xlsx'
-            df.to_excel(path, index=False)
-            output_paths['excel_feature_importance'] = path
-            logger.info(f"   ✓ Saved: {path.name}")
-    except Exception as e:
-        logger.warning(f"   ⚠️ Could not export feature importance: {e}")
-    
-    # 3. Iteration Performance Summary
-    try:
-        iteration_data_list = []
-        for iteration_data in all_results:
-            iteration = iteration_data.get('iteration', 0)
-            results = iteration_data.get('results', [])
-            
-            if results:
-                # Get best result for this iteration
-                best_result = max(results, key=lambda x: x.get('f1_score', 0))
-                
-                # Calculate iteration statistics
-                f1_scores = [r.get('f1_score', 0) for r in results]
-                auc_scores = [r.get('auc_roc', 0) for r in results]
-                
-                iteration_data_list.append({
-                    'Iteration': iteration,
-                    'Best F1': best_result.get('f1_score', 0),
-                    'Best Accuracy': best_result.get('accuracy', 0),
-                    'Best AUC-ROC': best_result.get('auc_roc', 0),
-                    'Best Groups': best_result.get('num_groups_used', 0),
-                    'Best Features': best_result.get('num_features_used', 0),
-                    'Mean F1 (all groups)': np.mean(f1_scores),
-                    'Std F1 (all groups)': np.std(f1_scores),
-                    'Mean AUC (all groups)': np.mean(auc_scores),
-                    'Std AUC (all groups)': np.std(auc_scores),
-                })
-        
-        if iteration_data_list:
-            df = pd.DataFrame(iteration_data_list)
-            
-            # Add overall summary
-            summary_row = {
-                'Iteration': 'OVERALL',
-                'Best F1': df['Best F1'].mean(),
-                'Best Accuracy': df['Best Accuracy'].mean(),
-                'Best AUC-ROC': df['Best AUC-ROC'].mean(),
-                'Best Groups': df['Best Groups'].mode().iloc[0] if len(df) > 0 else 0,
-                'Best Features': df['Best Features'].mean(),
-                'Mean F1 (all groups)': df['Mean F1 (all groups)'].mean(),
-                'Std F1 (all groups)': df['Std F1 (all groups)'].mean(),
-                'Mean AUC (all groups)': df['Mean AUC (all groups)'].mean(),
-                'Std AUC (all groups)': df['Std AUC (all groups)'].mean(),
-            }
-            
-            path = config.output_dir / 'statistics_iteration_summary.xlsx'
-            
-            with pd.ExcelWriter(path, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Per Iteration', index=False)
-                pd.DataFrame([summary_row]).to_excel(writer, sheet_name='Overall Summary', index=False)
-            
-            output_paths['excel_iteration_summary'] = path
-            logger.info(f"   ✓ Saved: {path.name}")
-    except Exception as e:
-        logger.warning(f"   ⚠️ Could not export iteration summary: {e}")
-    
-    # 4. Group Usage Frequency
-    try:
-        group_usage = {}
-        for iteration_data in all_results:
-            for result in iteration_data.get('results', []):
-                groups = result.get('used_groups', [])
-                for group in groups:
-                    if group not in group_usage:
-                        group_usage[group] = 0
-                    group_usage[group] += 1
-        
-        if group_usage:
-            df = pd.DataFrame([
-                {'Group Name': g, 'Usage Count': c} 
-                for g, c in group_usage.items()
-            ])
-            df = df.sort_values('Usage Count', ascending=False)
-            
-            path = config.output_dir / 'statistics_group_usage.xlsx'
-            df.to_excel(path, index=False)
-            output_paths['excel_group_usage'] = path
-            logger.info(f"   ✓ Saved: {path.name}")
-    except Exception as e:
-        logger.warning(f"   ⚠️ Could not export group usage: {e}")
-    
-    # 5. Feature Occurrence Frequency
-    try:
-        feature_usage = {}
-        for iteration_data in all_results:
-            for result in iteration_data.get('results', []):
-                features = result.get('used_features', [])
-                for feature in features:
-                    if feature not in feature_usage:
-                        feature_usage[feature] = 0
-                    feature_usage[feature] += 1
-        
-        if feature_usage:
-            df = pd.DataFrame([
-                {'Feature Name': f, 'Usage Count': c} 
-                for f, c in feature_usage.items()
-            ])
-            df = df.sort_values('Usage Count', ascending=False)
-            
-            path = config.output_dir / 'statistics_feature_usage.xlsx'
-            df.to_excel(path, index=False)
-            output_paths['excel_feature_usage'] = path
-            logger.info(f"   ✓ Saved: {path.name}")
-    except Exception as e:
-        logger.warning(f"   ⚠️ Could not export feature usage: {e}")
-    
-    # 6. Cross-Validation and Confidence Interval Statistics
-    try:
-        cv_ci_data = []
-        for iteration_data in all_results:
-            iteration = iteration_data.get('iteration', 0)
-            for result in iteration_data.get('results', []):
-                cv_ci_data.append({
-                    'Iteration': iteration,
-                    'Num Groups': result.get('num_groups_used', 0),
-                    'Test F1': result.get('f1_score', 0),
-                    'CV F1 Mean': result.get('cv_f1_mean', 0),
-                    'CV F1 Std': result.get('cv_f1_std', 0),
-                    'F1 CI Lower (95%)': result.get('f1_ci_lower', 0),
-                    'F1 CI Upper (95%)': result.get('f1_ci_upper', 0),
-                    'Test Accuracy': result.get('accuracy', 0),
-                    'CV Accuracy Mean': result.get('cv_accuracy_mean', 0),
-                    'CV Accuracy Std': result.get('cv_accuracy_std', 0),
-                    'Test AUC-ROC': result.get('auc_roc', 0),
-                    'AUC CI Lower (95%)': result.get('auc_ci_lower', 0),
-                    'AUC CI Upper (95%)': result.get('auc_ci_upper', 0),
-                })
-        
-        if cv_ci_data:
-            df = pd.DataFrame(cv_ci_data)
-            path = config.output_dir / 'statistics_cv_confidence_intervals.xlsx'
-            df.to_excel(path, index=False)
-            output_paths['excel_cv_ci'] = path
-            logger.info(f"   ✓ Saved: {path.name}")
-    except Exception as e:
-        logger.warning(f"   ⚠️ Could not export CV/CI statistics: {e}")
-    
-    logger.info(f"   ✅ Exported {len(output_paths)} Excel statistics files")
-    return output_paths
 
 
 ##### STANDALONE EXECUTION #####

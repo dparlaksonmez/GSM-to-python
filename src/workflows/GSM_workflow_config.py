@@ -198,7 +198,6 @@ DISGENET_API_KEY = ""
 
 LOGGING_LEVEL = "INFO"                  # Options: 'DEBUG', 'INFO', 'WARNING'
 LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-LOGGING_OUTPUT_FILE = "pipeline.log"
 
 
 # ╔════════════════════════════════════════════════════════════════════════════╗

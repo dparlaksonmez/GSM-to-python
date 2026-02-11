@@ -130,7 +130,7 @@ def run_biological_validation(
     Returns:
         ValidationReport with all analysis results
     """
-    logger.info("🧬 Starting biological validation of selected features...")
+    logger.info("Running biological validation...")
     
     validation_dir = output_dir / "biological_validation"
     validation_dir.mkdir(parents=True, exist_ok=True)
@@ -139,13 +139,13 @@ def run_biological_validation(
     save_biological_validation_explanation(output_dir, logger)
     
     ##### PART 1: Validate Individual Genes #####
-    logger.info("")
-    logger.info("📊 PART 1: Validating Top Individual Genes")
-    logger.info("-" * 50)
+    logger.debug("")
+    logger.debug("Validating top individual genes")
+    logger.debug("-" * 50)
     
     # Extract top genes from results
     genes = extract_top_genes(results_json_path, logger, top_n=top_n_genes)
-    logger.info(f"📋 Validating {len(genes)} genes: {', '.join(genes[:5])}...")
+    logger.debug(f"Validating {len(genes)} genes: {', '.join(genes[:5])}...")
     
     report = ValidationReport(input_genes=genes)
     
@@ -175,16 +175,16 @@ def run_biological_validation(
         except Exception as e:
             logger.warning(f"⚠️ DisGeNET query failed: {e}")
     else:
-        logger.info("ℹ️ DisGeNET API key not provided, skipping disease association query")
+        logger.debug("DisGeNET skipped (no API key)")
     
     # Generate summary report for individual genes
     save_validation_summary(report, validation_dir, logger)
     
     ##### PART 2: Validate Top Groups #####
     if grouping_data_path and grouping_data_path.exists():
-        logger.info("")
-        logger.info("📊 PART 2: Validating Top Gene Groups")
-        logger.info("-" * 50)
+        logger.debug("")
+        logger.debug("Validating top gene groups")
+        logger.debug("-" * 50)
         
         group_results = validate_top_groups(
             output_dir=output_dir,
@@ -198,10 +198,10 @@ def run_biological_validation(
         if group_results:
             logger.info(f"✅ Validated {len(group_results)} groups")
     else:
-        logger.info("")
-        logger.info("ℹ️ Skipping group validation (no grouping file provided)")
+        logger.debug("")
+        logger.debug("Group validation skipped (no grouping file)")
     
-    logger.info(f"\n✅ Biological validation complete. Results saved to: {validation_dir}")
+    logger.info(f"Biological validation done: {validation_dir.name}")
     return report
 
 
@@ -226,7 +226,7 @@ def extract_top_genes(results_path: Path, logger: logging.Logger, top_n: int = 2
             if 'Feature Name' in df.columns:
                 top_genes = df['Feature Name'].head(top_n).tolist()
                 top_genes = [g.split('(')[0] if '(' in g else g for g in top_genes]
-                logger.info(f"   Extracted {len(top_genes)} top genes from group-derived RRA ranking")
+                logger.debug(f"Extracted {len(top_genes)} top genes from group-derived RRA ranking")
                 return top_genes
         except Exception as e:
             logger.warning(f"   Could not read group-derived RRA file: {e}")
@@ -242,7 +242,7 @@ def extract_top_genes(results_path: Path, logger: logging.Logger, top_n: int = 2
                 top_genes = df['Feature Name'].head(top_n).tolist()
                 # Clean gene names (remove suffixes like "(1)" or "(2)")
                 top_genes = [g.split('(')[0] if '(' in g else g for g in top_genes]
-                logger.info(f"   Extracted {len(top_genes)} top genes from individual RRA ranking")
+                logger.debug(f"Extracted {len(top_genes)} top genes from individual RRA ranking")
                 return top_genes
         except Exception as e:
             logger.warning(f"   Could not read individual RRA file: {e}")
@@ -256,13 +256,13 @@ def extract_top_genes(results_path: Path, logger: logging.Logger, top_n: int = 2
             if 'Feature Name' in df.columns:
                 top_genes = df['Feature Name'].head(top_n).tolist()
                 top_genes = [g.split('(')[0] if '(' in g else g for g in top_genes]
-                logger.info(f"   Extracted {len(top_genes)} top genes from averaged features")
+                logger.debug(f"Extracted {len(top_genes)} top genes from averaged features")
                 return top_genes
         except Exception as e:
             logger.warning(f"   Could not read averaged features file: {e}")
     
     # Priority 4: Fallback to JSON aggregation
-    logger.info("   Using JSON fallback for gene extraction...")
+    logger.debug("Using JSON fallback for genes")
     with open(results_path, 'r') as f:
         all_results = json.load(f)
     
@@ -284,7 +284,7 @@ def extract_top_genes(results_path: Path, logger: logging.Logger, top_n: int = 2
     sorted_genes = sorted(gene_means.items(), key=lambda x: x[1], reverse=True)
     
     top_genes = [gene for gene, _ in sorted_genes[:top_n]]
-    logger.info(f"   Extracted {len(top_genes)} top genes by importance (JSON fallback)")
+    logger.debug(f"Extracted {len(top_genes)} top genes by importance (JSON fallback)")
     
     return top_genes
 
@@ -300,7 +300,7 @@ def query_enrichr(genes: List[str], logger: logging.Logger) -> List[EnrichmentRe
     Returns:
         List of EnrichmentResult objects
     """
-    logger.info("🔬 Querying Enrichr for pathway enrichment...")
+    logger.debug("Querying Enrichr...")
     
     # Step 1: Submit gene list
     genes_str = "\n".join(genes)
@@ -320,13 +320,13 @@ def query_enrichr(genes: List[str], logger: logging.Logger) -> List[EnrichmentRe
     if not user_list_id:
         raise Exception("Failed to get userListId from Enrichr")
     
-    logger.info(f"   Enrichr list ID: {user_list_id}")
+    logger.debug(f"Enrichr list ID: {user_list_id}")
     
     # Step 2: Query each library
     all_results = []
     
     for library in ENRICHR_LIBRARIES:
-        logger.info(f"   Querying library: {library}")
+        logger.debug(f"Querying: {library}")
         
         response = requests.get(
             f"{ENRICHR_URL}/enrich",
@@ -362,7 +362,7 @@ def query_enrichr(genes: List[str], logger: logging.Logger) -> List[EnrichmentRe
     # Sort by combined score
     all_results.sort(key=lambda x: x.combined_score, reverse=True)
     
-    logger.info(f"   ✓ Retrieved {len(all_results)} enrichment results")
+    logger.debug(f"Enrichr: {len(all_results)} results")
     return all_results
 
 
@@ -378,7 +378,7 @@ def query_string_db(genes: List[str], logger: logging.Logger, species: int = 960
     Returns:
         Dictionary with interactions list and network URL
     """
-    logger.info("🔗 Querying STRING-db for protein interactions...")
+    logger.debug("Querying STRING-db...")
     
     genes_str = "%0d".join(genes)
     
@@ -407,7 +407,7 @@ def query_string_db(genes: List[str], logger: logging.Logger, species: int = 960
             )
             interactions.append(interaction)
         
-        logger.info(f"   ✓ Found {len(interactions)} protein interactions")
+        logger.debug(f"STRING: {len(interactions)} interactions")
     else:
         logger.warning(f"   ⚠️ STRING network query failed: {response.status_code}")
     
@@ -426,7 +426,7 @@ def query_string_db(genes: List[str], logger: logging.Logger, species: int = 960
     string_enrichment = []
     if enrichment_response.status_code == 200:
         string_enrichment = enrichment_response.json()
-        logger.info(f"   ✓ Retrieved {len(string_enrichment)} STRING enrichment terms")
+        logger.debug(f"STRING enrichment: {len(string_enrichment)} terms")
     
     return {
         "interactions": interactions,
@@ -451,7 +451,7 @@ def query_disgenet(
     Returns:
         List of DiseaseAssociation objects
     """
-    logger.info("🏥 Querying DisGeNET for disease associations...")
+    logger.debug("Querying DisGeNET...")
     
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -484,7 +484,7 @@ def query_disgenet(
         # Rate limiting
         time.sleep(0.3)
     
-    logger.info(f"   ✓ Retrieved {len(all_associations)} disease associations")
+    logger.debug(f"DisGeNET: {len(all_associations)} associations")
     return all_associations
 
 
@@ -517,7 +517,7 @@ def save_enrichr_results(
                 "; ".join(result.genes)
             ])
     
-    logger.info(f"   💾 Saved: {output_path.name}")
+    logger.debug(f"Saved: {output_path.name}")
 
 
 def save_string_results(data: Dict, output_dir: Path, logger: logging.Logger) -> None:
@@ -538,7 +538,7 @@ def save_string_results(data: Dict, output_dir: Path, logger: logging.Logger) ->
                 f"{interaction.score:.3f}"
             ])
     
-    logger.info(f"   💾 Saved: {interactions_path.name}")
+    logger.debug(f"Saved: {interactions_path.name}")
     
     # Save network URL
     url_path = output_dir / "string_network_url.txt"
@@ -546,14 +546,14 @@ def save_string_results(data: Dict, output_dir: Path, logger: logging.Logger) ->
         f.write(f"STRING Network Visualization URL:\n{data['network_url']}\n")
         f.write(f"\nOpen this URL in a browser to view the protein-protein interaction network.\n")
     
-    logger.info(f"   💾 Saved: {url_path.name}")
+    logger.debug(f"Saved: {url_path.name}")
     
     # Save enrichment
     if data.get('enrichment'):
         enrichment_path = output_dir / "string_enrichment.json"
         with open(enrichment_path, 'w') as f:
             json.dump(data['enrichment'], f, indent=2)
-        logger.info(f"   💾 Saved: {enrichment_path.name}")
+        logger.debug(f"Saved: {enrichment_path.name}")
 
 
 def save_disgenet_results(
@@ -579,7 +579,7 @@ def save_disgenet_results(
                 result.source
             ])
     
-    logger.info(f"   💾 Saved: {output_path.name}")
+    logger.debug(f"Saved: {output_path.name}")
 
 
 def save_validation_summary(
@@ -672,7 +672,7 @@ def save_validation_summary(
         f.write("END OF VALIDATION SUMMARY\n")
         f.write("=" * 70 + "\n")
     
-    logger.info(f"   💾 Saved: {output_path.name}")
+    logger.debug(f"Saved: {output_path.name}")
 
 
 ##### GROUP-LEVEL VALIDATION #####
@@ -709,7 +709,7 @@ def validate_top_groups(
         logger.warning(f"⚠️ Group ranking file not found: {rra_file}")
         return []
     
-    logger.info(f"📊 Loading top {top_n_groups} groups from RRA ranking...")
+    logger.debug(f"Loading top {top_n_groups} groups from RRA")
     
     group_df = pd.read_excel(rra_file)
     
@@ -725,10 +725,10 @@ def validate_top_groups(
         return []
     
     top_groups = group_df[group_name_col].head(top_n_groups).tolist()
-    logger.info(f"   Top groups: {', '.join(str(g) for g in top_groups[:3])}...")
+    logger.debug(f"Top groups: {', '.join(str(g) for g in top_groups[:3])}...")
     
     ##### STEP 2: Load Grouping File to Get Genes per Group #####
-    logger.info(f"🔗 Loading grouping file to extract genes per group...")
+    logger.debug("Loading grouping file for genes per group")
     
     if not grouping_data_path.exists():
         logger.warning(f"⚠️ Grouping file not found: {grouping_data_path}")
@@ -762,7 +762,7 @@ def validate_top_groups(
     results = []
     
     for i, group_name in enumerate(top_groups, 1):
-        logger.info(f"   🧬 Validating Group {i}/{len(top_groups)}: {group_name}")
+        logger.debug(f"Validating Group {i}/{len(top_groups)}: {group_name}")
         
         # Get genes in this group
         group_genes = grouping_df[grouping_df[group_column] == group_name][gene_column].tolist()

@@ -117,7 +117,7 @@ def perform_ttest(
         return np.array(t_stats, dtype=np.float64), np.array(p_vals, dtype=np.float64)
 
     except Exception as e:
-        logger.error(f"❌ Error in t-test calculation: {str(e)}")
+        logger.error(f"T-test error: {str(e)}")
         raise
 
 def adjust_pvalues(
@@ -147,7 +147,7 @@ def adjust_pvalues(
         logger.debug(f"Applying {config.correction_method} correction to {len(pvalues)} p-values")
         return multipletests(pvalues, method=config.correction_method)[1]
     except Exception as e:
-        logger.error(f"❌ Error in p-value adjustment: {str(e)}")
+        logger.error(f"P-value adjustment error: {str(e)}")
         raise
 
 def filter_by_pvalue(
@@ -183,9 +183,9 @@ def filter_by_pvalue(
                          if data.feature_names is not None else None)
 
         if config.initial_feature_filter_size > 0:
-            logger.info(f"✅ t-test: {sum(final_mask)} genes (from {sum(significant_mask)} significant, top {config.initial_feature_filter_size})")
+            logger.info(f"Filter: {sum(final_mask)} genes (from {sum(significant_mask)} significant, top {config.initial_feature_filter_size})")
         else:
-            logger.info(f"✅ t-test: {sum(significant_mask)} significant genes (p < {config.threshold})")
+            logger.info(f"Filter: {sum(significant_mask)} significant genes (p < {config.threshold})")
         
         return TTestResults(
             statistics=pvalues,
@@ -196,7 +196,7 @@ def filter_by_pvalue(
         )
 
     except Exception as e:
-        logger.error(f"❌ Error in gene filtering: {str(e)}")
+        logger.error(f"Gene filtering error: {str(e)}")
         raise
 
 def select_features(
@@ -240,5 +240,5 @@ def select_features(
 
     except Exception as e:
         if logger:
-            logger.error(f"❌ Error in feature selection pipeline: {str(e)}")
+            logger.error(f"Feature selection error: {str(e)}")
         raise

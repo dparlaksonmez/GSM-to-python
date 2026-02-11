@@ -30,8 +30,26 @@ def _validate_input(data: pd.DataFrame) -> None:
         raise ValueError("Input DataFrame is empty")
     if data.isnull().any().any():
         raise ValueError("Input DataFrame contains missing values")
-    if not np.issubdtype(data.values.dtype, np.number):
-        raise ValueError("All columns must contain numeric values")
+
+
+def _coerce_to_numeric(data: pd.DataFrame, logger) -> pd.DataFrame:
+    """Coerce all columns to numeric, replacing non-convertible values with NaN then 0.
+
+    Some datasets (e.g. GDS3837) contain stray non-numeric values in a few cells.
+    Instead of rejecting the whole dataset, coerce and log warnings.
+    """
+    non_numeric_cols = data.select_dtypes(exclude=[np.number]).columns.tolist()
+    if not non_numeric_cols:
+        return data
+
+    logger.warning(
+        f"⚠️ Found {len(non_numeric_cols)} non-numeric column(s): {non_numeric_cols}. "
+        "Coercing to numeric (non-convertible values will be set to 0)."
+    )
+    data = data.copy()
+    for col in non_numeric_cols:
+        data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0)
+    return data
 
 def _minmax_normalize(data: pd.DataFrame) -> pd.DataFrame:
     """Apply min-max normalization."""
@@ -79,7 +97,10 @@ def normalize_data(
     Returns:
         pd.DataFrame: Normalized data
     """
-    logger.info(f"Starting data normalization using {method} method")
+    logger.debug(f"Normalizing with {method} method")
+    
+    # Coerce any non-numeric columns before validation
+    data = _coerce_to_numeric(data, logger)
     
     # Input validation
     _validate_input(data)
@@ -115,7 +136,7 @@ def normalize_data(
             data_to_normalize[cols_to_normalize]
         )
         
-        logger.info("Data normalization completed successfully")
+        logger.info(f"Normalized ({method})")
         return data_to_normalize
         
     except Exception as e:

@@ -65,7 +65,7 @@ def validate_input_data(data: pd.DataFrame, label_column_name: str) -> None:
     if data.empty:
         raise ValueError("Input data is empty")
     
-    required_columns = ['class']
+    required_columns = [label_column_name]
     missing_cols = [col for col in required_columns if col not in data.columns]
     if missing_cols:
         raise ValueError(f"Missing required columns: {missing_cols}")
@@ -129,24 +129,15 @@ def preprocess_data(
     if apply_class_balancing:
         sampled_data = determine_class_balance(normalized_data, 
                                                logger=logger,
+                                               label_column_name=label_column_name,
                                                min_class_balance_ratio=min_class_balance_ratio,
                                                sampling_method=sampling_method)
         logger.info(f"Sampled data size: {sampled_data.shape}")
     else:
         sampled_data = normalized_data
-        logger.info("Class balancing disabled - using original data")
+        logger.info("Class balancing disabled")
     
-    # Split data
-    # train_data, test_data = train_test_split(
-    #     normalized_data,
-    #     test_size=test_size,
-    #     random_state=random_state
-    # )
-    
-    # Give a snapshot of the data
-    logger.info(f"Data shape: {sampled_data.shape}")
-    logger.info(f"Data columns (first 10): {sampled_data.columns[:10].tolist()}")
-    logger.info(f"Data head:\n{sampled_data.head()}")
+    logger.info(f"Data: {sampled_data.shape}")
     
     return sampled_data
 
@@ -172,7 +163,7 @@ def convert_labels_to_binary(
         ValueError: If label column is missing or invalid labels found
     """
     if label_column_name not in data.columns:
-        raise ValueError("Data must contain 'label' column")
+        raise ValueError(f"Data must contain '{label_column_name}' column")
         
     label_map = {negative_label: 0, positive_label: 1}
     invalid_labels = set(data[label_column_name]) - set(label_map.keys())
@@ -186,6 +177,7 @@ def convert_labels_to_binary(
    
 def determine_class_balance(data: pd.DataFrame,
                             logger: Any,
+                            label_column_name: str = 'class',
                             min_class_balance_ratio: float = 0.5,
                             sampling_method: str = 'undersampling') -> pd.DataFrame:
     """
@@ -193,25 +185,22 @@ def determine_class_balance(data: pd.DataFrame,
 
     Parameters:
         data (pd.DataFrame): Input data with labels
-        label1 (str): Name of the first label column
-        label2 (str): Name of the second label column
         logger (Any): Logger instance
+        label_column_name (str): Name of the label column (default: 'class')
         min_class_balance_ratio (float): Minimum acceptable ratio between minority and majority classes
             (0.5 means classes can be at most 1:2)
         sampling_method (str): Method for balancing classes ('undersampling', 'oversampling')
     Returns:
         pd.DataFrame: Data with balanced classes
     """
-    negative_class = "0"
-    positive_class = "1"
-    class_label = 'class'
+    class_label = label_column_name
 
     # Count occurrences of each class
     class_counts = data[class_label].value_counts()
-    logger.info(f"Class counts: {class_counts}")
+    logger.debug(f"Class counts: {class_counts.to_dict()}")
     
     # Check if classes are balanced
-    if class_counts.min() / class_counts.max() < 0.5:
+    if class_counts.min() / class_counts.max() < min_class_balance_ratio:
         # Apply sampling method to balance classes
         if sampling_method == 'undersampling':
             # Find the minority and majority classes
@@ -237,14 +226,14 @@ def determine_class_balance(data: pd.DataFrame,
         else:
             raise ValueError(f"Unsupported sampling method: {sampling_method}")
     else:
-        logger.info("Classes are balanced, no sampling applied")
-    logger.info(f"Balanced class counts: {data[class_label].value_counts()}")
+        logger.debug("Classes balanced, no sampling needed")
+    logger.debug(f"Final class counts: {data[class_label].value_counts().to_dict()}")
     # Check if the class balance ratio is acceptable
     ratio = data[class_label].value_counts().min() / data[class_label].value_counts().max()
     if ratio < min_class_balance_ratio:
-        logger.warning(f"Class balance ratio {ratio} is below the minimum threshold {min_class_balance_ratio}")
+        logger.warning(f"Class balance ratio {ratio:.2f} below threshold {min_class_balance_ratio}")
     else:
-        logger.info(f"Class balance ratio {ratio} is acceptable")
+        logger.debug(f"Class balance ratio: {ratio:.2f}")
     return data
 
 def preprocess_grouping_data(
@@ -278,10 +267,7 @@ def preprocess_grouping_data(
         if missing_cols:
             raise ValueError(f"Missing required columns: {missing_cols}")
 
-        # Give a snapshot of the data
-        logger.info(f"Grouping data shape: {grouping_data.shape}")
-        logger.info(f"Grouping data columns: {grouping_data.columns.tolist()}")
-        logger.info(f"Grouping data head:\n{grouping_data.head()}")
+        logger.info(f"Grouping data: {grouping_data.shape[0]} rows, {grouping_data.shape[1]} cols")
         
         return grouping_data
 

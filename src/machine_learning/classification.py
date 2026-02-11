@@ -13,7 +13,6 @@ Usage Example:
     predictions = predict(model, X_test)
 """
 
-from email.mime import base
 from typing import Tuple
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -78,8 +77,8 @@ def get_classifier_object(model_name: str, n_estimators: int = 50):
     """
     if model_name == 'RandomForest':
         # Use fewer trees (50 vs 100 default) - sufficient for group ranking
-        # No random_state - relies on global seed set per iteration
-        return RandomForestClassifier(n_estimators=n_estimators)
+        # n_jobs=1 to avoid nested parallelism (groups are already parallelized)
+        return RandomForestClassifier(n_estimators=n_estimators, n_jobs=1)
     elif model_name == 'GradientBoosting':
         return GradientBoostingClassifier(n_estimators=n_estimators)
     else:

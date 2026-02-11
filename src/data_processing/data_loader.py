@@ -13,7 +13,6 @@ def load_input_file(input_file_name, *, separator: str = ","):
     Returns:
         pd.DataFrame: The input file data.
     """
-    print(input_file_name)
     data = pd.read_csv(input_file_name, sep=separator)
     return data
 

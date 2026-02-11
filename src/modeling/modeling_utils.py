@@ -153,18 +153,26 @@ def filter_features_of_groups(
         raise ValueError(error_message)
     
     # Filter features
-    filtered_features = []
+    all_filtered_features = []
     for group_name in group_list:
         group_data = next((group for group in group_feature_mapping if group.group_name == group_name), None)
         if group_data is None:
             logger.warning(f"Group {group_name} not found in group_feature_mapping")
             continue
         
-        # Filter features based on group data
-        filtered_features = [feature for feature in group_data.feature_list if feature in data_x.columns]
-        if not filtered_features:
+        # Filter features based on group data — keep only features present in the data
+        group_features = [feature for feature in group_data.feature_list if feature in data_x.columns]
+        if not group_features:
             logger.warning(f"No features found for group {group_name}")
             continue
         
-        filtered_features.append(group_name)
-    return filtered_features
+        all_filtered_features.extend(group_features)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_features = []
+    for f in all_filtered_features:
+        if f not in seen:
+            seen.add(f)
+            unique_features.append(f)
+    return unique_features

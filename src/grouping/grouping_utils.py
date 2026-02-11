@@ -69,8 +69,7 @@ def create_group_feature_mapping(
         >>> print(f"Cancer group has {len(mappings[0].feature_list)} genes")
     """
     if logger:
-        logger.info("🔄 Creating group-feature mappings...")
-        logger.info(f"   Processing {len(grouping_data):,} rows...")
+        logger.debug(f"Creating group mappings from {len(grouping_data):,} rows...")
     
     # Validate input data
     if grouping_data.empty:
@@ -98,7 +97,7 @@ def create_group_feature_mapping(
     
     if logger:
         total_mappings = sum(len(g.feature_list) for g in result)
-        logger.info(f"✅ Created {len(result):,} groups with {total_mappings:,} gene-group mappings")
+        logger.debug(f"Created {len(result):,} groups ({total_mappings:,} mappings)")
         
         # Log top 5 largest groups at DEBUG level to reduce verbosity
         if result:

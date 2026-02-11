@@ -1,76 +1,212 @@
-import streamlit as st
-import pandas as pd
-import sys
-from pathlib import Path
-import time
-import matplotlib.pyplot as plt
-from PIL import Image
-import logging
+"""
+GSM Bioinformatics Pipeline — Streamlit UI 🧬
 
-# Add project root to path
+Purpose:
+    Browser-based graphical interface for the Grouping-Scoring-Modeling
+    pipeline.  Allows researchers without programming experience to
+    configure, run, and inspect classification results.
+
+Key Features:
+    - File selection from data/ folder or direct upload
+    - Full parameter configuration via sidebar
+    - Live log streaming during pipeline execution
+    - Rich results dashboard with all figures and metrics
+    - Historical run browser with one-click result loading
+"""
+
+import json
+import logging
+import sys
+import time
+from pathlib import Path
+
+import streamlit as st
+
+##### PATH SETUP #####
+
 project_root = Path(__file__).resolve().parents[2]
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
-from src.workflows.GSM_workflow import gsm_run
+# NOTE: gsm_run is imported lazily inside the run handler to speed up page load
 from src.workflows.GSM_workflow_config import (
-    NUMBER_OF_ITERATIONS, TRAIN_TEST_SPLIT_RATIO, MODEL_NAME, 
-    LABEL_COLUMN_NAME, NORMALIZATION_METHOD, GENE_COLUMN_NAME, GROUP_COLUMN_NAME,
-    CLASS_LABELS_POSITIVE, CLASS_LABELS_NEGATIVE
+    CLASS_LABELS_NEGATIVE,
+    CLASS_LABELS_POSITIVE,
+    GENE_COLUMN_NAME,
+    GROUP_COLUMN_NAME,
+    LABEL_COLUMN_NAME,
+    MODEL_NAME,
+    NORMALIZATION_METHOD,
+    NUMBER_OF_ITERATIONS,
+    TRAIN_TEST_SPLIT_RATIO,
 )
 
-# Page configuration
+
+##### PAGE CONFIG #####
+
 st.set_page_config(
-    page_title="GSM Bioinformatics Pipeline",
+    page_title="GSM Pipeline",
     page_icon="🧬",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Custom CSS
+# Clear any stale cached data from previous code versions on first load
+if "_cache_cleared" not in st.session_state:
+    st.cache_data.clear()
+    st.session_state["_cache_cleared"] = True
+
+##### CUSTOM CSS #####
+
 st.markdown("""
-    <style>
-    .main {
-        padding: 2rem;
-    }
-    .stButton>button {
-        width: 100%;
-        background-color: #4CAF50;
-        color: white;
-        font-weight: bold;
-    }
-    .success-box {
-        padding: 1rem;
-        background-color: #d4edda;
-        border-color: #c3e6cb;
-        color: #155724;
-        border-radius: 0.25rem;
-        margin-bottom: 1rem;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+<style>
+/* Global font */
+html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
+
+/* Sidebar header */
+section[data-testid="stSidebar"] h1 { font-size: 1.15rem !important; }
+
+/* Primary action button */
+div.stButton > button[kind="primary"] {
+    width: 100%;
+    background: linear-gradient(135deg, #1A237E 0%, #4A90D9 100%);
+    color: white;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    padding: 0.65rem 1rem;
+    font-size: 1.05rem;
+    transition: opacity 0.2s;
+}
+div.stButton > button[kind="primary"]:hover { opacity: 0.88; }
+
+/* Metric cards — theme-aware */
+[data-testid="stMetric"] {
+    border-radius: 10px;
+    padding: 0.8rem 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+@media (prefers-color-scheme: dark) {
+    [data-testid="stMetric"] { background: #1e2130; }
+}
+@media (prefers-color-scheme: light) {
+    [data-testid="stMetric"] { background: #F4F6FA; }
+}
+/* Streamlit's own dark class override */
+[data-testtheme="dark"] [data-testid="stMetric"],
+.stApp[data-theme="dark"] [data-testid="stMetric"],
+html[data-theme="dark"] [data-testid="stMetric"] {
+    background: #1e2130;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+##### HELPER FUNCTIONS #####
+
+def _get_pd():
+    """Lazy pandas import to keep initial page load fast."""
+    import pandas as pd          # noqa: delayed import
+    return pd
+
 
 def smart_read_csv(file_input):
-    """Reads a CSV/TXT file with automatic separator detection."""
+    """Read CSV/TXT with automatic separator detection."""
+    pd = _get_pd()
+    if hasattr(file_input, "seek"):
+        file_input.seek(0)
     try:
-        # Reset pointer if possible
-        if hasattr(file_input, 'seek'):
+        return pd.read_csv(file_input, sep=None, engine="python")
+    except Exception:
+        if hasattr(file_input, "seek"):
             file_input.seek(0)
-            
-        # Try reading with Python engine and auto-detection
-        return pd.read_csv(file_input, sep=None, engine='python')
-    except Exception as e:
-        # Fallback strategies
-        try:
-            if hasattr(file_input, 'seek'):
-                file_input.seek(0)
-            return pd.read_csv(file_input, sep=',')
-        except:
-            if hasattr(file_input, 'seek'):
-                file_input.seek(0)
-            return pd.read_csv(file_input, sep='\t')
+        return pd.read_csv(file_input, sep="\t")
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _discover_output_runs(output_dir: str) -> list[dict]:
+    """Scan the output/ folder and return metadata dicts for each run.
+
+    Returns plain dicts (not dataclasses) so st.cache_data can pickle
+    them reliably across hot-reloads.
+    Keys: path, timestamp, dataset_name, group_name.
+    """
+    runs: list[dict] = []
+    out = Path(output_dir)
+    if not out.exists():
+        return runs
+    for d in sorted(out.iterdir(), reverse=True):
+        if not d.is_dir() or not d.name.startswith("gsm_"):
+            continue
+        # Parse: gsm_YYYY_MM_DD-HH_MM_SS_dataname_groupname
+        parts = d.name.split("_", 4)
+        if len(parts) < 4:
+            continue
+        ts_raw = "_".join(parts[1:4])
+        rest = parts[4] if len(parts) > 4 else ""
+        if "-" in ts_raw:
+            date_part = ts_raw[:10]
+            time_rest = ts_raw[11:]
+            time_part = time_rest[:8] if len(time_rest) >= 8 else time_rest
+            rest_of_name = time_rest[9:] if len(time_rest) > 9 else ""
+            ts_display = (f"{date_part.replace('_', '-')}  "
+                          f"{time_part.replace('_', ':')}")
+        else:
+            ts_display = ts_raw
+            rest_of_name = rest
+
+        r = rest_of_name if rest_of_name else rest
+        name_parts = r.rsplit("_", 1)
+        ds_name = name_parts[0] if name_parts else r
+        gr_name = name_parts[1] if len(name_parts) > 1 else ""
+
+        runs.append({
+            "path": str(d),
+            "timestamp": ts_display,
+            "dataset_name": ds_name.replace("_", " "),
+            "group_name": gr_name.replace("_", " "),
+        })
+    return runs
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_report_text(run_path: str) -> str:
+    """Load summary_report.txt for a run (cached)."""
+    f = Path(run_path) / "summary_report.txt"
+    return f.read_text() if f.exists() else "Summary report not available."
+
+
+def _find_figures(run_path: str) -> list[str]:
+    """Return all PNG figure paths inside a run's figures/ directory."""
+    fig_dir = Path(run_path) / "figures"
+    if not fig_dir.exists():
+        return []
+    return [str(p) for p in sorted(fig_dir.glob("*.png"))]
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_json_results(run_path: str) -> list[dict] | None:
+    """Load modeling results JSON if present (cached)."""
+    f = Path(run_path) / "modeling_results_all_iterations.json"
+    if not f.exists():
+        return None
+    try:
+        return json.loads(f.read_text())
+    except Exception:
+        return None
+
+
+@st.cache_data(show_spinner=False)
+def _cached_read_bytes(file_path: str) -> bytes:
+    """Read file bytes with caching to avoid repeated disk I/O."""
+    return Path(file_path).read_bytes()
+
+
+##### LOG HANDLER #####
 
 class StreamlitLogHandler(logging.Handler):
+    """Routes log messages into a Streamlit container."""
+
     def __init__(self, container, state_key: str):
         super().__init__()
         self.container = container
@@ -80,170 +216,280 @@ class StreamlitLogHandler(logging.Handler):
         msg = self.format(record)
         current = st.session_state.get(self.state_key, "")
         st.session_state[self.state_key] = current + msg + "\n"
-        log_text = st.session_state[self.state_key].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        safe = (st.session_state[self.state_key]
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;"))
+        # flex-direction:column-reverse keeps the scroll pinned to the bottom
         self.container.markdown(
-            f"""
-            <div id="log-box" style="height:240px; overflow-y:auto; border:1px solid #ddd; padding:8px; background:#0e1117; color:#e6e6e6; font-family:monospace; white-space:pre-wrap;">
-{log_text}
-            </div>
-            <script>
-            const logBox = document.getElementById('log-box');
-            if (logBox) {{ logBox.scrollTop = logBox.scrollHeight; }}
-            </script>
-            """,
-            unsafe_allow_html=True
+            f'<div style="display:flex; flex-direction:column-reverse;'
+            f' height:260px; overflow-y:auto; border:1px solid #334;'
+            f' padding:8px; background:#0e1117; color:#e6e6e6;'
+            f' font-family:Consolas,monospace; font-size:0.82rem;'
+            f' border-radius:6px;">'
+            f'<div style="white-space:pre-wrap;">{safe}</div></div>',
+            unsafe_allow_html=True,
         )
 
-def main():
-    st.title("🧬 GSM Bioinformatics Pipeline")
-    st.markdown("### Grouping-Scoring-Modeling Analysis Tool")
 
+##### RESULTS DASHBOARD #####
+
+def render_results_dashboard(run_path: str):
+    """Display a comprehensive results dashboard for a given run."""
+
+    # ---- Summary metrics row ----
+    json_results = _load_json_results(run_path)
+
+    if json_results:
+        # Each entry has {"metadata": {...}, "results": [{...}]}
+        last_iter = json_results[-1]
+        best = (last_iter.get("results", [{}])[0]
+                if "results" in last_iter else last_iter)
+        f1 = best.get("f1_score", 0)
+        auc = best.get("auc_roc", 0)
+        acc = best.get("accuracy", 0)
+        n_groups = best.get("num_groups_used", "?")
+        n_feats = best.get("num_features_used", "?")
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("F1 Score", f"{f1:.3f}")
+        c2.metric("AUC-ROC", f"{auc:.3f}")
+        c3.metric("Accuracy", f"{acc:.3f}")
+        c4.metric("Groups", str(n_groups))
+        c5.metric("Features", str(n_feats))
+
+    # ---- Tabs ----
+    tab_report, tab_figures, tab_files = st.tabs(
+        ["📄 Summary Report", "📊 Figures", "📁 Output Files"]
+    )
+
+    with tab_report:
+        st.code(_load_report_text(run_path), language=None)
+
+    with tab_figures:
+        figures = _find_figures(run_path)
+        if not figures:
+            st.info("No figures generated for this run.")
+        else:
+            for i in range(0, len(figures), 2):
+                cols = st.columns(2)
+                for j, col in enumerate(cols):
+                    idx = i + j
+                    if idx < len(figures):
+                        caption = Path(figures[idx]).stem.replace("_", " ").title()
+                        col.image(figures[idx], caption=caption,
+                                  width="stretch")
+
+    with tab_files:
+        exts = {".txt", ".json", ".xlsx", ".csv", ".png", ".log"}
+        run_dir = Path(run_path)
+
+        def _list_files(base: Path, prefix: str = ""):
+            for f in sorted(base.iterdir()):
+                if f.is_dir():
+                    _list_files(f, prefix=f"{prefix}{f.name}/")
+                elif f.suffix in exts:
+                    kb = f.stat().st_size / 1024
+                    cn, cs, cd = st.columns([4, 1, 1])
+                    cn.text(f"{prefix}{f.name}")
+                    cs.text(f"{kb:.0f} KB")
+                    with cd:
+                        st.download_button(
+                            "⬇", data=_cached_read_bytes(str(f)),
+                            file_name=f.name,
+                            key=f"dl_{run_dir.name}_{prefix}{f.name}",
+                        )
+
+        _list_files(run_dir)
+
+
+##### MAIN APPLICATION #####
+
+def main():
+    # ---- Header ----
+    st.markdown(
+        '<h1 style="margin-bottom:0;">🧬 GSM Bioinformatics Pipeline</h1>'
+        '<p style="color:#555; margin-top:0; font-size:1.05rem;">'
+        'Grouping–Scoring–Modeling &nbsp;|&nbsp; Knowledge-driven '
+        'feature selection for transcriptomic classification</p>',
+        unsafe_allow_html=True,
+    )
+
+    # ---- Session state ----
     if "log_text" not in st.session_state:
         st.session_state["log_text"] = ""
     if "last_output_path" not in st.session_state:
         st.session_state["last_output_path"] = None
-    
-    # Sidebar for Configuration
+
+
+    # ==================================================================
+    #  SIDEBAR
+    # ==================================================================
     with st.sidebar:
-        st.header("⚙️ Configuration")
-        
-        st.subheader("📁 Data Input")
-        
-        input_method = st.radio("Input Method", ["Select from 'data' folder", "Upload Files"])
-        
+        st.markdown("## ⚙️ Configuration")
+
+        st.markdown("### 📁 Data Input")
+        input_method = st.radio(
+            "Input method",
+            ["Select from data/ folder", "Upload files"],
+            horizontal=True,
+        )
+
         expression_file = None
         group_file = None
-        
-        if input_method == "Upload Files":
-            expression_file = st.file_uploader("Expression Data (CSV)", type=['csv'])
-            group_file = st.file_uploader("Group Data (CSV/TXT)", type=['csv', 'txt'])
+        expr_name = None
+        group_name = None
+
+        if input_method == "Upload files":
+            expression_file = st.file_uploader(
+                "Expression data", type=["csv", "txt"],
+                help="Gene-expression matrix (samples × genes)")
+            group_file = st.file_uploader(
+                "Group data", type=["csv", "txt"],
+                help="Gene-to-group mapping file")
+            if expression_file:
+                expr_name = Path(expression_file.name).stem
+            if group_file:
+                group_name = Path(group_file.name).stem
         else:
             data_dir = project_root / "data"
-            
-            # Helper to find files
-            def find_files(patterns, subdirs):
-                files = {}
-                for subdir in subdirs:
-                    path = data_dir / subdir
-                    if path.exists():
-                        for pattern in patterns:
-                            for f in path.glob(pattern):
-                                files[f"{subdir}/{f.name}"] = f
-                return files
 
-            # Expression Files (main_data, test)
-            expr_files = find_files(["*.csv"], ["main_data", "test"])
+            def _find(patterns, subdirs):
+                found = {}
+                for sd in subdirs:
+                    p = data_dir / sd
+                    if p.exists():
+                        for pat in patterns:
+                            for f in p.glob(pat):
+                                found[f"{sd}/{f.name}"] = f
+                return found
+
+            expr_files = _find(["*.csv"], ["main_data", "test"])
             if expr_files:
-                selected_expr = st.selectbox("Expression Data", options=list(expr_files.keys()))
-                expression_file = expr_files[selected_expr]
+                sel = st.selectbox("Expression data",
+                                   list(expr_files.keys()))
+                expression_file = expr_files[sel]
+                expr_name = Path(sel).stem
             else:
-                st.warning("No CSV files found in data/main_data or data/test")
+                st.warning("No CSV files in data/main_data or data/test")
 
-            # Group Files (grouping_data, test)
-            group_files = find_files(["*.csv", "*.txt"], ["grouping_data", "test"])
+            group_files = _find(["*.csv", "*.txt"],
+                                ["grouping_data", "test"])
             if group_files:
-                selected_group = st.selectbox("Group Data", options=list(group_files.keys()))
-                group_file = group_files[selected_group]
+                sel = st.selectbox("Group data",
+                                   list(group_files.keys()))
+                group_file = group_files[sel]
+                group_name = Path(sel).stem
             else:
-                st.warning("No Group files found in data/grouping_data or data/test")
-        
-        st.subheader("🔧 Parameters")
-        
-        # Pipeline Parameters
-        n_iterations = st.number_input(
-            "Number of Iterations", 
-            min_value=1, 
-            max_value=100, 
-            value=NUMBER_OF_ITERATIONS
-        )
-        
-        split_ratio = st.slider(
-            "Train/Test Split Ratio",
-            min_value=0.1,
-            max_value=0.9,
-            value=TRAIN_TEST_SPLIT_RATIO,
-            step=0.05
-        )
-        
-        norm_method = st.selectbox(
-            "Normalization Method",
-            options=['zscore', 'minmax', 'robust'],
-            index=['zscore', 'minmax', 'robust'].index(NORMALIZATION_METHOD) if NORMALIZATION_METHOD in ['zscore', 'minmax', 'robust'] else 0
-        )
-        
-        model_name = st.selectbox(
-            "Machine Learning Model",
-            options=['RandomForest', 'SVM', 'LogisticRegression'],
-            index=0  # Default to RandomForest
-        )
-        
-        st.subheader("🏷️ Column Names & Labels")
-        label_col = st.text_input("Label Column", value=LABEL_COLUMN_NAME)
-        pos_label = st.text_input("Positive Class Label", value=CLASS_LABELS_POSITIVE)
-        neg_label = st.text_input("Negative Class Label", value=CLASS_LABELS_NEGATIVE)
-        gene_col = st.text_input("Gene Column", value=GENE_COLUMN_NAME)
-        group_col = st.text_input("Group Column", value=GROUP_COLUMN_NAME)
+                st.warning("No group files in data/grouping_data or data/test")
 
-    # Main Content Area
+        st.divider()
+
+        st.markdown("### 🔧 Parameters")
+        n_iterations = st.number_input(
+            "Iterations", min_value=1, max_value=100,
+            value=NUMBER_OF_ITERATIONS,
+            help="Number of independent train/test random splits",
+        )
+        split_ratio = st.slider(
+            "Train / Test split", 0.50, 0.90,
+            value=TRAIN_TEST_SPLIT_RATIO, step=0.05,
+        )
+        norm_method = st.selectbox(
+            "Normalisation",
+            ["zscore", "minmax", "robust"],
+            index=(["zscore", "minmax", "robust"].index(NORMALIZATION_METHOD)
+                   if NORMALIZATION_METHOD in ["zscore", "minmax", "robust"]
+                   else 0),
+        )
+        model_name = st.selectbox(
+            "Classifier",
+            ["RandomForest", "SVM", "LogisticRegression"],
+        )
+
+        st.divider()
+
+        st.markdown("### 🏷️ Label Mapping")
+        label_col = st.text_input("Label column", LABEL_COLUMN_NAME)
+        c1, c2 = st.columns(2)
+        pos_label = c1.text_input("Positive class", CLASS_LABELS_POSITIVE)
+        neg_label = c2.text_input("Negative class", CLASS_LABELS_NEGATIVE)
+        gene_col = st.text_input("Gene column", GENE_COLUMN_NAME)
+        group_col = st.text_input("Group column", GROUP_COLUMN_NAME)
+
+    # ==================================================================
+    #  MAIN AREA
+    # ==================================================================
     if expression_file and group_file:
-        st.info("✅ Data files selected. Ready to run pipeline.")
-        
-        # Preview Data
-        with st.expander("📊 Data Preview"):
+        # ---- Data preview ----
+        with st.expander("📊 Data Preview", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
-                st.markdown("**Expression Data**")
+                st.markdown("**Expression data**")
                 try:
                     df_expr = smart_read_csv(expression_file)
-                    preview_cols = list(df_expr.columns[:12])
-                    if len(df_expr.columns) > 12:
-                        st.caption("Showing first 12 columns for readability.")
-                    st.dataframe(df_expr[preview_cols].head())
-                    st.caption(f"Shape: {df_expr.shape}")
-                    # Reset file pointer if it's an uploaded file
-                    if hasattr(expression_file, 'seek'):
+                    st.dataframe(df_expr[list(df_expr.columns[:10])].head(6),
+                                 width="stretch")
+                    st.caption(f"{df_expr.shape[0]} samples × "
+                               f"{df_expr.shape[1]} features")
+                    if hasattr(expression_file, "seek"):
                         expression_file.seek(0)
                 except Exception as e:
-                    st.error(f"Error reading expression file: {e}")
-            
+                    st.error(f"Error: {e}")
             with col2:
-                st.markdown("**Group Data**")
+                st.markdown("**Group data**")
                 try:
-                    df_group = smart_read_csv(group_file)
-                    preview_cols = list(df_group.columns[:6])
-                    if len(df_group.columns) > 6:
-                        st.caption("Showing first 6 columns for readability.")
-                    st.dataframe(df_group[preview_cols].head())
-                    st.caption(f"Shape: {df_group.shape}")
-                    # Reset file pointer if it's an uploaded file
-                    if hasattr(group_file, 'seek'):
+                    df_grp = smart_read_csv(group_file)
+                    st.dataframe(df_grp.head(6),
+                                 width="stretch")
+                    st.caption(f"{df_grp.shape[0]} rows × "
+                               f"{df_grp.shape[1]} columns")
+                    if hasattr(group_file, "seek"):
                         group_file.seek(0)
                 except Exception as e:
-                    st.error(f"Error reading group file: {e}")
+                    st.error(f"Error: {e}")
 
-        # Run Button
-        if st.button("🚀 Run GSM Pipeline"):
-            try:
-                st.session_state["log_text"] = ""
-                st.session_state["last_output_path"] = None
+        # ---- Run button ----
+        run_clicked = st.button("🚀  Run GSM Pipeline", type="primary")
+        st.caption("Use the **Stop** button in the top-right corner of the "
+                   "page to cancel a running pipeline.")
 
-                log_section = st.container()
-                log_placeholder = log_section.empty()
-                
-                # Create handler
-                st_handler = StreamlitLogHandler(log_placeholder, "log_text")
-                st_handler.setLevel(logging.INFO)
-                
-                # Create a formatter
-                formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-                st_handler.setFormatter(formatter)
+        # Show persisted log from a previous run
+        if st.session_state.get("log_text") and not run_clicked:
+            with st.expander("📋 Pipeline Log", expanded=False):
+                _safe = (st.session_state["log_text"]
+                         .replace("&", "&amp;")
+                         .replace("<", "&lt;")
+                         .replace(">", "&gt;"))
+                st.markdown(
+                    f'<div style="display:flex; flex-direction:column-reverse;'
+                    f' height:260px; overflow-y:auto; border:1px solid #334;'
+                    f' padding:8px; background:#0e1117; color:#e6e6e6;'
+                    f' font-family:Consolas,monospace; font-size:0.82rem;'
+                    f' border-radius:6px;">'
+                    f'<div style="white-space:pre-wrap;">{_safe}</div></div>',
+                    unsafe_allow_html=True,
+                )
 
-                with st.spinner("Running pipeline... This may take a while."):
-                    # Load data for processing
+        if run_clicked:
+            st.session_state["log_text"] = ""
+            st.session_state["last_output_path"] = None
+
+            log_placeholder = st.empty()
+            handler = StreamlitLogHandler(log_placeholder, "log_text")
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(logging.Formatter(
+                "%(asctime)s  %(levelname)s  %(message)s",
+                datefmt="%H:%M:%S"))
+
+            with st.spinner("Pipeline running … use the Stop button "
+                            "(top-right) to cancel."):
+                try:
+                    from src.workflows.GSM_workflow import gsm_run
+
                     input_data = smart_read_csv(expression_file)
                     group_data = smart_read_csv(group_file)
-                    
-                    # Run Pipeline
+
                     output_path = gsm_run(
                         input_data=input_data,
                         group_data=group_data,
@@ -257,52 +503,80 @@ def main():
                         group_column=group_col,
                         normalization_method=norm_method,
                         notebook_mode=False,
-                        extra_handlers=[st_handler]
+                        extra_handlers=[handler],
+                        input_data_name=expr_name,
+                        group_data_name=group_name,
                     )
-                    
-                    st.session_state["last_output_path"] = output_path
-                    st.success(f"Pipeline completed successfully! Results saved to: {output_path}")
-                            
-            except Exception as e:
-                st.error(f"An error occurred during execution: {str(e)}")
-                st.exception(e)
 
-        # Results Section (always below the run button)
+                    st.session_state["last_output_path"] = str(output_path)
+                    st.success(
+                        f"✅  Pipeline completed — results at "
+                        f"`{output_path.name}`")
+                except Exception as e:
+                    st.error(f"Pipeline failed: {e}")
+                    st.exception(e)
+
+        # ---- Show latest results ----
         if st.session_state.get("last_output_path"):
-            output_path = st.session_state["last_output_path"]
-            st.markdown("## 📈 Analysis Results")
+            st.markdown("---")
+            st.markdown("## 📈 Latest Results")
+            render_results_dashboard(
+                st.session_state["last_output_path"])
 
-            summary_file = output_path / "summary_report.txt"
-            if summary_file.exists():
-                with st.expander("📄 Summary Report", expanded=True):
-                    with open(summary_file, 'r') as f:
-                        report_content = f.read()
-                    st.text(report_content)
-
-            st.markdown("### 📊 Visualizations")
-            col1, col2 = st.columns(2)
-            plot1 = output_path / "f1_scores_across_iterations.png"
-            plot2 = output_path / "average_f1_scores_by_groups.png"
-
-            with col1:
-                if plot1.exists():
-                    st.image(str(plot1), caption="F1 Scores across Iterations", use_column_width=True)
-
-            with col2:
-                if plot2.exists():
-                    st.image(str(plot2), caption="Average F1 Scores by Groups", use_column_width=True)
-                
     else:
-        st.warning("👈 Please select or upload both Expression Data and Group Data files in the sidebar to proceed.")
-        
-        # Instructions
+        st.info("👈  Select or upload **Expression data** and "
+                "**Group data** in the sidebar to get started.")
         st.markdown("""
-        ### How to use:
-        1. **Select Data**: Choose to select files from the 'data' folder or upload new ones.
-        2. **Configure**: Adjust parameters like iterations, split ratio, and column names if needed.
-        3. **Run**: Click the 'Run GSM Pipeline' button.
-        4. **Analyze**: View the generated summary report and visualizations.
+        ### Quick Start
+        1. **Select data** — pick files from the `data/` folder or upload
+        2. **Configure** — adjust iterations, split ratio, and classifier
+        3. **Run** — click **Run GSM Pipeline** and watch the live log
+        4. **Analyse** — browse metrics, figures, and downloadable files
         """)
+
+    # ==================================================================
+    #  HISTORICAL RUNS  (runs as a fragment — selecting a run only
+    #  rerenders this section, not the entire page)
+    # ==================================================================
+    st.markdown("---")
+    st.markdown("## 🕘 Run History")
+
+    @st.fragment
+    def _history_fragment():
+        output_dir = str(project_root / "output")
+        runs = _discover_output_runs(output_dir)
+
+        if not runs:
+            st.caption("No previous runs found in output/.")
+            return
+
+        st.caption(f"{len(runs)} previous run(s) found.")
+
+        # Build labels for selectbox (lightweight — no file I/O)
+        run_labels = [
+            f"{r['timestamp']}  —  {r['dataset_name']}  /  {r['group_name']}"
+            for r in runs
+        ]
+
+        selected_idx = st.selectbox(
+            "Select a run to inspect",
+            range(len(run_labels)),
+            format_func=lambda i: run_labels[i],
+            key="history_run_selector",
+        )
+
+        # Render dashboard only when user clicks Load
+        if selected_idx is not None:
+            if st.button("📂 Load Results", key="load_history_btn"):
+                st.session_state["_loaded_run_idx"] = selected_idx
+
+            loaded_idx = st.session_state.get("_loaded_run_idx")
+            if loaded_idx is not None and loaded_idx < len(runs):
+                with st.spinner("Loading run results…"):
+                    render_results_dashboard(runs[loaded_idx]["path"])
+
+    _history_fragment()
+
 
 if __name__ == "__main__":
     main()

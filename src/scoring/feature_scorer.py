@@ -85,10 +85,11 @@ def _compute_mutual_info_fast(
     
     # Compute all at once with fewer neighbors (faster than batching)
     # n_neighbors=3 is much faster than default n_neighbors=5
+    # No hardcoded random_state — relies on global np.random.seed()
+    # set per iteration for proper variation across runs
     mutual_info = mutual_info_classif(
         X, y,
         n_neighbors=n_neighbors,
-        random_state=42
     )
     
     return mutual_info
@@ -119,11 +120,14 @@ def score_features(
         if data_x.shape[1] != len(feature_names):
             raise ValueError("Number of features doesn't match feature names")
 
-        logger.info(f"🎯 Scoring {len(feature_names)} features (MI + RF importance + F1)...")
+        logger.info(f"Feature scoring: {len(feature_names)} features (MI + RF + F1)")
 
         mutual_info = _compute_mutual_info_fast(data_x, labels, n_neighbors=3, logger=logger)
 
-        rf = RandomForestClassifier(n_estimators=100, random_state=42)
+        # No hardcoded random_state — relies on global np.random.seed()
+        # set per iteration so feature scores vary across iterations
+        # 50 trees is sufficient for ranking features by importance
+        rf = RandomForestClassifier(n_estimators=50, n_jobs=1)
         rf.fit(data_x, labels)
         importance_scores = rf.feature_importances_
 
@@ -141,11 +145,11 @@ def score_features(
             for idx in range(len(feature_names))
         ]
 
-        logger.info("✅ Feature scoring completed")
+        logger.info("Feature scoring done")
         return feature_scores
 
     except Exception as e:
-        logger.error(f"❌ Error during feature scoring: {str(e)}")
+        logger.error(f"Feature scoring failed: {str(e)}")
         raise
 
 
@@ -225,9 +229,9 @@ def calculate_feature_importance(
             reverse=True
         ))
 
-        logger.info("✅ Feature importance calculation completed")
+        logger.debug("Feature importance extracted")
         return importance_dict
 
     except Exception as e:
-        logger.error(f"❌ Error calculating feature importance: {str(e)}")
+        logger.error(f"Feature importance error: {str(e)}")
         raise

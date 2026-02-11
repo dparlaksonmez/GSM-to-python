@@ -63,7 +63,8 @@ def score_data(params: ScoringParameters) -> MetricsData:
         RuntimeError: If scoring process fails
     """
     # Input validation
-    if params.data_x.empty or params.labels.empty:
+    # Use len() instead of .empty to support both pandas Series and numpy arrays
+    if len(params.data_x) == 0 or len(params.labels) == 0:
         raise ValueError("❌ Input data or labels are empty")
     
     if params.data_x.shape[0] != params.labels.shape[0]:

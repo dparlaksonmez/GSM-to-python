@@ -65,7 +65,7 @@ def save_ranked_features(
     """
     try:
         output_path = ranking_data.output_path
-        logger.info(f"💾 Saving ranked features to {output_path}")
+        logger.info(f"Saving ranked features to {output_path.name}")
 
         # Create DataFrame from feature scores
         results_df = pd.DataFrame([
@@ -98,17 +98,17 @@ def save_ranked_features(
                 existing_df = pd.read_csv(output_path)
                 results_df = pd.concat([existing_df, results_df], ignore_index=True)
             results_df.to_csv(output_path, index=False)
-            logger.info(f"✅ Successfully saved {len(results_df)} ranked features to CSV: {output_path}")
+            logger.debug(f"Saved {len(results_df)} features to {output_path.name}")
         else:
             # Excel behavior (append if exists)
             if output_path.exists():
                 existing_df = pd.read_excel(output_path)
                 results_df = pd.concat([existing_df, results_df], ignore_index=True)
             results_df.to_excel(output_path, sheet_name='Ranked Features', index=False)
-            logger.info(f"✅ Successfully saved {len(results_df)} ranked features to Excel: {output_path}")
+            logger.debug(f"Saved {len(results_df)} features to {output_path.name}")
 
     except Exception as e:
-        logger.error(f"❌ Failed to save ranked features: {str(e)}")
+        logger.error(f"Failed to save ranked features: {str(e)}")
         raise IOError(f"Feature ranking save failed: {str(e)}")
 
 
@@ -159,7 +159,7 @@ def compute_group_derived_feature_scores(
         key=lambda x: (-x.group_f1_score, x.group_rank)
     )
     
-    logger.info(f"📊 Computed group-derived scores for {len(sorted_scores)} features")
+    logger.debug(f"Group-derived scores for {len(sorted_scores)} features")
     return sorted_scores
 
 
@@ -181,7 +181,7 @@ def save_group_derived_features(
     """
     try:
         output_path = ranking_data.output_path
-        logger.info(f"💾 Saving group-derived feature rankings to {output_path}")
+        logger.debug(f"Saving group-derived rankings to {output_path.name}")
 
         # Create DataFrame from feature scores
         results_df = pd.DataFrame([
@@ -210,14 +210,14 @@ def save_group_derived_features(
                 existing_df = pd.read_csv(output_path)
                 results_df = pd.concat([existing_df, results_df], ignore_index=True)
             results_df.to_csv(output_path, index=False)
-            logger.info(f"✅ Saved {len(ranking_data.feature_scores)} group-derived feature rankings to CSV: {output_path}")
+            logger.debug(f"Saved {len(ranking_data.feature_scores)} group-derived rankings to {output_path.name}")
         else:
             if output_path.exists():
                 existing_df = pd.read_excel(output_path)
                 results_df = pd.concat([existing_df, results_df], ignore_index=True)
             results_df.to_excel(output_path, sheet_name='Group Derived Features', index=False)
-            logger.info(f"✅ Saved {len(ranking_data.feature_scores)} group-derived feature rankings to Excel: {output_path}")
+            logger.debug(f"Saved {len(ranking_data.feature_scores)} group-derived rankings to {output_path.name}")
 
     except Exception as e:
-        logger.error(f"❌ Failed to save group-derived features: {str(e)}")
+        logger.error(f"Failed to save group-derived features: {str(e)}")
         raise IOError(f"Group-derived feature ranking save failed: {str(e)}")
