@@ -95,7 +95,8 @@ from src.utils.rank_aggregation import (
     save_aggregated_feature_ranking,
     compute_best_averaged_groups,
     compute_best_averaged_features,
-    save_best_averaged_rankings
+    save_best_averaged_rankings,
+    aggregate_model_feature_importance_rra
 )
 from src.utils.biological_validation import run_biological_validation
 import time
@@ -560,6 +561,14 @@ def gsm_run(
                 ]
         except Exception as e:
             logger.warning(f"Failed to aggregate feature rankings: {e}")
+
+        # Perform RRA on model feature importances (XGBoost gain-based)
+        try:
+            model_fi_rra = aggregate_model_feature_importance_rra(
+                all_results_data, output_folder_path, logger
+            )
+        except Exception as e:
+            logger.warning(f"Failed to aggregate model feature importances: {e}")
 
     # Identify the best performing iteration and save a summary report
     logger.info("Generating summary report...")

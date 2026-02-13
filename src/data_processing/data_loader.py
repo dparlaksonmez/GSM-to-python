@@ -4,15 +4,20 @@ def load_input_file(input_file_name, *, separator: str = ","):
     """
     Load the input file from the data folder.
 
+    Tries UTF-8 first, then falls back to latin-1 if a UnicodeDecodeError
+    is raised (some GEO datasets contain non-ASCII probe annotations).
+
     Args:
-        project_folder (pathlib.Path): The project folder.
         input_file_name (str): The name of the input file.
         separator (str): Column separator used in the input file.
 
     Returns:
         pd.DataFrame: The input file data.
     """
-    data = pd.read_csv(input_file_name, sep=separator)
+    try:
+        data = pd.read_csv(input_file_name, sep=separator)
+    except UnicodeDecodeError:
+        data = pd.read_csv(input_file_name, sep=separator, encoding="latin-1")
     return data
 
 def load_group_file(group_file_name, *, separator: str = "\t"):

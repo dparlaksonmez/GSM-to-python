@@ -6,6 +6,9 @@ ARCHIVE/
 output/
 *ARCHIVE*/
 
+# Runtime logs
+batch_run.log
+
 # data/grouping_data/
 # data/main_data
 data/test/*.py

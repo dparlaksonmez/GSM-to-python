@@ -95,7 +95,64 @@ Suggested habits:
 
 ---
 
-## 6) Running after you change something
+## 6) Running tests before you change something
+
+Tests verify that core functions still work correctly after your edits.
+Think of tests as a **checklist** that runs automatically and tells you
+"everything still works" or "something broke here".
+
+### Run tests manually (recommended after every change)
+
+```bash
+# From the project root:
+pytest
+```
+
+This runs all 29+ unit tests and takes about 2 seconds.
+You will see green PASSED / red FAILED next to each test.
+
+### What happens automatically
+
+| Trigger | What runs | How |
+|---------|-----------|-----|
+| `git push` to `main` or `develop` | Full test suite | GitHub Actions (`.github/workflows/tests.yml`) |
+| Pull Request to `main` or `develop` | Full test suite | GitHub Actions |
+| `git push` (local, if pre-commit installed) | Full test suite | pre-commit hook |
+
+**GitHub Actions**: Every push and PR automatically runs the tests on GitHub.
+If tests fail, the PR will show a red ✗. You can see the details
+in the "Actions" tab on GitHub.
+
+**Pre-commit hook** (optional, local): Runs tests before every `git push`
+so broken code never reaches GitHub. To set up:
+
+```bash
+pip install pre-commit
+pre-commit install --hook-type pre-push
+```
+
+After this, `git push` will automatically run the tests first.
+If any test fails, the push is blocked until you fix it.
+
+### Writing new tests
+
+Tests live in `tests/test_core_functions.py`. To add a test:
+
+```python
+def test_my_new_function():
+    """Describe what you are testing."""
+    result = my_function(input_data)
+    assert result == expected, "Helpful message if it fails"
+```
+
+Guidelines:
+- Test name must start with `test_`
+- Keep each test short and focused on one thing
+- Use small, synthetic data (not real datasets)
+
+---
+
+## 7) Running after you change something
 
 After changes, do a quick run:
 
@@ -115,7 +172,7 @@ If something breaks, check errors carefully. Most issues are missing packages or
 
 ---
 
-## 7) Share your changes on GitHub (integrate your code)
+## 8) Share your changes on GitHub (integrate your code)
 
 If you want your changes to become part of the shared project, the safe way is:
 **Branch → Commit → Push → Pull Request → Review → Merge**.
@@ -203,7 +260,7 @@ This process is explained in more detail (with screenshot placeholders and termi
 
 ---
 
-## 8) Asking for help (recommended)
+## 9) Asking for help (recommended)
 
 If you get stuck, copy:
 - The command you ran

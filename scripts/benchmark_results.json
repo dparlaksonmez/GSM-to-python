@@ -1,0 +1,559 @@
+{
+  "dataset": "/home/yasin/GSM-to-python/data/main_data/GDS2545.csv",
+  "cv_folds": 3,
+  "random_seed": 44,
+  "models": [
+    {
+      "model": "LogisticRegression",
+      "time_s": 7.91,
+      "speedup_vs_rf": 6.7,
+      "groups_scored": 1562,
+      "mean_f1": 0.6737,
+      "std_f1": 0.053,
+      "mean_accuracy": 0.6865,
+      "std_accuracy": 0.0478
+    },
+    {
+      "model": "NaiveBayes",
+      "time_s": 6.61,
+      "speedup_vs_rf": 8.0,
+      "groups_scored": 1562,
+      "mean_f1": 0.6705,
+      "std_f1": 0.0685,
+      "mean_accuracy": 0.6823,
+      "std_accuracy": 0.0635
+    },
+    {
+      "model": "LinearSVM",
+      "time_s": 6.89,
+      "speedup_vs_rf": 7.6,
+      "groups_scored": 1562,
+      "mean_f1": 0.6692,
+      "std_f1": 0.0511,
+      "mean_accuracy": 0.6813,
+      "std_accuracy": 0.0467
+    },
+    {
+      "model": "KNN",
+      "time_s": 8.64,
+      "speedup_vs_rf": 6.1,
+      "groups_scored": 1562,
+      "mean_f1": 0.639,
+      "std_f1": 0.0682,
+      "mean_accuracy": 0.6498,
+      "std_accuracy": 0.0646
+    },
+    {
+      "model": "AdaBoost",
+      "time_s": 85.02,
+      "speedup_vs_rf": 0.6,
+      "groups_scored": 1562,
+      "mean_f1": 0.6364,
+      "std_f1": 0.0683,
+      "mean_accuracy": 0.651,
+      "std_accuracy": 0.0617
+    },
+    {
+      "model": "RandomForest",
+      "time_s": 52.63,
+      "speedup_vs_rf": 1.0,
+      "groups_scored": 1562,
+      "mean_f1": 0.6327,
+      "std_f1": 0.0859,
+      "mean_accuracy": 0.6426,
+      "std_accuracy": 0.085
+    },
+    {
+      "model": "ExtraTrees",
+      "time_s": 45.75,
+      "speedup_vs_rf": 1.2,
+      "groups_scored": 1562,
+      "mean_f1": 0.6316,
+      "std_f1": 0.086,
+      "mean_accuracy": 0.6416,
+      "std_accuracy": 0.0851
+    },
+    {
+      "model": "XGBoost",
+      "time_s": 19.27,
+      "speedup_vs_rf": 2.7,
+      "groups_scored": 1562,
+      "mean_f1": 0.6306,
+      "std_f1": 0.0701,
+      "mean_accuracy": 0.6418,
+      "std_accuracy": 0.0668
+    },
+    {
+      "model": "GradientBoosting",
+      "time_s": 51.85,
+      "speedup_vs_rf": 1.0,
+      "groups_scored": 1562,
+      "mean_f1": 0.6191,
+      "std_f1": 0.0722,
+      "mean_accuracy": 0.6289,
+      "std_accuracy": 0.0701
+    },
+    {
+      "model": "DecisionTree",
+      "time_s": 9.49,
+      "speedup_vs_rf": 5.5,
+      "groups_scored": 1562,
+      "mean_f1": 0.5927,
+      "std_f1": 0.0654,
+      "mean_accuracy": 0.6016,
+      "std_accuracy": 0.0641
+    },
+    {
+      "model": "SGD",
+      "time_s": 6.76,
+      "speedup_vs_rf": 7.8,
+      "groups_scored": 1562,
+      "mean_f1": 0.5899,
+      "std_f1": 0.0982,
+      "mean_accuracy": 0.626,
+      "std_accuracy": 0.0727
+    }
+  ],
+  "correlations": [
+    {
+      "model_a": "DecisionTree",
+      "model_b": "RandomForest",
+      "spearman_rho": 0.254,
+      "spearman_p": 0.0002843994007814987,
+      "kendall_tau": 0.1907,
+      "kendall_p": 6.09085843359764e-05
+    },
+    {
+      "model_a": "DecisionTree",
+      "model_b": "ExtraTrees",
+      "spearman_rho": 0.248,
+      "spearman_p": 0.0003985090983281046,
+      "kendall_tau": 0.1796,
+      "kendall_p": 0.0001588685787541007
+    },
+    {
+      "model_a": "DecisionTree",
+      "model_b": "XGBoost",
+      "spearman_rho": 0.0545,
+      "spearman_p": 0.4434055609631703,
+      "kendall_tau": 0.0652,
+      "kendall_p": 0.17017380803092608
+    },
+    {
+      "model_a": "DecisionTree",
+      "model_b": "GradientBoosting",
+      "spearman_rho": 0.3923,
+      "spearman_p": 9.224808156272716e-09,
+      "kendall_tau": 0.2792,
+      "kendall_p": 4.325613610384121e-09
+    },
+    {
+      "model_a": "DecisionTree",
+      "model_b": "AdaBoost",
+      "spearman_rho": 0.0151,
+      "spearman_p": 0.8323700444569657,
+      "kendall_tau": 0.0346,
+      "kendall_p": 0.4672041824951987
+    },
+    {
+      "model_a": "DecisionTree",
+      "model_b": "LogisticRegression",
+      "spearman_rho": 0.0806,
+      "spearman_p": 0.2564626520771726,
+      "kendall_tau": 0.0584,
+      "kendall_p": 0.21947354054063717
+    },
+    {
+      "model_a": "DecisionTree",
+      "model_b": "KNN",
+      "spearman_rho": 0.0185,
+      "spearman_p": 0.7952779567058285,
+      "kendall_tau": 0.0277,
+      "kendall_p": 0.5596784296663085
+    },
+    {
+      "model_a": "DecisionTree",
+      "model_b": "NaiveBayes",
+      "spearman_rho": -0.031,
+      "spearman_p": 0.663072209751959,
+      "kendall_tau": -0.0119,
+      "kendall_p": 0.8030590429939124
+    },
+    {
+      "model_a": "DecisionTree",
+      "model_b": "LinearSVM",
+      "spearman_rho": 0.089,
+      "spearman_p": 0.21034537908883288,
+      "kendall_tau": 0.0738,
+      "kendall_p": 0.12083197327942134
+    },
+    {
+      "model_a": "DecisionTree",
+      "model_b": "SGD",
+      "spearman_rho": -0.0254,
+      "spearman_p": 0.7213623976574285,
+      "kendall_tau": -0.0182,
+      "kendall_p": 0.7020615693256365
+    },
+    {
+      "model_a": "RandomForest",
+      "model_b": "ExtraTrees",
+      "spearman_rho": 0.7254,
+      "spearman_p": 5.872379460945779e-34,
+      "kendall_tau": 0.5321,
+      "kendall_p": 4.6297159861668327e-29
+    },
+    {
+      "model_a": "RandomForest",
+      "model_b": "XGBoost",
+      "spearman_rho": 0.5252,
+      "spearman_p": 1.4219395085454729e-15,
+      "kendall_tau": 0.3843,
+      "kendall_p": 6.374970063767146e-16
+    },
+    {
+      "model_a": "RandomForest",
+      "model_b": "GradientBoosting",
+      "spearman_rho": 0.4879,
+      "spearman_p": 2.34110586607983e-13,
+      "kendall_tau": 0.3342,
+      "kendall_p": 2.1055962501362284e-12
+    },
+    {
+      "model_a": "RandomForest",
+      "model_b": "AdaBoost",
+      "spearman_rho": 0.3181,
+      "spearman_p": 4.443708674782747e-06,
+      "kendall_tau": 0.2222,
+      "kendall_p": 2.9698484957113054e-06
+    },
+    {
+      "model_a": "RandomForest",
+      "model_b": "LogisticRegression",
+      "spearman_rho": 0.3377,
+      "spearman_p": 1.0036427203451985e-06,
+      "kendall_tau": 0.2231,
+      "kendall_p": 2.7065902085387105e-06
+    },
+    {
+      "model_a": "RandomForest",
+      "model_b": "KNN",
+      "spearman_rho": 0.3315,
+      "spearman_p": 1.6229942256542475e-06,
+      "kendall_tau": 0.2359,
+      "kendall_p": 7.037468356680893e-07
+    },
+    {
+      "model_a": "RandomForest",
+      "model_b": "NaiveBayes",
+      "spearman_rho": 0.4914,
+      "spearman_p": 1.4816811563463605e-13,
+      "kendall_tau": 0.3424,
+      "kendall_p": 5.99434484392482e-13
+    },
+    {
+      "model_a": "RandomForest",
+      "model_b": "LinearSVM",
+      "spearman_rho": 0.1654,
+      "spearman_p": 0.019217609394723174,
+      "kendall_tau": 0.1101,
+      "kendall_p": 0.02065370677022117
+    },
+    {
+      "model_a": "RandomForest",
+      "model_b": "SGD",
+      "spearman_rho": 0.3286,
+      "spearman_p": 2.0287914772172757e-06,
+      "kendall_tau": 0.2213,
+      "kendall_p": 3.2575770089888334e-06
+    },
+    {
+      "model_a": "ExtraTrees",
+      "model_b": "XGBoost",
+      "spearman_rho": 0.4829,
+      "spearman_p": 4.438292537242278e-13,
+      "kendall_tau": 0.3403,
+      "kendall_p": 8.29273220025196e-13
+    },
+    {
+      "model_a": "ExtraTrees",
+      "model_b": "GradientBoosting",
+      "spearman_rho": 0.437,
+      "spearman_p": 9.84197409393018e-11,
+      "kendall_tau": 0.308,
+      "kendall_p": 9.306827493585881e-11
+    },
+    {
+      "model_a": "ExtraTrees",
+      "model_b": "AdaBoost",
+      "spearman_rho": 0.2919,
+      "spearman_p": 2.7450976500804608e-05,
+      "kendall_tau": 0.1987,
+      "kendall_p": 2.936433010728488e-05
+    },
+    {
+      "model_a": "ExtraTrees",
+      "model_b": "LogisticRegression",
+      "spearman_rho": 0.369,
+      "spearman_p": 7.589426344152681e-08,
+      "kendall_tau": 0.2472,
+      "kendall_p": 2.0020243136088986e-07
+    },
+    {
+      "model_a": "ExtraTrees",
+      "model_b": "KNN",
+      "spearman_rho": 0.3646,
+      "spearman_p": 1.1066856682469445e-07,
+      "kendall_tau": 0.253,
+      "kendall_p": 1.0398556784648089e-07
+    },
+    {
+      "model_a": "ExtraTrees",
+      "model_b": "NaiveBayes",
+      "spearman_rho": 0.5321,
+      "spearman_p": 5.154568044744107e-16,
+      "kendall_tau": 0.3702,
+      "kendall_p": 7.030569061007955e-15
+    },
+    {
+      "model_a": "ExtraTrees",
+      "model_b": "LinearSVM",
+      "spearman_rho": 0.1403,
+      "spearman_p": 0.04752855129164379,
+      "kendall_tau": 0.093,
+      "kendall_p": 0.05058722981299315
+    },
+    {
+      "model_a": "ExtraTrees",
+      "model_b": "SGD",
+      "spearman_rho": 0.3263,
+      "spearman_p": 2.4122799506977024e-06,
+      "kendall_tau": 0.2229,
+      "kendall_p": 2.7630819559062377e-06
+    },
+    {
+      "model_a": "XGBoost",
+      "model_b": "GradientBoosting",
+      "spearman_rho": 0.3444,
+      "spearman_p": 5.936094353099024e-07,
+      "kendall_tau": 0.2574,
+      "kendall_p": 6.211248644673372e-08
+    },
+    {
+      "model_a": "XGBoost",
+      "model_b": "AdaBoost",
+      "spearman_rho": 0.5477,
+      "spearman_p": 4.7372446822525105e-17,
+      "kendall_tau": 0.4073,
+      "kendall_p": 1.072201582943006e-17
+    },
+    {
+      "model_a": "XGBoost",
+      "model_b": "LogisticRegression",
+      "spearman_rho": 0.4394,
+      "spearman_p": 7.515442934329752e-11,
+      "kendall_tau": 0.3198,
+      "kendall_p": 1.7549747048279504e-11
+    },
+    {
+      "model_a": "XGBoost",
+      "model_b": "KNN",
+      "spearman_rho": 0.5795,
+      "spearman_p": 2.4838171545462912e-19,
+      "kendall_tau": 0.4292,
+      "kendall_p": 1.770017894539195e-19
+    },
+    {
+      "model_a": "XGBoost",
+      "model_b": "NaiveBayes",
+      "spearman_rho": 0.4924,
+      "spearman_p": 1.3042110554499851e-13,
+      "kendall_tau": 0.345,
+      "kendall_p": 4.000001457128028e-13
+    },
+    {
+      "model_a": "XGBoost",
+      "model_b": "LinearSVM",
+      "spearman_rho": 0.2973,
+      "spearman_p": 1.9149730334692973e-05,
+      "kendall_tau": 0.2158,
+      "kendall_p": 5.688949718980146e-06
+    },
+    {
+      "model_a": "XGBoost",
+      "model_b": "SGD",
+      "spearman_rho": 0.4483,
+      "spearman_p": 2.7861558579592507e-11,
+      "kendall_tau": 0.3061,
+      "kendall_p": 1.2134049344142975e-10
+    },
+    {
+      "model_a": "GradientBoosting",
+      "model_b": "AdaBoost",
+      "spearman_rho": 0.1407,
+      "spearman_p": 0.04693245230420477,
+      "kendall_tau": 0.117,
+      "kendall_p": 0.013890396460775951
+    },
+    {
+      "model_a": "GradientBoosting",
+      "model_b": "LogisticRegression",
+      "spearman_rho": 0.1564,
+      "spearman_p": 0.026996300057560527,
+      "kendall_tau": 0.1219,
+      "kendall_p": 0.010357922290172072
+    },
+    {
+      "model_a": "GradientBoosting",
+      "model_b": "KNN",
+      "spearman_rho": 0.1548,
+      "spearman_p": 0.028591878077317577,
+      "kendall_tau": 0.1174,
+      "kendall_p": 0.013566575925444765
+    },
+    {
+      "model_a": "GradientBoosting",
+      "model_b": "NaiveBayes",
+      "spearman_rho": 0.1562,
+      "spearman_p": 0.027234851472851093,
+      "kendall_tau": 0.123,
+      "kendall_p": 0.009684540492429847
+    },
+    {
+      "model_a": "GradientBoosting",
+      "model_b": "LinearSVM",
+      "spearman_rho": 0.0866,
+      "spearman_p": 0.22295351877801078,
+      "kendall_tau": 0.0683,
+      "kendall_p": 0.15067160312354366
+    },
+    {
+      "model_a": "GradientBoosting",
+      "model_b": "SGD",
+      "spearman_rho": 0.1037,
+      "spearman_p": 0.14405611219962894,
+      "kendall_tau": 0.0729,
+      "kendall_p": 0.12545590063791126
+    },
+    {
+      "model_a": "AdaBoost",
+      "model_b": "LogisticRegression",
+      "spearman_rho": 0.401,
+      "spearman_p": 4.015484011005234e-09,
+      "kendall_tau": 0.292,
+      "kendall_p": 8.270553556645032e-10
+    },
+    {
+      "model_a": "AdaBoost",
+      "model_b": "KNN",
+      "spearman_rho": 0.3483,
+      "spearman_p": 4.325951589825151e-07,
+      "kendall_tau": 0.245,
+      "kendall_p": 2.568268369240535e-07
+    },
+    {
+      "model_a": "AdaBoost",
+      "model_b": "NaiveBayes",
+      "spearman_rho": 0.355,
+      "spearman_p": 2.5033331889908874e-07,
+      "kendall_tau": 0.249,
+      "kendall_p": 1.630379888994336e-07
+    },
+    {
+      "model_a": "AdaBoost",
+      "model_b": "LinearSVM",
+      "spearman_rho": 0.3498,
+      "spearman_p": 3.832198689027461e-07,
+      "kendall_tau": 0.2689,
+      "kendall_p": 1.552483326589266e-08
+    },
+    {
+      "model_a": "AdaBoost",
+      "model_b": "SGD",
+      "spearman_rho": 0.221,
+      "spearman_p": 0.0016597313320364606,
+      "kendall_tau": 0.1486,
+      "kendall_p": 0.0017730393011491897
+    },
+    {
+      "model_a": "LogisticRegression",
+      "model_b": "KNN",
+      "spearman_rho": 0.4257,
+      "spearman_p": 3.293696487362096e-10,
+      "kendall_tau": 0.2964,
+      "kendall_p": 4.586422567021367e-10
+    },
+    {
+      "model_a": "LogisticRegression",
+      "model_b": "NaiveBayes",
+      "spearman_rho": 0.4619,
+      "spearman_p": 5.8151659669093224e-12,
+      "kendall_tau": 0.3414,
+      "kendall_p": 6.997911105185143e-13
+    },
+    {
+      "model_a": "LogisticRegression",
+      "model_b": "LinearSVM",
+      "spearman_rho": 0.8169,
+      "spearman_p": 3.3860698168481995e-49,
+      "kendall_tau": 0.6524,
+      "kendall_p": 7.860151586752685e-43
+    },
+    {
+      "model_a": "LogisticRegression",
+      "model_b": "SGD",
+      "spearman_rho": 0.4358,
+      "spearman_p": 1.1143207809445059e-10,
+      "kendall_tau": 0.3057,
+      "kendall_p": 1.2828382512607786e-10
+    },
+    {
+      "model_a": "KNN",
+      "model_b": "NaiveBayes",
+      "spearman_rho": 0.5093,
+      "spearman_p": 1.349265332054046e-14,
+      "kendall_tau": 0.3759,
+      "kendall_p": 2.692314039882281e-15
+    },
+    {
+      "model_a": "KNN",
+      "model_b": "LinearSVM",
+      "spearman_rho": 0.2269,
+      "spearman_p": 0.0012351573702251107,
+      "kendall_tau": 0.1616,
+      "kendall_p": 0.0006776427358158048
+    },
+    {
+      "model_a": "KNN",
+      "model_b": "SGD",
+      "spearman_rho": 0.353,
+      "spearman_p": 2.946512438376072e-07,
+      "kendall_tau": 0.2361,
+      "kendall_p": 6.885921324434947e-07
+    },
+    {
+      "model_a": "NaiveBayes",
+      "model_b": "LinearSVM",
+      "spearman_rho": 0.1734,
+      "spearman_p": 0.014089869144436485,
+      "kendall_tau": 0.1337,
+      "kendall_p": 0.004939971341112239
+    },
+    {
+      "model_a": "NaiveBayes",
+      "model_b": "SGD",
+      "spearman_rho": 0.4793,
+      "spearman_p": 7.001252238653832e-13,
+      "kendall_tau": 0.3243,
+      "kendall_p": 9.092323846832212e-12
+    },
+    {
+      "model_a": "LinearSVM",
+      "model_b": "SGD",
+      "spearman_rho": 0.2838,
+      "spearman_p": 4.64140911361639e-05,
+      "kendall_tau": 0.1911,
+      "kendall_p": 5.87647698023648e-05
+    }
+  ]
+}

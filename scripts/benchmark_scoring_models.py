@@ -2,22 +2,25 @@
 🏎️ Scoring Model Benchmark Script
 
 Purpose:
-    Compare DecisionTree vs RandomForest vs XGBoost for the GROUP SCORING phase.
-    Measures both speed and ranking quality (rank correlation between models).
+    Compare multiple classifiers for the GROUP SCORING phase.
+    Measures speed, F1, accuracy, and ranking quality (rank correlation).
+    Results are used to justify the default scoring model in the manuscript.
 
 Usage:
     python scripts/benchmark_scoring_models.py
 
 Output:
     Prints a table with timing, accuracy, and rank correlation for each model.
+    Saves results to scripts/benchmark_results.json for manuscript inclusion.
 """
 
 import sys
 import time
 import copy
+import json
 import logging
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 import numpy as np
 import pandas as pd
@@ -35,8 +38,20 @@ from src.data_processing.train_test_splitter import split_data
 
 
 ##### CONFIGURATION #####
-# Models to benchmark
-MODELS_TO_BENCHMARK = ["DecisionTree", "RandomForest", "XGBoost"]
+# All models to benchmark (comprehensive comparison)
+MODELS_TO_BENCHMARK = [
+    "DecisionTree",
+    "RandomForest",
+    "ExtraTrees",
+    "XGBoost",
+    "GradientBoosting",
+    "AdaBoost",
+    "LogisticRegression",
+    "KNN",
+    "NaiveBayes",
+    "LinearSVM",
+    "SGD",
+]
 
 # Use real data for meaningful benchmarks
 EXPRESSION_FILE = str(PROJECT_ROOT / "data" / "main_data" / "GDS2545.csv")
@@ -59,7 +74,9 @@ class BenchmarkResult:
     num_groups_scored: int
     mean_accuracy: float
     mean_f1: float
-    group_rankings: list  # Ordered list of group names (best to worst)
+    std_accuracy: float = 0.0
+    std_f1: float = 0.0
+    group_rankings: list = None  # Ordered list of group names (best to worst)
 
 
 ##### LOGGING SETUP #####
@@ -216,36 +233,40 @@ def benchmark_single_model(
         num_groups_scored=len(ranked),
         mean_accuracy=float(np.mean(accuracies)) if accuracies else 0.0,
         mean_f1=float(np.mean(f1_scores)) if f1_scores else 0.0,
+        std_accuracy=float(np.std(accuracies)) if accuracies else 0.0,
+        std_f1=float(np.std(f1_scores)) if f1_scores else 0.0,
         group_rankings=group_names,
     )
 
 
 ##### RANKING COMPARISON #####
-def compare_rankings(results: list[BenchmarkResult], logger: logging.Logger):
+def compare_rankings(
+    results: list[BenchmarkResult],
+    logger: logging.Logger,
+) -> list[dict]:
     """
-    Compute rank correlation between models to assess ranking agreement.
+    Compute rank correlation between all model pairs.
 
     Uses Spearman and Kendall-tau on the top-200 groups.
+    Returns a list of dicts with pairwise correlation data.
     """
     logger.info("\n📊 RANKING CORRELATION (top 200 groups)")
     logger.info("=" * 65)
 
-    # Build a mapping of group_name -> rank for each model
     rank_maps = {}
     for r in results:
         rank_maps[r.model_name] = {name: i for i, name in enumerate(r.group_rankings)}
 
-    # Find common groups across all models
     common_groups = set(results[0].group_rankings)
     for r in results[1:]:
         common_groups &= set(r.group_rankings)
-    
-    # Limit to top 200 (from first model's ranking) for focused comparison
+
     reference = results[0]
     top_common = [g for g in reference.group_rankings if g in common_groups][:200]
-    
+
     logger.info(f"   Common groups: {len(common_groups)}, comparing top {len(top_common)}")
 
+    correlations = []
     for i in range(len(results)):
         for j in range(i + 1, len(results)):
             name_a = results[i].model_name
@@ -261,43 +282,101 @@ def compare_rankings(results: list[BenchmarkResult], logger: logging.Logger):
             logger.info(f"     Spearman ρ = {spearman_corr:.4f} (p={spearman_p:.2e})")
             logger.info(f"     Kendall  τ = {kendall_corr:.4f} (p={kendall_p:.2e})")
 
+            correlations.append({
+                "model_a": name_a,
+                "model_b": name_b,
+                "spearman_rho": round(spearman_corr, 4),
+                "spearman_p": float(spearman_p),
+                "kendall_tau": round(kendall_corr, 4),
+                "kendall_p": float(kendall_p),
+            })
+
+    return correlations
+
 
 ##### RESULTS TABLE #####
 def print_results_table(results: list[BenchmarkResult], logger: logging.Logger):
-    """Print a formatted comparison table."""
-    logger.info("\n" + "=" * 75)
+    """Print a formatted comparison table sorted by F1 descending."""
+    logger.info("\n" + "=" * 90)
     logger.info("🏎️  SCORING MODEL BENCHMARK RESULTS")
-    logger.info("=" * 75)
-    
-    # Header
-    header = f"{'Model':<18} {'Time (s)':>10} {'Speedup':>10} {'Groups':>8} {'Mean Acc':>10} {'Mean F1':>10}"
-    logger.info(header)
-    logger.info("-" * 75)
+    logger.info("=" * 90)
 
-    # Use RandomForest as speedup baseline (or slowest model)
+    header = (
+        f"{'Model':<22} {'Time (s)':>10} {'Speedup':>10} {'Groups':>8} "
+        f"{'Mean F1':>10} {'Std F1':>10} {'Mean Acc':>10}"
+    )
+    logger.info(header)
+    logger.info("-" * 90)
+
+    # Use RandomForest as speedup baseline
     rf_time = next((r.elapsed_seconds for r in results if r.model_name == "RandomForest"), None)
     baseline_time = rf_time if rf_time else max(r.elapsed_seconds for r in results)
 
-    for r in results:
+    # Sort by F1 descending for readability
+    sorted_results = sorted(results, key=lambda r: r.mean_f1, reverse=True)
+
+    for r in sorted_results:
         speedup = baseline_time / r.elapsed_seconds if r.elapsed_seconds > 0 else float('inf')
         speedup_str = f"{speedup:.1f}×"
-        row = f"{r.model_name:<18} {r.elapsed_seconds:>10.2f} {speedup_str:>10} {r.num_groups_scored:>8} {r.mean_accuracy:>10.4f} {r.mean_f1:>10.4f}"
+        row = (
+            f"{r.model_name:<22} {r.elapsed_seconds:>10.2f} {speedup_str:>10} "
+            f"{r.num_groups_scored:>8} {r.mean_f1:>10.4f} {r.std_f1:>10.4f} "
+            f"{r.mean_accuracy:>10.4f}"
+        )
         logger.info(row)
-    
-    logger.info("=" * 75)
+
+    logger.info("=" * 90)
+
+
+def save_results_json(
+    results: list[BenchmarkResult],
+    correlations: list[dict],
+    output_path: Path,
+    logger: logging.Logger,
+):
+    """Save benchmark results to JSON for manuscript use."""
+    data = {
+        "dataset": EXPRESSION_FILE,
+        "cv_folds": CROSS_VALIDATION_FOLDS,
+        "random_seed": RANDOM_SEED,
+        "models": [],
+    }
+
+    rf_time = next((r.elapsed_seconds for r in results if r.model_name == "RandomForest"), None)
+    baseline_time = rf_time if rf_time else max(r.elapsed_seconds for r in results)
+
+    for r in sorted(results, key=lambda x: x.mean_f1, reverse=True):
+        speedup = baseline_time / r.elapsed_seconds if r.elapsed_seconds > 0 else 0
+        data["models"].append({
+            "model": r.model_name,
+            "time_s": round(r.elapsed_seconds, 2),
+            "speedup_vs_rf": round(speedup, 1),
+            "groups_scored": r.num_groups_scored,
+            "mean_f1": round(r.mean_f1, 4),
+            "std_f1": round(r.std_f1, 4),
+            "mean_accuracy": round(r.mean_accuracy, 4),
+            "std_accuracy": round(r.std_accuracy, 4),
+        })
+
+    data["correlations"] = correlations
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(data, f, indent=2)
+    logger.info(f"   Saved results to {output_path}")
 
 
 ##### MAIN #####
 def main():
     """Run the complete benchmark."""
     logger = setup_logger()
-    
-    logger.info("=" * 75)
-    logger.info("🏎️  GSM SCORING MODEL BENCHMARK")
+
+    logger.info("=" * 90)
+    logger.info("🏎️  GSM SCORING MODEL BENCHMARK (COMPREHENSIVE)")
     logger.info(f"   Models: {', '.join(MODELS_TO_BENCHMARK)}")
     logger.info(f"   CV Folds: {CROSS_VALIDATION_FOLDS}")
     logger.info(f"   Parallel Jobs: {N_JOBS}")
-    logger.info("=" * 75)
+    logger.info("=" * 90)
 
     # Load data once
     data_x, labels, groups, output_dir = prepare_benchmark_data(logger)
@@ -305,25 +384,35 @@ def main():
     # Benchmark each model
     results: list[BenchmarkResult] = []
     for model_name in MODELS_TO_BENCHMARK:
-        result = benchmark_single_model(
-            model_name=model_name,
-            data_x=data_x,
-            labels=labels,
-            groups=groups,
-            output_dir=output_dir,
-            logger=logger,
-        )
-        results.append(result)
-        logger.info(f"   ✅ {model_name}: {result.elapsed_seconds:.2f}s, "
-                     f"{result.num_groups_scored} groups, "
-                     f"mean F1={result.mean_f1:.4f}")
+        try:
+            result = benchmark_single_model(
+                model_name=model_name,
+                data_x=data_x,
+                labels=labels,
+                groups=groups,
+                output_dir=output_dir,
+                logger=logger,
+            )
+            results.append(result)
+            logger.info(
+                f"   ✅ {model_name}: {result.elapsed_seconds:.2f}s, "
+                f"{result.num_groups_scored} groups, "
+                f"mean F1={result.mean_f1:.4f}"
+            )
+        except Exception as e:
+            logger.error(f"   ❌ {model_name} failed: {e}")
 
     # Print comparison table
     print_results_table(results, logger)
 
     # Compare rankings
+    correlations = []
     if len(results) >= 2:
-        compare_rankings(results, logger)
+        correlations = compare_rankings(results, logger)
+
+    # Save results to JSON for manuscript
+    results_path = PROJECT_ROOT / "scripts" / "benchmark_results.json"
+    save_results_json(results, correlations, results_path, logger)
 
     # Cleanup temp directory
     import shutil

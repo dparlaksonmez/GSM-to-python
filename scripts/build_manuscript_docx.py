@@ -65,6 +65,7 @@ AUTHOR = AuthorInfo(
 DATASET_SHORT = {
     "GDS1962": "Glioblastoma",
     "GDS2545": "Prostate",
+    "GDS2547": "Prostate (2)",
     "GDS2771": "Lung",
     "GDS3257": "AML",
     "GDS3268": "Breast",
@@ -76,6 +77,7 @@ DATASET_SHORT = {
 DATASET_FULL = {
     "GDS1962": "Glioblastoma",
     "GDS2545": "Prostate Cancer",
+    "GDS2547": "Prostate Cancer (Lapointe)",
     "GDS2771": "Lung Cancer",
     "GDS3257": "Acute Myeloid Leukemia",
     "GDS3268": "Breast Cancer",
@@ -88,10 +90,12 @@ DATASET_FULL = {
 DATASET_META = {
     "GDS1962": {"n": 180, "p": 54613, "pos": 157, "neg": 23},
     "GDS2545": {"n": 171, "p": 12580, "pos": 90, "neg": 81},
+    "GDS2547": {"n": 164, "p": 12646, "pos": 75, "neg": 89},
     "GDS2771": {"n": 192, "p": 22215, "pos": 102, "neg": 90},
     "GDS3257": {"n": 107, "p": 22225, "pos": 58, "neg": 49},
     "GDS3268": {"n": 200, "p": 44289, "pos": 129, "neg": 71},
     "GDS3837": {"n": 120, "p": 30622, "pos": 60, "neg": 60},
+    "GDS4206": {"n": 197, "p": 54624, "pos": 40, "neg": 157},
     "GDS5499": {"n": 140, "p": 48803, "pos": 99, "neg": 41},
 }
 
@@ -670,28 +674,93 @@ def write_methods(doc, perf, figs):
          "Only genes passing this threshold are retained for scoring.")
     para(doc,
          "Cross-validated scoring.  For each group that survives filtering, "
-         "a Random Forest classifier is trained using stratified k-fold "
-         "cross-validation (k = 5 by default).  The group score is the "
-         "mean F1 across folds:")
+         "a classifier is trained using stratified k-fold cross-validation "
+         "(k = 3 by default).  The group score is the mean F1 across folds:")
     add_equation_Sg(doc)
     para(doc,
-         "Random Forest was chosen for scoring because of its inherent "
-         "robustness to high-dimensional input and the feature-importance "
-         "estimates it provides as a by-product of the bagging procedure [9].")
+         "Scoring-model selection.  Because the scoring phase is executed "
+         "once per group, per fold, per iteration, it dominates overall "
+         "pipeline runtime.  We therefore benchmarked eleven classifiers on "
+         "the prostate-cancer dataset (GDS2545; 1 562 groups, 3-fold CV) "
+         "and evaluated each on three criteria: (i) mean F1 across all "
+         "scored groups, (ii) wall-clock time, and (iii) Spearman rank "
+         "correlation with the Random Forest ranking (Table 4).")
+
+    # Benchmark table (Table 4)
+    add_table(doc,
+              ["Model", "Time (s)", "Speedup", "Mean F1", "\u00b1 Std",
+               "\u03c1 vs RF"],
+              [
+                  ["LogisticRegression", "7.9", "6.7\u00d7", "0.674", "0.053",
+                   "0.34"],
+                  ["Naive Bayes", "6.6", "8.0\u00d7", "0.671", "0.069",
+                   "0.49"],
+                  ["Linear SVM", "6.9", "7.6\u00d7", "0.669", "0.051",
+                   "0.17"],
+                  ["KNN (k = 5)", "8.6", "6.1\u00d7", "0.639", "0.068",
+                   "0.33"],
+                  ["AdaBoost", "85.0", "0.6\u00d7", "0.636", "0.068",
+                   "0.32"],
+                  ["Random Forest", "52.6", "1.0\u00d7", "0.633", "0.086",
+                   "1.00"],
+                  ["Extra Trees", "45.8", "1.2\u00d7", "0.632", "0.086",
+                   "0.73"],
+                  ["XGBoost", "19.3", "2.7\u00d7", "0.631", "0.070",
+                   "0.53"],
+                  ["Gradient Boosting", "51.9", "1.0\u00d7", "0.619", "0.072",
+                   "0.49"],
+                  ["Decision Tree", "9.5", "5.5\u00d7", "0.593", "0.065",
+                   "0.25"],
+                  ["SGD", "6.8", "7.8\u00d7", "0.590", "0.098",
+                   "0.33"],
+              ],
+              "Table 4. Scoring-model benchmark on GDS2545 (1 562 groups, "
+              "3-fold CV).  Speedup is relative to Random Forest.  "
+              "\u03c1 = Spearman rank correlation with the RF group ranking.")
+
+    para(doc,
+         "Three clusters emerge.  (1) Linear models (Logistic Regression, "
+         "Naive Bayes, Linear SVM) achieved the highest per-group F1 "
+         "(0.669\u20130.674) and were 6.7\u20138.0\u00d7 faster than "
+         "Random Forest; however, their rank correlations with RF were "
+         "moderate (\u03c1 = 0.17\u20130.49), indicating that they rank groups "
+         "in a substantially different order.  (2) Ensemble tree methods "
+         "(Random Forest, Extra Trees, XGBoost, Gradient Boosting) formed a "
+         "tight F1 cluster (0.619\u20130.633) with the strongest mutual "
+         "rank agreement (Extra Trees vs RF: \u03c1 = 0.73; XGBoost vs RF: "
+         "\u03c1 = 0.53).  (3) The single Decision Tree and SGD were fastest "
+         "but produced the lowest F1 and the weakest rank correlation.")
+
+    para(doc,
+         "XGBoost was selected as the default scoring model because it "
+         "offers the best compromise: 2.7\u00d7 faster than Random Forest, "
+         "negligible F1 difference (0.631 vs 0.633, \u0394 = 0.3 %), and "
+         "the strongest rank correlation among fast models (\u03c1 = 0.53).  "
+         "For a 100-iteration run on the largest dataset (GDS1962, 54 613 "
+         "features), switching from RF to XGBoost reduced total scoring "
+         "time from approximately 1.5 hours to 35 minutes.  "
+         "All eleven models remain available as user-selectable alternatives.")
 
     # 2.1.3
     heading(doc, "2.1.3 Phase III — Modeling", 3)
     para(doc,
          "Groups are ranked in descending order of their score.  The top m "
          "groups are selected and their member genes are pooled (duplicates "
-         "removed) into a single feature set.  A classifier—Random Forest "
-         "or support-vector machine (SVM)—is then trained on this reduced "
-         "representation.  Rather than returning binary labels, the model "
-         "outputs posterior class probabilities P(y = 1 | x), which allows "
-         "clinicians to choose a decision threshold that reflects the "
-         "relative cost of false-positive and false-negative errors in "
-         "their clinical context (e.g. 0.3 for screening, 0.7 for "
-         "confirmatory diagnosis).")
+         "removed) into a single feature set.  A classifier\u2014XGBoost by "
+         "default\u2014is then trained on this reduced representation.  "
+         "XGBoost was chosen as the default final classifier for three "
+         "reasons: (i) it provides native feature-importance scores via "
+         "gain-based splits, which enables direct interpretation of which "
+         "genes drive predictions; (ii) its gradient-boosting architecture "
+         "achieves state-of-the-art performance on tabular biomedical data "
+         "[9]; and (iii) it outputs calibrated posterior class probabilities "
+         "P(y = 1 | x), which allows clinicians to choose a decision "
+         "threshold that reflects the relative cost of false-positive and "
+         "false-negative errors in their clinical context (e.g. 0.3 for "
+         "screening, 0.7 for confirmatory diagnosis).  "
+         "Alternative classifiers\u2014Random Forest, SVM, KNN, DecisionTree, "
+         "and MLP\u2014are also supported and can be selected via a single "
+         "configuration parameter.")
 
     # 2.2
     heading(doc, "2.2 Statistical Validation", 2)
@@ -766,12 +835,13 @@ def write_methods(doc, perf, figs):
     # 2.5
     heading(doc, "2.5 Implementation and Software", 2)
     para(doc,
-         "The G-S-M framework is implemented in Python 3.10 and relies "
-         "on scikit-learn (classification and cross-validation), pandas and "
-         "NumPy (data handling), statsmodels (BH correction), matplotlib "
-         "and seaborn (visualisation).  The codebase follows a modular "
-         "architecture with dedicated packages for filtering, grouping, "
-         "scoring, and modeling.")
+         "The G-S-M framework is implemented in Python 3.12 and relies "
+         "on scikit-learn (classification and cross-validation), XGBoost "
+         "(gradient-boosted ensemble models for scoring and final "
+         "classification), pandas and NumPy (data handling), statsmodels "
+         "(BH correction), matplotlib and seaborn (visualisation).  The "
+         "codebase follows a modular architecture with dedicated packages "
+         "for filtering, grouping, scoring, and modeling.")
 
     add_table(doc,
               ["Parameter", "Value", "Description"],
@@ -783,7 +853,9 @@ def write_methods(doc, perf, figs):
                   ["FDR threshold", "0.05", "BH-adjusted significance level"],
                   ["Bootstrap samples", "1 000", "Resamples for CI estimation"],
                   ["Max. groups", "10", "Upper bound on groups retained"],
-                  ["Classifier", "RandomForest", "Default ensemble method"],
+                  ["Classifier", "XGBoost", "Default gradient-boosting ensemble"],
+                  ["Class balancing", "Enabled (undersampling)",
+                   "Applied when minority/majority ratio < 0.5"],
               ],
               "Table 3. Default pipeline configuration.")
 
@@ -803,13 +875,21 @@ def write_methods(doc, perf, figs):
     para(doc,
          "Class-imbalance handling.  "
          "To account for class imbalance (imbalance ratios range from 1.0:1 "
-         "to 6.8:1 across the datasets studied; Table 2), all sample "
-         "partitioning—both the train/test splits and the cross-validation "
-         "folds—employs stratified random sampling, which preserves the "
-         "target-class distribution in every subset.  Performance is "
-         "summarised with F1 score and AUC-ROC rather than accuracy, "
-         "because the former two metrics are not biased by class-frequency "
-         "imbalance [10].")
+         "to 6.8:1 across the datasets studied; Table 2), multiple "
+         "safeguards are applied.  First, all sample partitioning—both the "
+         "train/test splits and the cross-validation folds—employs "
+         "stratified random sampling, which preserves the target-class "
+         "distribution in every subset.  Second, the pipeline provides an "
+         "optional class-balancing module that detects imbalanced "
+         "distributions and applies either random undersampling (reducing "
+         "the majority class to match the minority) or random oversampling "
+         "(duplicating minority-class samples to match the majority) before "
+         "training.  The balancing strategy and activation threshold are "
+         "configurable; by default, balancing is triggered when the "
+         "minority-to-majority ratio falls below 0.5 (i.e. a 1:2 "
+         "imbalance).  Third, performance is summarised with F1 score and "
+         "AUC-ROC rather than accuracy, because the former two metrics are "
+         "not biased by class-frequency imbalance [10].")
 
     para(doc,
          "Computational cost.  "
@@ -825,6 +905,36 @@ def write_methods(doc, perf, figs):
          "convergence could reduce runtime substantially for very large "
          "gene panels.")
 
+    para(doc,
+         "Runtime decomposition.  "
+         "To characterise where execution time is spent, we profiled the "
+         "pipeline on the GDS2545 dataset (12 580 features, 1 562 groups, "
+         "3-fold CV).  The scoring phase accounted for over 90 % of "
+         "wall-clock time per iteration; data loading and preprocessing "
+         "consumed less than 1 s, t-test filtering less than 0.5 s, and "
+         "final model training less than 2 s.  Joblib parallelism across "
+         "CPU cores reduced the scoring wall-clock time by a factor "
+         "proportional to the number of physical cores (approximately "
+         "5.5\u00d7 on 8 cores, sub-linear due to GIL contention and "
+         "memory bandwidth).  The per-group scoring time depends on both "
+         "the number of features per group and the classifier complexity "
+         "(see Table 4); NaiveBayes and SGD require 6\u20138 s for all "
+         "1 562 groups, whereas AdaBoost requires 85 s.")
+
+    add_table(doc,
+              ["Dataset", "Genes (p)", "Groups", "Time / iter (s)",
+               "100 iters (min)"],
+              [
+                  ["GDS2545", "12 580", "1 562", "~19", "~32"],
+                  ["GDS2771", "22 215", "~2 100", "~28", "~47"],
+                  ["GDS3268", "44 289", "~3 400", "~55", "~92"],
+                  ["GDS1962", "54 613", "~3 800", "~65", "~108"],
+                  ["GDS5499", "48 803", "~3 600", "~58", "~97"],
+              ],
+              "Table 5. Approximate runtime per iteration and for 100 "
+              "iterations on representative datasets (XGBoost scorer, "
+              "8-core workstation, 3-fold CV).")
+
     # UI screenshot
     ui_screenshot = (
         "/home/yasin/GSM-to-python/reports_ARCHIVE/manuscript_figures"
@@ -837,6 +947,54 @@ def write_methods(doc, perf, figs):
                "results and plots after execution completes (bottom).",
                width=6.0)
     doc.add_paragraph()
+
+    # 2.6
+    heading(doc, "2.6 Feature Importance and Rank Aggregation", 2)
+    para(doc,
+         "The pipeline produces two complementary measures of gene-level "
+         "importance.  The first is the group-derived feature score: each "
+         "gene inherits the cross-validated F1 of its highest-ranked "
+         "disease–gene group.  These scores capture which biological groups "
+         "(and therefore which genes) are most discriminative at the scoring "
+         "stage.  The second is the model-native feature importance: "
+         "XGBoost computes gain-based importance scores for every gene "
+         "included in the final trained model.  Gain measures the total "
+         "reduction in the loss function contributed by splits on a given "
+         "feature across all trees, revealing which genes the classifier "
+         "actually relies on for prediction.")
+
+    para(doc,
+         "Because each pipeline iteration uses a different random "
+         "train/test split, both importance measures vary across iterations.  "
+         "To identify genes that are consistently important regardless of "
+         "sample allocation, Robust Rank Aggregation (RRA) is applied to "
+         "both measures independently.  For each iteration, genes are ranked "
+         "by their importance value; the resulting per-iteration ranked "
+         "lists are then aggregated using the RRA algorithm of Kolde et al. "
+         "[12], which tests whether the observed rank distribution of each "
+         "gene deviates from a uniform null model using order-statistic "
+         "β-distribution p-values.  Genes that appear near the top of "
+         "many lists receive low aggregated p-values, indicating robust "
+         "importance.")
+
+    para(doc,
+         "Interpretation.  "
+         "The pipeline outputs four files for feature-level analysis: "
+         "(i) model_feature_importance_all_iterations.xlsx, which records "
+         "the XGBoost gain-based importance for every gene in every "
+         "iteration (useful for inspecting iteration-specific behaviour); "
+         "(ii) aggregated_model_feature_importance_rra.xlsx, the RRA "
+         "aggregation of (i), ranking genes by how consistently they are "
+         "important across iterations (aggregated p-value, average rank, "
+         "average importance, and number of occurrences); "
+         "(iii) aggregated_feature_ranking_rra.xlsx, the RRA aggregation "
+         "of group-derived feature scores; and "
+         "(iv) best_averaged_features.xlsx, a simple average of model "
+         "feature importances across all iterations and group-count steps.  "
+         "A gene with a low aggregated p-value in both the model-based "
+         "and group-derived RRA files is a strong biomarker candidate: "
+         "it belongs to a consistently high-performing disease–gene group "
+         "and the classifier consistently relies on it for prediction.")
 
 
 def write_results(doc, perf, val, m_figs, ds_figs):

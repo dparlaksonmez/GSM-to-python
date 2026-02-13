@@ -517,3 +517,167 @@ def save_best_averaged_rankings(
         features_path = output_dir / "best_averaged_features.xlsx"
         features_df.to_excel(features_path, index=False)
         logger.debug(f"Saved averaged features: {features_path.name}")
+
+
+##### MODEL FEATURE IMPORTANCE RRA #####
+def extract_model_feature_importance_lists(
+    all_results: List[Dict],
+    logger: logging.Logger
+) -> List[RankedFeatureList]:
+    """
+    Extract per-iteration feature importance rankings from modeling results JSON.
+
+    For each iteration, the model's native feature importances (e.g. XGBoost gain)
+    are aggregated across all group-count steps by taking the maximum importance
+    each feature received. The features are then ranked by descending importance,
+    producing one RankedFeatureList per iteration.
+
+    Args:
+        all_results: Loaded modeling_results_all_iterations.json data
+        logger: Logger instance
+
+    Returns:
+        List of RankedFeatureList objects, one per iteration
+
+    Example:
+        >>> with open("modeling_results_all_iterations.json") as f:
+        ...     data = json.load(f)
+        >>> lists = extract_model_feature_importance_lists(data, logger)
+        >>> print(f"Got {len(lists)} iteration lists")
+    """
+    ranked_lists: List[RankedFeatureList] = []
+
+    for idx, iteration_data in enumerate(all_results):
+        iteration_id = iteration_data.get('iteration', idx + 1)
+
+        # Collect max importance per feature across all group-count steps
+        feature_max_importance: Dict[str, float] = {}
+        for result in iteration_data.get('results', []):
+            for feature_name, importance in result.get('feature_importance', {}).items():
+                current_max = feature_max_importance.get(feature_name, 0.0)
+                feature_max_importance[feature_name] = max(current_max, importance)
+
+        if not feature_max_importance:
+            continue
+
+        # Sort by importance (descending) and assign ranks
+        sorted_features = sorted(
+            feature_max_importance.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )
+        list_size = len(sorted_features)
+        items = [
+            RankedFeatureItem(
+                feature_name=name,
+                rank=rank,
+                list_size=list_size,
+                importance_score=importance
+            )
+            for rank, (name, importance) in enumerate(sorted_features, start=1)
+        ]
+
+        ranked_lists.append(
+            RankedFeatureList(
+                source_id=f"iteration_{iteration_id}",
+                items=items
+            )
+        )
+
+    logger.debug(
+        f"Extracted model feature importance lists from {len(ranked_lists)} iterations"
+    )
+    return ranked_lists
+
+
+def save_model_feature_importance_per_iteration(
+    all_results: List[Dict],
+    output_dir: Path,
+    logger: logging.Logger
+) -> Path:
+    """
+    Save per-iteration model feature importances to a single Excel file.
+
+    Each iteration gets its own rows. Features are ranked by descending
+    importance within each iteration. This file is useful for inspecting
+    which genes the model relied on in each train/test split.
+
+    Args:
+        all_results: Loaded modeling_results_all_iterations.json data
+        output_dir: Directory to save the output file
+        logger: Logger instance
+
+    Returns:
+        Path to the saved Excel file
+    """
+    ranked_lists = extract_model_feature_importance_lists(all_results, logger)
+
+    rows = []
+    for ranked_list in ranked_lists:
+        for item in ranked_list.items:
+            rows.append({
+                'iteration': ranked_list.source_id,
+                'feature_name': item.feature_name,
+                'rank': item.rank,
+                'importance_score': item.importance_score
+            })
+
+    output_path = output_dir / "model_feature_importance_all_iterations.xlsx"
+    if rows:
+        df = pd.DataFrame(rows)
+        df.to_excel(output_path, index=False)
+        logger.debug(
+            f"Saved model feature importances: {output_path.name} "
+            f"({len(ranked_lists)} iterations, {len(rows)} total entries)"
+        )
+    else:
+        logger.warning("No model feature importance data to save")
+
+    return output_path
+
+
+def aggregate_model_feature_importance_rra(
+    all_results: List[Dict],
+    output_dir: Path,
+    logger: logging.Logger
+) -> Optional[AggregatedFeatureRanking]:
+    """
+    Run RRA on per-iteration model feature importances and save the result.
+
+    This applies Robust Rank Aggregation to the XGBoost (or other model)
+    native feature importances, identifying genes that are consistently
+    important across multiple random train/test splits.
+
+    Low aggregated p-value = gene is reliably ranked high regardless of
+    which samples are in the train vs test set — a strong biomarker signal.
+
+    Args:
+        all_results: Loaded modeling_results_all_iterations.json data
+        output_dir: Directory to save the aggregated result
+        logger: Logger instance
+
+    Returns:
+        AggregatedFeatureRanking or None if no data available
+    """
+    # Save per-iteration file for inspection
+    save_model_feature_importance_per_iteration(all_results, output_dir, logger)
+
+    # Extract and aggregate
+    ranked_lists = extract_model_feature_importance_lists(all_results, logger)
+    if not ranked_lists:
+        logger.warning("No model feature importance lists for RRA aggregation")
+        return None
+
+    aggregated = aggregate_feature_ranks_rra(ranked_lists)
+
+    # Save aggregated result
+    save_aggregated_feature_ranking(
+        aggregated,
+        output_dir / "aggregated_model_feature_importance_rra.xlsx",
+        logger
+    )
+    logger.info(
+        f"📊 Model feature importance RRA: {len(aggregated.items)} features aggregated "
+        f"from {len(ranked_lists)} iterations"
+    )
+    return aggregated

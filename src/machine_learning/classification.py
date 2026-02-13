@@ -17,9 +17,12 @@ from typing import Tuple
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import GradientBoostingClassifier, AdaBoostClassifier, ExtraTreesClassifier
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.svm import LinearSVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
 from xgboost import XGBClassifier
 
 
@@ -99,5 +102,26 @@ def get_classifier_object(model_name: str, n_estimators: int = 50):
         )
     elif model_name == 'GradientBoosting':
         return GradientBoostingClassifier(n_estimators=n_estimators)
+    elif model_name == 'ExtraTrees':
+        # Extremely randomized trees — fast and robust
+        return ExtraTreesClassifier(n_estimators=n_estimators, n_jobs=1)
+    elif model_name == 'AdaBoost':
+        # Adaptive boosting with decision stumps
+        return AdaBoostClassifier(n_estimators=n_estimators, algorithm='SAMME')
+    elif model_name == 'LogisticRegression':
+        # Fast linear model — good baseline
+        return LogisticRegression(max_iter=500, solver='lbfgs')
+    elif model_name == 'KNN':
+        # k-nearest neighbours (k=5)
+        return KNeighborsClassifier(n_neighbors=5, n_jobs=1)
+    elif model_name == 'NaiveBayes':
+        # Gaussian Naive Bayes — very fast, assumes feature independence
+        return GaussianNB()
+    elif model_name == 'LinearSVM':
+        # Linear SVM — fast on high-dimensional data
+        return LinearSVC(max_iter=2000, dual=True)
+    elif model_name == 'SGD':
+        # Stochastic Gradient Descent classifier — very fast
+        return SGDClassifier(loss='hinge', max_iter=1000)
     else:
         raise ValueError(f"Model '{model_name}' is not supported for scoring.")

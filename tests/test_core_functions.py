@@ -362,7 +362,7 @@ class TestConfig:
     def test_model_name_valid(self):
         """Model name should be a valid option."""
         from src.workflows.GSM_workflow_config import MODEL_NAME
-        assert MODEL_NAME in ("DecisionTree", "RandomForest", "SVM", "KNN", "MLP")
+        assert MODEL_NAME in ("DecisionTree", "RandomForest", "XGBoost", "SVM", "KNN", "MLP")
 
 
 ##### 8. Seed Reproducibility Tests #####

@@ -404,7 +404,7 @@ def main():
         )
         model_name = st.selectbox(
             "Classifier",
-            ["RandomForest", "SVM", "LogisticRegression"],
+            ["XGBoost", "RandomForest", "DecisionTree", "SVM", "KNN", "MLP"],
         )
 
         st.divider()

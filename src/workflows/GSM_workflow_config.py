@@ -178,14 +178,15 @@ BEST_GROUPS_TO_KEEP = 10
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  MODEL SELECTION                                                         │
 # │  Available options:                                                      │
-# │    • 'RandomForest'  - Recommended for most cases                        │
+# │    • 'XGBoost'       - Recommended (fast, accurate, feature importance)  │
+# │    • 'RandomForest'  - Classic ensemble, slightly slower than XGBoost    │
 # │    • 'DecisionTree'  - Simple, interpretable                             │
 # │    • 'SVM'           - Support Vector Machine                            │
 # │    • 'KNN'           - K-Nearest Neighbors                               │
 # │    • 'MLP'           - Neural Network (Multi-Layer Perceptron)           │
 # └──────────────────────────────────────────────────────────────────────────┘
-ModelType = Literal['DecisionTree', 'RandomForest', 'SVM', 'KNN', 'MLP']
-MODEL_NAME: ModelType = "RandomForest"
+ModelType = Literal['DecisionTree', 'RandomForest', 'XGBoost', 'SVM', 'KNN', 'MLP']
+MODEL_NAME: ModelType = "XGBoost"
 
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  SCORING MODEL (for group ranking)                                       │

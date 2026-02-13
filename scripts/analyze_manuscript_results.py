@@ -72,6 +72,7 @@ class BiologicalValidation:
 DATASET_DISEASES = {
     "GDS1962": "Glioblastoma",
     "GDS2545": "Prostate Cancer",
+    "GDS2547": "Prostate Cancer (Lapointe)",
     "GDS2771": "Lung Cancer",
     "GDS3257": "Acute Myeloid Leukemia",
     "GDS3268": "Breast Cancer",
@@ -83,6 +84,7 @@ DATASET_DISEASES = {
 DATASET_SHORT = {
     "GDS1962": "Glioblastoma",
     "GDS2545": "Prostate",
+    "GDS2547": "Prostate (2)",
     "GDS2771": "Lung",
     "GDS3257": "AML",
     "GDS3268": "Breast",

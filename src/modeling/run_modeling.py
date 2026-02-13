@@ -40,6 +40,7 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
+from xgboost import XGBClassifier
 
 from src.scoring.metrics import MetricsData
 from src.grouping.grouping_utils import GroupFeatureMappingData
@@ -338,6 +339,17 @@ def train_and_evaluate_model(
     # n_jobs=-1 for final modeling RF to use all cores (this is NOT nested inside joblib)
     if model_name == "RandomForest":
         model = RandomForestClassifier(n_estimators=100, n_jobs=-1)
+    elif model_name == "XGBoost":
+        # Gradient boosting: fast, accurate, with native feature importance
+        model = XGBClassifier(
+            n_estimators=100,
+            max_depth=6,
+            learning_rate=0.1,
+            use_label_encoder=False,
+            eval_metric='logloss',
+            verbosity=0,
+            n_jobs=-1
+        )
     elif model_name == "DecisionTree":
         model = DecisionTreeClassifier()
     elif model_name == "SVM":
@@ -423,7 +435,7 @@ def train_and_evaluate_model(
     # Get feature importance if available
     feature_importance = {}
     try:
-        if isinstance(model, RandomForestClassifier) and hasattr(model, "feature_importances_"):
+        if isinstance(model, (RandomForestClassifier, XGBClassifier)) and hasattr(model, "feature_importances_"):
             for feature, importance in zip(train_x.columns, model.feature_importances_):
                 feature_importance[feature] = float(importance)
         elif isinstance(model, DecisionTreeClassifier) and hasattr(model, "feature_importances_"):
