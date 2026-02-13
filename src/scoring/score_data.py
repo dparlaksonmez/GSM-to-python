@@ -17,7 +17,6 @@ Example:
 """
 
 from dataclasses import dataclass
-from typing import Dict
 import logging
 import numpy as np
 import pandas as pd

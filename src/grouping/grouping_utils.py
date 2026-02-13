@@ -24,8 +24,9 @@ from typing import List, Optional
 from dataclasses import dataclass, field
 
 # Default column names for grouping data
-DEFAULT_GROUP_COLUMN_NAME = "diseaseName"
-DEFAULT_GENE_COLUMN_NAME = "geneSymbol"
+# These match the config defaults in GSM_workflow_config.py
+DEFAULT_GROUP_COLUMN_NAME = "group_name"
+DEFAULT_GENE_COLUMN_NAME = "feature_id"
 
 
 @dataclass

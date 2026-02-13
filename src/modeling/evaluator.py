@@ -19,10 +19,9 @@ Key Functions:
 
 from src.scoring.metrics import MetricsData
 
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Optional, List
 import pandas as pd
 import numpy as np
-from sklearn.base import BaseEstimator
 from sklearn.metrics import (
     roc_auc_score, precision_score, recall_score, f1_score,
     matthews_corrcoef, balanced_accuracy_score, confusion_matrix
@@ -122,9 +121,11 @@ def update_feature_ranks(
         elif method == 'max':
             return combined.groupby('feature').max()
         else:  # weighted
-            #TODO: add weighted average calculation
-            # return combined.groupby('feature').apply(lambda x: float(np.average(x, weights=weights[:len(x)])))
-            pass
+            if len(weights) < len(combined.groupby('feature').first()):
+                raise ValueError("Not enough weights for the number of feature groups")
+            return combined.groupby('feature').apply(
+                lambda x: float(np.average(x, weights=weights[:len(x)]))
+            )
     except Exception as e:
         logger.error(f"Error updating feature ranks: {str(e)}")
         raise

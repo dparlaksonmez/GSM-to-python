@@ -90,7 +90,10 @@ def _score_single_group(
         result = score_data(scoring_params)
         result.name = group_name
         return result
-    except Exception:
+    except Exception as e:
+        import logging
+        worker_logger = logging.getLogger(f"worker_{group_name}")
+        worker_logger.warning(f"Scoring failed for group '{group_name}': {e}")
         return None
 
 

@@ -65,7 +65,7 @@ OUTPUT_DIR = project_dir / "output"
 # │  More iterations = more robust results, but longer runtime               │
 # │  Recommended: 50-100 for publication, 10 for testing                     │
 # └──────────────────────────────────────────────────────────────────────────┘
-NUMBER_OF_ITERATIONS = 10
+NUMBER_OF_ITERATIONS = 100
 
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  REPRODUCIBILITY                                                         │
@@ -113,7 +113,36 @@ TRAIN_TEST_SPLIT_RATIO = 0.7            # 70% train, 30% test
 
 
 # ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                      4. FEATURE SELECTION SETTINGS                         ║
+# ║                      4. CLASS BALANCING SETTINGS                            ║
+# ║                                                                            ║
+# ║  Handle imbalanced datasets by balancing class distributions               ║
+# ║  Applied AFTER normalization, BEFORE the iteration loop                    ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  ENABLE/DISABLE                                                          │
+# │  Set to True to balance classes before training                          │
+# └──────────────────────────────────────────────────────────────────────────┘
+APPLY_CLASS_BALANCING = True
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  MINIMUM CLASS BALANCE RATIO                                             │
+# │  If minority/majority ratio is below this, balancing is applied          │
+# │  0.5 means classes can be at most 1:2 before triggering                  │
+# └──────────────────────────────────────────────────────────────────────────┘
+MIN_CLASS_BALANCE_RATIO = 0.5
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  SAMPLING METHOD                                                         │
+# │  Options: 'undersampling' (recommended), 'oversampling'                  │
+# │    • undersampling: Reduces majority class to match minority             │
+# │    • oversampling:  Duplicates minority class to match majority          │
+# └──────────────────────────────────────────────────────────────────────────┘
+SAMPLING_METHOD = "undersampling"
+
+
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                      5. FEATURE SELECTION SETTINGS                         ║
 # ║                                                                            ║
 # ║  Control how genes are filtered and groups are selected                    ║
 # ╚════════════════════════════════════════════════════════════════════════════╝
@@ -141,7 +170,7 @@ BEST_GROUPS_TO_KEEP = 10
 
 
 # ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                      5. MACHINE LEARNING MODEL                             ║
+# ║                      6. MACHINE LEARNING MODEL                             ║
 # ║                                                                            ║
 # ║  Select and configure the classification model                             ║
 # ╚════════════════════════════════════════════════════════════════════════════╝
@@ -158,9 +187,21 @@ BEST_GROUPS_TO_KEEP = 10
 ModelType = Literal['DecisionTree', 'RandomForest', 'SVM', 'KNN', 'MLP']
 MODEL_NAME: ModelType = "RandomForest"
 
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  SCORING MODEL (for group ranking)                                       │
+# │  This model is used to RANK gene groups during the scoring phase.        │
+# │  It does NOT affect the final prediction model (MODEL_NAME above).       │
+# │  A faster model here dramatically reduces runtime:                       │
+# │    • 'XGBoost'       - Recommended (3.5× faster than RF, similar F1)     │
+# │    • 'DecisionTree'  - Fastest (4.2× faster, but ~6% lower F1)          │
+# │    • 'RandomForest'  - Most accurate ranking, but slowest                │
+# └──────────────────────────────────────────────────────────────────────────┘
+ScoringModelType = Literal['DecisionTree', 'RandomForest', 'XGBoost']
+SCORING_MODEL: ScoringModelType = "XGBoost"
+
 
 # ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                      6. BIOLOGICAL VALIDATION (Optional)                   ║
+# ║                      7. BIOLOGICAL VALIDATION (Optional)                   ║
 # ║                                                                            ║
 # ║  Query external databases to validate your top genes biologically          ║
 # ║  This adds ~30-60 seconds to runtime due to API calls                      ║
@@ -193,7 +234,7 @@ DISGENET_API_KEY = ""
 
 
 # ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                      7. LOGGING SETTINGS                                   ║
+# ║                      8. LOGGING SETTINGS                                   ║
 # ╚════════════════════════════════════════════════════════════════════════════╝
 
 LOGGING_LEVEL = "INFO"                  # Options: 'DEBUG', 'INFO', 'WARNING'

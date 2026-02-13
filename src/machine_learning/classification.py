@@ -18,6 +18,9 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
+from xgboost import XGBClassifier
 
 
 def train_model(model_name: str, data_x: pd.DataFrame, data_y: pd.Series):
@@ -79,7 +82,22 @@ def get_classifier_object(model_name: str, n_estimators: int = 50):
         # Use fewer trees (50 vs 100 default) - sufficient for group ranking
         # n_jobs=1 to avoid nested parallelism (groups are already parallelized)
         return RandomForestClassifier(n_estimators=n_estimators, n_jobs=1)
+    elif model_name == 'DecisionTree':
+        # Very fast — ideal for group scoring/ranking
+        return DecisionTreeClassifier()
+    elif model_name == 'XGBoost':
+        # Fast gradient boosting — good balance of speed and accuracy
+        # n_jobs=1 to avoid nested parallelism (groups are already parallelized)
+        return XGBClassifier(
+            n_estimators=n_estimators,
+            max_depth=4,
+            learning_rate=0.1,
+            use_label_encoder=False,
+            eval_metric='logloss',
+            verbosity=0,
+            n_jobs=1
+        )
     elif model_name == 'GradientBoosting':
         return GradientBoostingClassifier(n_estimators=n_estimators)
     else:
-        raise ValueError(f"Model '{model_name}' is not supported.")
+        raise ValueError(f"Model '{model_name}' is not supported for scoring.")

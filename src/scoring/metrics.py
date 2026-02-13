@@ -14,7 +14,7 @@ Example:
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import List, Optional
 from dataclasses import dataclass
 import numpy as np
 from sklearn.metrics import (accuracy_score, precision_score, 
@@ -142,19 +142,19 @@ def calculate_average_scores(scores: List[MetricsData], logger: logging.Logger) 
         result = MetricsData()
         
         # Calculate means and standard deviations for each numeric metric
-        # Skip non-numeric fields like 'name' (which is a string)
-        numeric_fields = [f for f in MetricsData.__dataclass_fields__
-                         if f != 'name' and not f.startswith('_')]
-        for field in numeric_fields:
+        # Only process base metrics (not _std fields) to avoid computing std-of-stds
+        base_fields = [f for f in MetricsData.__dataclass_fields__
+                       if f != 'name' and not f.startswith('_') and not f.endswith('_std')]
+        for field in base_fields:
             values = [getattr(score, field) for score in scores 
                      if getattr(score, field) is not None]
             
             if values:
-                # Calculate mean
+                # Calculate mean of this metric across iterations
                 mean_value = float(np.mean(values))
                 setattr(result, field, mean_value)
                 
-                # Calculate standard deviation if applicable
+                # Calculate standard deviation across iterations
                 std_field = f"{field}_std"
                 if std_field in MetricsData.__dataclass_fields__:
                     std_value = float(np.std(values))

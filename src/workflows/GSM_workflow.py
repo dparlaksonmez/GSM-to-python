@@ -1,5 +1,3 @@
-# TODO: Implement unit tests for gsm_run and gsm_main_loop functions
-# TODO: Add support for additional ML models in the modeling stage
 
 """
 🧬 GSM_pipeline.py - Main Pipeline Implementation for Gene Analysis
@@ -37,6 +35,7 @@ Notes:
 
 ##### Imports #####
 import sys
+import json
 from pathlib import Path
 import logging
 
@@ -52,7 +51,11 @@ from src.workflows.GSM_workflow_config import (INPUT_EXPRESSION_DATA, INPUT_GROU
                         SAVE_INTERMEDIATE_RESULTS, TRAIN_TEST_SPLIT_RATIO, MODEL_NAME, LABEL_COLUMN_NAME, NORMALIZATION_METHOD,
                         CLASS_LABELS_NEGATIVE, CLASS_LABELS_POSITIVE, BEST_GROUPS_TO_KEEP,
                         MAIN_DATA_FILE_SEPARATOR,
-                        GROUPING_FILE_SEPARATOR)
+                        GROUPING_FILE_SEPARATOR,
+                        APPLY_CLASS_BALANCING, MIN_CLASS_BALANCE_RATIO, SAMPLING_METHOD,
+                        SCORING_MODEL,
+                        RUN_BIOLOGICAL_VALIDATION, BIOLOGICAL_VALIDATION_TOP_GENES,
+                        DISGENET_API_KEY)
 
 # Import the config module itself (not only constants) so we can log where it
 # was loaded from at runtime. This is critical for debugging “wrong config file
@@ -94,6 +97,7 @@ from src.utils.rank_aggregation import (
     compute_best_averaged_features,
     save_best_averaged_rankings
 )
+from src.utils.biological_validation import run_biological_validation
 import time
 
 ##### Helper Functions #####
@@ -144,7 +148,6 @@ class AdjustedGroupSelection:
 
 def save_runtime_config(*, output_dir: Path, runtime_params: dict, logger) -> None:
     """Save the actual runtime parameters as JSON (not the static config file)."""
-    import json
     try:
         config_path = output_dir / "runtime_config.json"
         with open(config_path, "w") as f:
@@ -154,35 +157,24 @@ def save_runtime_config(*, output_dir: Path, runtime_params: dict, logger) -> No
         logger.warning(f"Could not save runtime config: {exc}")
 
 
-def build_config_log_items() -> List[ConfigLogItem]:
-    """Build the list of important config variables for logging."""
+def build_runtime_log_items(runtime_params: dict) -> List[ConfigLogItem]:
+    """Build the list of runtime config variables for logging.
+    
+    Logs the ACTUAL runtime parameters passed to the pipeline,
+    not the static values from the config file. This prevents
+    confusion when callers override config defaults.
+    """
     return [
-        ConfigLogItem("INPUT_EXPRESSION_DATA", str(gsm_workflow_config.INPUT_EXPRESSION_DATA)),
-        ConfigLogItem("INPUT_GROUP_DATA", str(gsm_workflow_config.INPUT_GROUP_DATA)),
-        ConfigLogItem("MAIN_DATA_FILE_SEPARATOR", str(gsm_workflow_config.MAIN_DATA_FILE_SEPARATOR)),
-        ConfigLogItem("GROUPING_FILE_SEPARATOR", str(gsm_workflow_config.GROUPING_FILE_SEPARATOR)),
-        ConfigLogItem("OUTPUT_DIR", str(gsm_workflow_config.OUTPUT_DIR)),
-        ConfigLogItem("NUMBER_OF_ITERATIONS", str(gsm_workflow_config.NUMBER_OF_ITERATIONS)),
-        ConfigLogItem("TRAIN_TEST_SPLIT_RATIO", str(gsm_workflow_config.TRAIN_TEST_SPLIT_RATIO)),
-        ConfigLogItem("MODEL_NAME", str(gsm_workflow_config.MODEL_NAME)),
-        ConfigLogItem("LABEL_COLUMN_NAME", str(gsm_workflow_config.LABEL_COLUMN_NAME)),
-        ConfigLogItem("NORMALIZATION_METHOD", str(gsm_workflow_config.NORMALIZATION_METHOD)),
-        ConfigLogItem("CLASS_LABELS_POSITIVE", str(gsm_workflow_config.CLASS_LABELS_POSITIVE)),
-        ConfigLogItem("CLASS_LABELS_NEGATIVE", str(gsm_workflow_config.CLASS_LABELS_NEGATIVE)),
-        ConfigLogItem("RANDOM_SEED", str(gsm_workflow_config.RANDOM_SEED)),
-        ConfigLogItem("CROSS_VALIDATION_FOLDS", str(gsm_workflow_config.CROSS_VALIDATION_FOLDS)),
-        ConfigLogItem("INITIAL_FEATURE_FILTER_SIZE", str(gsm_workflow_config.INITIAL_FEATURE_FILTER_SIZE)),
-        ConfigLogItem("TTEST_THRESHOLD", str(gsm_workflow_config.TTEST_THRESHOLD)),
-        ConfigLogItem("BEST_GROUPS_TO_KEEP", str(gsm_workflow_config.BEST_GROUPS_TO_KEEP)),
-        ConfigLogItem("SAVE_INTERMEDIATE_RESULTS", str(gsm_workflow_config.SAVE_INTERMEDIATE_RESULTS)),
+        ConfigLogItem(name, str(value))
+        for name, value in runtime_params.items()
     ]
 
 
-def log_config_values(*, logger) -> None:
-    """Log important configuration values as a compact block."""
-    items = build_config_log_items()
+def log_runtime_config(*, runtime_params: dict, logger) -> None:
+    """Log the actual runtime configuration as a compact block."""
+    items = build_runtime_log_items(runtime_params)
     config_str = " | ".join(f"{item.name}={item.value}" for item in items)
-    logger.info(f"Config: {config_str}")
+    logger.info(f"Runtime Config: {config_str}")
 
 
 def count_unique_features_for_top_groups(
@@ -264,8 +256,19 @@ def gsm_run(
     gene_column: str = GENE_COLUMN_NAME,
     group_column: str = GROUP_COLUMN_NAME,
     normalization_method: str = NORMALIZATION_METHOD,
-    initial_feature_filter_size: int = 0,
-    initial_seed: int = 42,
+    initial_feature_filter_size: int = INITIAL_FEATURE_FILTER_SIZE,
+    initial_seed: int = RANDOM_SEED,
+    ttest_threshold: float = TTEST_THRESHOLD,
+    cross_validation_folds: int = CROSS_VALIDATION_FOLDS,
+    best_groups_to_keep: int = BEST_GROUPS_TO_KEEP,
+    save_intermediate_results: bool = SAVE_INTERMEDIATE_RESULTS,
+    apply_class_balancing: bool = APPLY_CLASS_BALANCING,
+    min_class_balance_ratio: float = MIN_CLASS_BALANCE_RATIO,
+    sampling_method: str = SAMPLING_METHOD,
+    scoring_model: str = SCORING_MODEL,
+    run_biological_validation_flag: bool = RUN_BIOLOGICAL_VALIDATION,
+    biological_validation_top_genes: int = BIOLOGICAL_VALIDATION_TOP_GENES,
+    disgenet_api_key: str = DISGENET_API_KEY,
     logger_path: Optional[Path] = None,
     notebook_mode: bool = False,
     extra_handlers: Optional[List[logging.Handler]] = None,
@@ -307,37 +310,48 @@ def gsm_run(
     if n_iterations < 1:
         raise ValueError(f"n_iterations must be >= 1, got {n_iterations}")
 
+    # Build runtime params dict — these are the ACTUAL values used by this run,
+    # not necessarily what's in the config file. Log these to prevent confusion.
+    runtime_params = {
+        "input_data": main_data_stem,
+        "input_shape": list(input_data.shape),
+        "grouping_data": group_data_stem,
+        "grouping_shape": list(group_data.shape),
+        "n_iterations": n_iterations,
+        "sample_ratio": sample_ratio,
+        "model_name": model_name,
+        "label_column": label_column,
+        "positive_class_label": positive_class_label,
+        "negative_class_label": negative_class_label,
+        "gene_column": gene_column,
+        "group_column": group_column,
+        "normalization_method": normalization_method,
+        "initial_feature_filter_size": initial_feature_filter_size,
+        "initial_seed": initial_seed,
+        "ttest_threshold": ttest_threshold,
+        "cross_validation_folds": cross_validation_folds,
+        "best_groups_to_keep": best_groups_to_keep,
+        "save_intermediate_results": save_intermediate_results,
+        "apply_class_balancing": apply_class_balancing,
+        "min_class_balance_ratio": min_class_balance_ratio,
+        "sampling_method": sampling_method,
+        "scoring_model": scoring_model,
+        "run_biological_validation": run_biological_validation_flag,
+        "biological_validation_top_genes": biological_validation_top_genes,
+    }
+
     logger.info(
         f"GSM Pipeline | data={main_data_stem} {input_data.shape} | "
         f"groups={group_data_stem} {group_data.shape} | "
         f"iters={n_iterations} | model={model_name}"
     )
     
-    log_config_values(logger=logger)
+    # Log the actual runtime config (not the static config file values)
+    log_runtime_config(runtime_params=runtime_params, logger=logger)
 
     save_runtime_config(
         output_dir=output_folder_path,
-        runtime_params={
-            "input_data": main_data_stem,
-            "input_shape": list(input_data.shape),
-            "grouping_data": group_data_stem,
-            "grouping_shape": list(group_data.shape),
-            "n_iterations": n_iterations,
-            "sample_ratio": sample_ratio,
-            "model_name": model_name,
-            "label_column": label_column,
-            "positive_class_label": positive_class_label,
-            "negative_class_label": negative_class_label,
-            "gene_column": gene_column,
-            "group_column": group_column,
-            "normalization_method": normalization_method,
-            "initial_feature_filter_size": initial_feature_filter_size,
-            "initial_seed": initial_seed,
-            "ttest_threshold": TTEST_THRESHOLD,
-            "cross_validation_folds": CROSS_VALIDATION_FOLDS,
-            "best_groups_to_keep": BEST_GROUPS_TO_KEEP,
-            "random_seed": RANDOM_SEED,
-        },
+        runtime_params=runtime_params,
         logger=logger,
     )
     
@@ -355,7 +369,10 @@ def gsm_run(
         logger=logger,
         label_of_negative_class=negative_class_label,
         label_of_positive_class=positive_class_label,
-        normalization_method=normalization_method
+        normalization_method=normalization_method,
+        apply_class_balancing=apply_class_balancing,
+        min_class_balance_ratio=min_class_balance_ratio,
+        sampling_method=sampling_method
     )
     logger.info("Data preprocessed.")
     group_data_processed = preprocess_grouping_data(group_data, 
@@ -403,6 +420,7 @@ def gsm_run(
             data=data_preprocessed, 
             grouping_data=group_data_processed, 
             model_name=model_name,
+            scoring_model=scoring_model,
             output_dir=output_folder_path,
             iteration=i,
             logger=logger,
@@ -410,10 +428,10 @@ def gsm_run(
             group_column=group_column,
             label_column=label_column,
             sample_ratio=sample_ratio,
-            ttest_threshold=TTEST_THRESHOLD,
+            ttest_threshold=ttest_threshold,
             initial_feature_filter_size=initial_feature_filter_size,
-            best_groups_to_keep=BEST_GROUPS_TO_KEEP,
-            cross_validation_folds=CROSS_VALIDATION_FOLDS,
+            best_groups_to_keep=best_groups_to_keep,
+            cross_validation_folds=cross_validation_folds,
             iteration_seed=iteration_seed,
             save_group_derived_features=(i == 1)
         )
@@ -444,7 +462,7 @@ def gsm_run(
             logger.info(f"Iter {i}/{n_iterations} done in {format_duration(iteration_duration)}")
 
     # Save results
-    if SAVE_INTERMEDIATE_RESULTS:
+    if save_intermediate_results:
         logger.info("Saving results...")
         save_results.save_modeling_results(
             results=[r.modeling_results for r in iteration_results],
@@ -483,7 +501,6 @@ def gsm_run(
     robust_rank_features = None
     
     if results_json_path.exists():
-        import json
         with open(results_json_path, 'r') as f:
             all_results_data = json.load(f)
         
@@ -569,6 +586,27 @@ def gsm_run(
     except Exception as e:
         logger.warning(f"Figure generation failed: {e}")
 
+    # Run biological validation if enabled
+    if run_biological_validation_flag and results_json_path.exists():
+        try:
+            logger.info("🧬 Running biological validation...")
+            grouping_data_path = project_root / INPUT_GROUP_DATA
+            run_biological_validation(
+                output_dir=output_folder_path,
+                results_json_path=results_json_path,
+                logger=logger,
+                disgenet_api_key=disgenet_api_key or None,
+                top_n_genes=biological_validation_top_genes,
+                grouping_data_path=grouping_data_path if grouping_data_path.exists() else None,
+                gene_column=gene_column,
+                group_column=group_column,
+            )
+            logger.info("✅ Biological validation completed")
+        except Exception as e:
+            logger.warning(f"Biological validation failed: {e}")
+    elif run_biological_validation_flag:
+        logger.warning("Biological validation skipped: results JSON not found")
+
     logger.info("✅ GSM pipeline completed successfully")
     return output_folder_path
 
@@ -589,6 +627,7 @@ def gsm_main_loop(data: pd.DataFrame,
                   initial_feature_filter_size: int = INITIAL_FEATURE_FILTER_SIZE,
                   best_groups_to_keep: int = BEST_GROUPS_TO_KEEP,
                   cross_validation_folds: int = CROSS_VALIDATION_FOLDS,
+                  scoring_model: str = SCORING_MODEL,
                   iteration_seed: Optional[int] = None,
                   save_group_derived_features: bool = False) -> List[ModelingResult]:
     """
@@ -656,10 +695,10 @@ def gsm_main_loop(data: pd.DataFrame,
                                           logger=logger)
 
     # Group Scoring
-    # Feature scores computed on training data only (no precomputed full-data scores)
+    # Use scoring_model (fast, for ranking) instead of model_name (final prediction)
     scoring_results = run_scoring(data_x=train_test_split_data.X_train, 
                                 labels=train_test_split_data.y_train,
-                                model_name=model_name, 
+                                model_name=scoring_model, 
                                 groups=group_feature_mappings,
                                 output_dir=output_dir,
                                 iteration=iteration,

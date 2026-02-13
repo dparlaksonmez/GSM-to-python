@@ -34,12 +34,11 @@ Example Usage:
 Note: All functions use explicit parameter names for better code readability.
 """
 
-from typing import Tuple, Union, Any
+from typing import Any
 import pandas as pd
 
 from src.data_processing.normalization import normalize_data
-from src.data_processing.train_test_splitter import train_test_split
-from src.data_processing.handle_missing_values import drop_missing_values, fill_missing_values
+from src.data_processing.handle_missing_values import drop_missing_values
 
 # Default constants for gene grouping (used when working with GSM workflow)
 DEFAULT_GENE_COLUMN_NAME = "feature_id"
@@ -211,8 +210,10 @@ def determine_class_balance(data: pd.DataFrame,
             minority_samples = data[data[class_label] == minority_class]
             
             # Randomly sample from the majority class to match minority class count
+            # Use random_state for reproducibility across runs
             majority_samples = data[data[class_label] == majority_class].sample(
                 n=class_counts.min(),
+                random_state=42,
             )
             
             # Combine minority and sampled majority classes
@@ -220,9 +221,12 @@ def determine_class_balance(data: pd.DataFrame,
         elif sampling_method == 'oversampling':
             # Find the minority class (the class with the fewest samples)
             minority_class = class_counts.idxmin()
-            # Create copies of the minority class data and append them to balance the classes
-            # This duplicates minority class samples until they roughly match the majority class
-            data = pd.concat([data, data[data[class_label] == minority_class].copy()] * (class_counts.max() // class_counts.min()))
+            minority_data = data[data[class_label] == minority_class]
+            
+            # Sample exactly the number of additional rows needed to match majority
+            n_additional = class_counts.max() - class_counts.min()
+            extra = minority_data.sample(n=n_additional, replace=True, random_state=42)
+            data = pd.concat([data, extra])
         else:
             raise ValueError(f"Unsupported sampling method: {sampling_method}")
     else:

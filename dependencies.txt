@@ -14,3 +14,6 @@ xgboost==3.0.0
 group-lasso==1.5.0
 
 streamlit==1.51.0
+
+# Testing
+pytest

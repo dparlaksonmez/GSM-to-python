@@ -1,5 +1,4 @@
 import pandas as pd
-import pathlib
 
 def load_input_file(input_file_name, *, separator: str = ","):
     """

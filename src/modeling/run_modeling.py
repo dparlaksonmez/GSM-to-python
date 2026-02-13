@@ -34,9 +34,12 @@ import numpy as np
 import logging
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score,
-                            roc_auc_score, roc_curve)
-from sklearn.model_selection import cross_val_score, StratifiedKFold
+                            roc_auc_score)
+from sklearn.model_selection import StratifiedKFold
 from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
 
 from src.scoring.metrics import MetricsData
 from src.grouping.grouping_utils import GroupFeatureMappingData
@@ -335,8 +338,14 @@ def train_and_evaluate_model(
     # n_jobs=-1 for final modeling RF to use all cores (this is NOT nested inside joblib)
     if model_name == "RandomForest":
         model = RandomForestClassifier(n_estimators=100, n_jobs=-1)
+    elif model_name == "DecisionTree":
+        model = DecisionTreeClassifier()
     elif model_name == "SVM":
         model = SVC(probability=True)  # Enable probability estimates
+    elif model_name == "KNN":
+        model = KNeighborsClassifier(n_neighbors=5, n_jobs=-1)
+    elif model_name == "MLP":
+        model = MLPClassifier(hidden_layer_sizes=(100,), max_iter=500)
     else:
         logger.error(f"Unsupported model: {model_name}")
         raise ValueError(f"Unsupported model type: {model_name}")
@@ -417,8 +426,13 @@ def train_and_evaluate_model(
         if isinstance(model, RandomForestClassifier) and hasattr(model, "feature_importances_"):
             for feature, importance in zip(train_x.columns, model.feature_importances_):
                 feature_importance[feature] = float(importance)
+        elif isinstance(model, DecisionTreeClassifier) and hasattr(model, "feature_importances_"):
+            for feature, importance in zip(train_x.columns, model.feature_importances_):
+                feature_importance[feature] = float(importance)
         elif isinstance(model, SVC):
             logger.debug("ℹ️ SVM models use embedded feature selection via support vectors")
+        elif isinstance(model, (KNeighborsClassifier, MLPClassifier)):
+            logger.debug(f"ℹ️ {model_name} does not provide direct feature importances")
     except Exception as e:
         logger.warning(f"Cannot extract feature importance: {str(e)}")
     
