@@ -5,10 +5,13 @@ Functions for loading and validating grouping input data
 """
 from typing import Tuple
 import pandas as pd
+from src.data_processing.data_loader import _detect_separator
 
 def load_grouping_data(filepath: str) -> pd.DataFrame:
     """
     Load and validate grouping data from file.
+    
+    Auto-detects the column separator (comma, tab, etc.).
     
     Args:
         filepath (str): Path to the grouping data file
@@ -16,7 +19,8 @@ def load_grouping_data(filepath: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Validated grouping data with feature_name and group_name columns
     """
-    grouping_data = pd.read_csv(filepath)
+    sep = _detect_separator(filepath)
+    grouping_data = pd.read_csv(filepath, sep=sep)
     required_columns = {'feature_name', 'group_name'}
     
     if not required_columns.issubset(grouping_data.columns):
@@ -53,7 +57,7 @@ def prepare_data(main_data_path: str,
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: Validated main data and grouping data
     """
-    main_data = pd.read_csv(main_data_path)
+    main_data = pd.read_csv(main_data_path, sep=_detect_separator(main_data_path))
     grouping_data = load_grouping_data(grouping_data_path)
     validate_main_data(main_data, grouping_data)
     return main_data, grouping_data

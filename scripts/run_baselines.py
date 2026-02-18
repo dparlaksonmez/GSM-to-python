@@ -82,7 +82,8 @@ N_BOOTSTRAP = 500          # bootstrap resamples for CI
 CV_FOLDS = 5               # stratified CV folds
 TTEST_TOP_K = 100          # genes to keep for RF-ttest baseline
 RANDOM_SEED_BASE = 42
-DATA_DIR = Path("/home/yasin/GSM-to-python/data/main_data")
+project_root = Path(__file__).resolve().parent.parent
+DATA_DIR = project_root / "data" / "main_data"
 
 
 ##### HELPER FUNCTIONS #####
@@ -334,9 +335,7 @@ def main():
             results.append(result)
 
     # Save results
-    out_path = Path(
-        "/home/yasin/GSM-to-python/reports_ARCHIVE/baseline_results.json"
-    )
+    out_path = project_root / "output" / "baselines" / "baseline_results.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps([asdict(r) for r in results], indent=2))
     print(f"\n📦 Results saved to: {out_path}")

@@ -30,7 +30,7 @@ project_dir = Path(__file__).resolve().parents[2]
 # │  Must include a class label column (see LABEL_COLUMN_NAME below)         │
 # └──────────────────────────────────────────────────────────────────────────┘
 INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
-MAIN_DATA_FILE_SEPARATOR = ","          # Use "," for CSV, "\t" for TSV
+MAIN_DATA_FILE_SEPARATOR = "auto"       # "auto" detects separator; or use "," / "\t"
 
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  GROUPING DATA FILE                                                      │
@@ -38,7 +38,7 @@ MAIN_DATA_FILE_SEPARATOR = ","          # Use "," for CSV, "\t" for TSV
 # │  Example sources: DisGeNET, KEGG, GO, custom gene sets                   │
 # └──────────────────────────────────────────────────────────────────────────┘
 INPUT_GROUP_DATA = "data/grouping_data/cancer-DisGeNET_gedinet.txt"
-GROUPING_FILE_SEPARATOR = ","           # Use "," for CSV, "\t" for TSV
+GROUPING_FILE_SEPARATOR = "auto"        # "auto" detects separator; or use "," / "\t"
 
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  COLUMN NAMES                                                            │
@@ -178,27 +178,26 @@ BEST_GROUPS_TO_KEEP = 10
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  MODEL SELECTION                                                         │
 # │  Available options:                                                      │
-# │    • 'XGBoost'       - Recommended (fast, accurate, feature importance)  │
-# │    • 'RandomForest'  - Classic ensemble, slightly slower than XGBoost    │
+# │    • 'RandomForest'  - Recommended (best biological coherence)           │
+# │    • 'XGBoost'       - Fast alternative (2.7× faster, lower bio signal)  │
 # │    • 'DecisionTree'  - Simple, interpretable                             │
 # │    • 'SVM'           - Support Vector Machine                            │
 # │    • 'KNN'           - K-Nearest Neighbors                               │
 # │    • 'MLP'           - Neural Network (Multi-Layer Perceptron)           │
 # └──────────────────────────────────────────────────────────────────────────┘
 ModelType = Literal['DecisionTree', 'RandomForest', 'XGBoost', 'SVM', 'KNN', 'MLP']
-MODEL_NAME: ModelType = "XGBoost"
+MODEL_NAME: ModelType = "RandomForest"
 
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  SCORING MODEL (for group ranking)                                       │
 # │  This model is used to RANK gene groups during the scoring phase.        │
 # │  It does NOT affect the final prediction model (MODEL_NAME above).       │
-# │  A faster model here dramatically reduces runtime:                       │
-# │    • 'XGBoost'       - Recommended (3.5× faster than RF, similar F1)     │
+# │    • 'RandomForest'  - Recommended (best bio coherence, highest PPI)     │
+# │    • 'XGBoost'       - 2.7× faster, slightly lower bio signal            │
 # │    • 'DecisionTree'  - Fastest (4.2× faster, but ~6% lower F1)          │
-# │    • 'RandomForest'  - Most accurate ranking, but slowest                │
 # └──────────────────────────────────────────────────────────────────────────┘
 ScoringModelType = Literal['DecisionTree', 'RandomForest', 'XGBoost']
-SCORING_MODEL: ScoringModelType = "XGBoost"
+SCORING_MODEL: ScoringModelType = "RandomForest"
 
 
 # ╔════════════════════════════════════════════════════════════════════════════╗

@@ -435,7 +435,8 @@ def main():
         print(f"  {param}: ΔF1 = {impact:.4f}")
 
     # Save results
-    output_path = project_root / "scripts" / "sensitivity_results.json"
+    output_path = project_root / "output" / "sensitivity_runs" / "sensitivity_results.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     save_results(all_results, output_path)
 
     print("\n✅ Sensitivity analysis completed!")

@@ -1,0 +1,2 @@
+[lfs]
+	fetchinclude = data/main_data/*, data/grouping_data/*, data/test/*

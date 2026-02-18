@@ -3,6 +3,22 @@
 ## Purpose
 Implementation of Grouping-Scoring-Modeling (GSM) pipeline for gene analysis. This pipeline helps researchers analyze gene expression data to identify meaningful patterns and make predictions.
 
+## Latest Results (7 Cancer Datasets)
+
+| Dataset | Disease | Samples | F1 | AUC | Groups | Features |
+|---------|---------|--------:|----:|-----:|-------:|---------:|
+| GDS1962 | Glioblastoma | 26 | 1.000 | 1.000 | 1 | 67 |
+| GDS2545 | Prostate | 89 | 0.842 | 0.887 | 11 | 180 |
+| GDS2547 | Prostate (Lapointe) | 89 | 0.870 | 0.911 | 9 | 108 |
+| GDS2771 | Lung | 118 | 0.849 | 0.829 | 1 | 9 |
+| GDS3257 | AML | 107 | 1.000 | 1.000 | 2 | 146 |
+| GDS3837 | Colorectal | 70 | 1.000 | 1.000 | 2 | 442 |
+| GDS5499 | Pancreatic | 140 | 1.000 | 1.000 | 5 | 51 |
+
+**Mean F1 = 0.937 | Mean AUC = 0.947 | 4/7 datasets perfect (F1 = 1.00)**
+
+Two additional datasets (GDS3268 Breast, GDS4206 HCC) were excluded due to severe t-test filtering issues — see [DATASET_EXCLUSIONS.md](DATASET_EXCLUSIONS.md).
+
 ## Project Overview
 This project implements a modular data pipeline for bioinformatics analysis using the GSM approach:
 1. **Load**: Load and validate input data
@@ -24,7 +40,7 @@ We have detailed documentation available in the `DOCS/` folder:
 - **[Troubleshooting](DOCS/TROUBLESHOOTING.md)**: Common fixes for installation and runtime errors.
 
 ## VS Code Extensions
-Recommended extensions for this repo are listed in [EXTENSIONS.txt](EXTENSIONS.txt).
+Recommended: Python, Rainbow CSV, TODO Highlight, Remote - WSL.
 
 ## Getting Started (Quick)
 
@@ -36,10 +52,18 @@ For a visual walkthrough of setting up this project, watch our tutorial video:
 **Video Link**: [GSM Pipeline Setup Tutorial](https://www.youtube.com/watch?v=brYpWo7VfK0&feature=youtu.be)
 
 ### Quick Setup
-1. **Clone the repository**:
+1. **Clone the repository** (requires [Git LFS](https://git-lfs.com/)):
     ```sh
+    # Install Git LFS first (once per machine)
+    # Ubuntu/Debian: sudo apt install git-lfs
+    # macOS:         brew install git-lfs
+    git lfs install
+
     git clone https://github.com/shiny-apricot/GSM-to-python.git
     cd GSM-to-python
+
+    # If data files are pointer stubs (< 1 KB), pull the real files:
+    git lfs pull
     ```
 
 2. **Create a virtual environment**:

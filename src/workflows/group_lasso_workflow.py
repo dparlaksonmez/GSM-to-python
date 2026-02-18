@@ -37,6 +37,7 @@ from sklearn.preprocessing import StandardScaler
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 from src.utils.logger import setup_logger
 from src.workflows.group_lasso_workflow_config import GroupLassoConfig
+from src.data_processing.data_loader import _detect_separator
 
 
 ##### MAIN WORKFLOW #####
@@ -98,7 +99,8 @@ def load_and_prepare_data(config: GroupLassoConfig, logger: logging.Logger):
     # Load the main dataset containing features and target variable.
     logger.info(f"Loading main data from: {config.main_data_path}")
     try:
-        main_df = pd.read_csv(config.main_data_path)
+        sep = _detect_separator(config.main_data_path)
+        main_df = pd.read_csv(config.main_data_path, sep=sep)
     except FileNotFoundError:
         logger.error(f"Main data file not found at: {config.main_data_path}")
         sys.exit(1)
@@ -106,8 +108,8 @@ def load_and_prepare_data(config: GroupLassoConfig, logger: logging.Logger):
     # Load the grouping data which defines feature-to-group relationships.
     logger.info(f"Loading group data from: {config.group_data_path}")
     try:
-        # take the first row as part of the data
-        group_df = pd.read_csv(config.group_data_path, sep=',', header=0)
+        sep = _detect_separator(config.group_data_path)
+        group_df = pd.read_csv(config.group_data_path, sep=sep, header=0)
     except FileNotFoundError:
         logger.error(f"Group data file not found at: {config.group_data_path}")
         sys.exit(1)

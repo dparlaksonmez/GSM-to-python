@@ -5,9 +5,13 @@ ARCHIVE/
 .cursorrules
 output/
 *ARCHIVE*/
+malik-burcu-PUBLICATIONS/
 
-# Runtime logs
-batch_run.log
+# Runtime logs — never commit these
+*.log
+
+# Word temp / lock files
+~$*
 
 # data/grouping_data/
 # data/main_data

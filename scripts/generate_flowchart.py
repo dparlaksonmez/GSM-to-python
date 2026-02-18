@@ -17,12 +17,13 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
+project_root = Path(__file__).resolve().parent.parent
 
 ##### CONSTANTS #####
 
-OUTPUT_PATH = Path(
-    "/home/yasin/GSM-to-python/reports_ARCHIVE/manuscript_figures"
-    "/fig_pipeline_flowchart.png"
+OUTPUT_PATH = (
+    project_root / "reports_ARCHIVE" / "manuscript_figures"
+    / "fig_pipeline_flowchart.png"
 )
 
 # Colour palette
@@ -193,7 +194,7 @@ def generate_flowchart():
 
     y_cv = _next_y(y_ttest, bh / 2, e2e_box, bh / 2)
     _add_box(ax, cx, y_cv, bw, bh,
-             "Stratified k-fold CV\n(RF per group)", C_PHASE2,
+             "Stratified k-fold CV\n(XGBoost per group)", C_PHASE2,
              C_DARK_TEXT, fontsize=10.5, alpha=0.85)
     _arrow(ax, cx, y_ttest - bh / 2, cx, y_cv + bh / 2)
     _side_label(ax, ann_x, y_cv,
@@ -223,7 +224,7 @@ def generate_flowchart():
 
     y_clf = _next_y(y_top, bh / 2, e2e_box, bh / 2)
     _add_box(ax, cx, y_clf, bw, bh,
-             "Train final classifier\n(Random Forest / SVM)", C_PHASE3,
+             "Train final classifier\n(XGBoost, default)", C_PHASE3,
              fontsize=10.5, alpha=0.85)
     _arrow(ax, cx, y_top - bh / 2, cx, y_clf + bh / 2)
     _side_label(ax, ann_x, y_clf,
@@ -283,11 +284,25 @@ def generate_flowchart():
            cx - bw / 2, sg_cy,
            color=C_STAT, lw=1.0, style="->")
 
+    # ---- FRAME around the entire figure ----
+    frame_pad = 0.15
+    frame = FancyBboxPatch(
+        (ax.get_xlim()[0] + frame_pad, ax.get_ylim()[0] + frame_pad),
+        ax.get_xlim()[1] - ax.get_xlim()[0] - 2 * frame_pad,
+        ax.get_ylim()[1] - ax.get_ylim()[0] - 2 * frame_pad,
+        boxstyle="round,pad=0.08",
+        facecolor="none",
+        edgecolor="#333333",
+        linewidth=1.8,
+        zorder=4,
+    )
+    ax.add_patch(frame)
+
     # Save
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(str(OUTPUT_PATH), dpi=300, bbox_inches="tight",
-                pad_inches=0.15,
-                facecolor=C_BG, edgecolor="none")
+                pad_inches=0.25,
+                facecolor=C_BG, edgecolor="#333333")
     plt.close(fig)
     print(f"Flowchart saved to: {OUTPUT_PATH}")
     return str(OUTPUT_PATH)

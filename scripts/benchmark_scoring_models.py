@@ -411,7 +411,8 @@ def main():
         correlations = compare_rankings(results, logger)
 
     # Save results to JSON for manuscript
-    results_path = PROJECT_ROOT / "scripts" / "benchmark_results.json"
+    results_path = PROJECT_ROOT / "output" / "benchmark" / "benchmark_results.json"
+    results_path.parent.mkdir(parents=True, exist_ok=True)
     save_results_json(results, correlations, results_path, logger)
 
     # Cleanup temp directory

@@ -23,6 +23,8 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+project_root = Path(__file__).resolve().parent.parent
 import matplotlib.patches as mpatches
 import numpy as np
 
@@ -44,17 +46,17 @@ class MethodResult:
 
 ##### CONSTANTS #####
 
-OUTPUT_PATH = Path(
-    "/home/yasin/GSM-to-python/reports_ARCHIVE/manuscript_figures"
-    "/fig_baseline_comparison.png"
+OUTPUT_PATH = (
+    project_root / "reports_ARCHIVE" / "manuscript_figures"
+    / "fig_baseline_comparison.png"
 )
 
-BASELINE_PATH = Path(
-    "/home/yasin/GSM-to-python/reports_ARCHIVE/baseline_results.json"
+BASELINE_PATH = (
+    project_root / "output" / "baselines" / "baseline_results.json"
 )
 
-GSM_DATA_PATH = Path(
-    "/home/yasin/GSM-to-python/reports_ARCHIVE/manuscript_data.json"
+GSM_DATA_PATH = (
+    project_root / "reports_ARCHIVE" / "manuscript_data.json"
 )
 
 # Short labels for datasets

@@ -1,14 +1,14 @@
-# GSM Bioinformatics Pipeline Development Guide 🧬
+# GSM Bioinformatics Pipeline — Development Guide 🧬
 
-## Purpose
-This guide outlines the development standards for the Grouping-Scoring-Modeling (GSM) pipeline, designed for researchers with varying Python expertise levels.
+> **Stable conventions only** — This file contains coding standards,
+> design principles, and documentation rules that rarely change.
+>
+> For the **project map** (every file, folder, key function, and current
+> defaults) see **[`PROJECT_MAP.md`](../PROJECT_MAP.md)** in the repo root.
+> That file is the living document that AI agents and contributors should
+> update whenever files are added, removed, or renamed.
 
-## Pipeline Overview
-```
-Data → Filter → Group → Score → Model → Predict
-```
-
-Each stage processes gene data sequentially, transforming raw input into actionable predictions.
+---
 
 ## Core Development Principles
 
@@ -123,22 +123,6 @@ def process_large_dataset(file_path: str) -> dd.DataFrame:
     return dd.read_csv(file_path).map_partitions(process_partition)
 ```
 
-## Project Structure
-```
-gsm_pipeline/
-├── src/
-│   ├── filtering/       # T-test based filtering
-│   ├── grouping/        # Gene group analysis
-│   ├── scoring/         # ML-based scoring
-│   ├── modeling/        # Model training
-│   ├── ml_utils/        # ML helpers
-│   └── utils/           # Common utilities
-├── data/
-│   ├── raw/            # Input data
-│   └── processed/      # Analysis results
-└── tests/              # Test suites
-```
-
 ## Documentation Standards
 
 ### File Headers
@@ -199,9 +183,30 @@ def test_gene_grouping():
 ```
 
 ## Dependencies
-- pandas
-- numpy
-- scikit-learn
-- dask
-- matplotlib
-- seaborn
+Core: pandas, numpy, scikit-learn, xgboost, matplotlib, seaborn, openpyxl
+Bio-APIs: requests (Enrichr, STRING-db, DisGeNET)
+UI: streamlit
+Dev: pytest, ruff, pre-commit
+Full list: `dependencies.txt`
+
+---
+
+## Key Conventions Quick-Reference
+- **Default classifier**: Random Forest (seed = 44) for both scoring and modeling.
+- **Iterations**: 100 per run, each with a new random seed.
+- **FDR threshold**: α = 0.05, Welch t-test + Benjamini–Hochberg.
+- **CV folds**: 5-fold stratified within each iteration.
+- **Feature ranking**: Robust Rank Aggregation (Stuart et al.).
+- **Excluded datasets**: GDS3268 (breast, 100 % zero-sig), GDS4206 (HCC, 92 % zero-sig). See `DATASET_EXCLUSIONS.md`.
+- **Manuscripts**: Built programmatically via `scripts/build_manuscript_docx.py` from `reports_ARCHIVE/manuscript_data.json`.
+- **Biological validation**: Enrichr + STRING-db + DisGeNET. Results in `output/<run>/biological_validation/`.
+
+## When to Update PROJECT_MAP.md
+Copilot (or any contributor) should update **`PROJECT_MAP.md`** (not this file) whenever:
+- A new source file or folder is added/removed.
+- A public function is renamed or its signature changes.
+- Pipeline defaults (classifier, seed, FDR α, etc.) are altered.
+- New scripts or workflow configs are introduced.
+
+Update **this file** only when coding conventions, design principles, or
+documentation standards change.

@@ -107,7 +107,7 @@ def get_classifier_object(model_name: str, n_estimators: int = 50):
         return ExtraTreesClassifier(n_estimators=n_estimators, n_jobs=1)
     elif model_name == 'AdaBoost':
         # Adaptive boosting with decision stumps
-        return AdaBoostClassifier(n_estimators=n_estimators, algorithm='SAMME')
+        return AdaBoostClassifier(n_estimators=n_estimators)
     elif model_name == 'LogisticRegression':
         # Fast linear model — good baseline
         return LogisticRegression(max_iter=500, solver='lbfgs')

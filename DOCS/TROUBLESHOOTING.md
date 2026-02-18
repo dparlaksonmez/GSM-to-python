@@ -4,7 +4,42 @@ This page lists common problems when installing/running the project on WSL.
 
 ---
 
-## 1) “command not found: python” or “python3 not found”
+## 1) Git LFS – data files are empty / contain only pointer text
+
+This project uses **Git LFS** for CSV data files. If you see tiny files
+(~130 bytes) that start with `version https://git-lfs.github.com/spec/v1`,
+LFS did not download the real content.
+
+```bash
+# Install Git LFS (once per machine)
+sudo apt install -y git-lfs
+git lfs install
+
+# Pull all tracked data files
+git lfs pull
+```
+
+If you cloned *before* installing `git-lfs`, run `git lfs pull` from the
+repo root to replace pointer stubs with the real files.
+
+---
+
+## 2) "Missing column" error when loading grouping data
+
+The pipeline **auto-detects** the separator (comma, tab, etc.) in both
+expression and grouping files.  If you still get a "missing column" error:
+
+- Open the file in a text editor and check whether it uses **commas**,
+  **tabs**, or another delimiter.
+- Make sure the header row contains the expected column names
+  (`feature_id`, `group_name` for grouping files; `class` for expression
+  data).
+- Windows-created files with `\r\n` line endings work fine — no need to
+  convert.
+
+---
+
+## 3) "command not found: python" or "python3 not found"
 
 Install Python in Ubuntu:
 
@@ -15,7 +50,7 @@ sudo apt install -y python3 python3-venv python3-pip
 
 ---
 
-## 2) Virtual environment not activating
+## 4) Virtual environment not activating
 
 From project root:
 
@@ -28,7 +63,7 @@ If `source` fails, check you are inside Ubuntu (WSL) and that `.venv/bin/activat
 
 ---
 
-## 3) `pip install -r dependencies.txt` fails
+## 5) `pip install -r dependencies.txt` fails
 
 ### First try upgrading pip
 
@@ -54,7 +89,7 @@ pip install -r dependencies.txt
 
 ---
 
-## 4) Streamlit does not start
+## 6) Streamlit does not start
 
 Make sure you activated the environment:
 
@@ -76,7 +111,7 @@ streamlit run src/ui/app.py --server.port 8502
 
 ---
 
-## 5) Browser cannot open `localhost:8501`
+## 7) Browser cannot open `localhost:8501`
 
 - Confirm Streamlit is still running in the terminal (no crash)
 - Try opening the full URL Streamlit prints
@@ -84,7 +119,7 @@ streamlit run src/ui/app.py --server.port 8502
 
 ---
 
-## 6) Import errors when running the workflow
+## 8) Import errors when running the workflow
 
 Try the module form (recommended):
 
@@ -96,7 +131,7 @@ If errors persist, confirm you are running from the project root (`~/GSM-to-pyth
 
 ---
 
-## 7) “Permission denied”
+## 9) "Permission denied"
 
 This is uncommon for Python scripts, but if you see it:
 - Check file permissions
@@ -104,7 +139,7 @@ This is uncommon for Python scripts, but if you see it:
 
 ---
 
-## 8) Still stuck
+## 10) Still stuck
 
 When asking for help, provide:
 - The exact command you ran

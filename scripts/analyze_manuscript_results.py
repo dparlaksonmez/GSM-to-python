@@ -29,6 +29,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 
+project_root = Path(__file__).resolve().parent.parent
+
 
 ##### DATA STRUCTURES #####
 
@@ -75,9 +77,7 @@ DATASET_DISEASES = {
     "GDS2547": "Prostate Cancer (Lapointe)",
     "GDS2771": "Lung Cancer",
     "GDS3257": "Acute Myeloid Leukemia",
-    "GDS3268": "Breast Cancer",
     "GDS3837": "Colorectal Cancer",
-    "GDS4206": "Hepatocellular Carcinoma",
     "GDS5499": "Pancreatic Cancer",
 }
 
@@ -87,9 +87,7 @@ DATASET_SHORT = {
     "GDS2547": "Prostate (2)",
     "GDS2771": "Lung",
     "GDS3257": "AML",
-    "GDS3268": "Breast",
     "GDS3837": "Colorectal",
-    "GDS4206": "HCC",
     "GDS5499": "Pancreatic",
 }
 
@@ -368,50 +366,57 @@ def generate_groups_features_chart(
 def generate_cv_stability_chart(
     results: list[PerformanceMetrics], output_dir: Path
 ) -> Path:
-    """Generate horizontal bar chart of CV F1 mean ± std."""
+    """Generate horizontal bar chart of test-set F1 with bootstrap 95% CI."""
     setup_plot_style()
 
     labels = [
         f"{r.dataset_id} ({DATASET_SHORT.get(r.dataset_id, '')})"
         for r in results
     ]
-    means = [r.cv_f1_mean for r in results]
-    stds = [r.cv_f1_std for r in results]
+    f1_scores = [r.f1_score for r in results]
+    ci_lowers = [r.f1_ci_lower for r in results]
+    ci_uppers = [r.f1_ci_upper for r in results]
 
-    # Sort by mean value for better readability
-    order = np.argsort(means)
+    # Sort by F1 score for better readability
+    order = np.argsort(f1_scores)
     labels = [labels[i] for i in order]
-    means = [means[i] for i in order]
-    stds = [stds[i] for i in order]
+    f1_scores = [f1_scores[i] for i in order]
+    ci_lowers = [ci_lowers[i] for i in order]
+    ci_uppers = [ci_uppers[i] for i in order]
+
+    # Asymmetric error bars from CI bounds
+    err_low = [f - lo for f, lo in zip(f1_scores, ci_lowers)]
+    err_high = [hi - f for f, hi in zip(f1_scores, ci_uppers)]
 
     fig, ax = plt.subplots(figsize=(8, 4.5))
     y_pos = np.arange(len(labels))
 
     # Color bars by score value
-    norm_means = np.array(means)
-    colors = plt.cm.RdYlGn(norm_means)
+    norm_scores = np.array(f1_scores)
+    colors = plt.cm.RdYlGn(norm_scores)
 
     ax.barh(
-        y_pos, means, xerr=stds, height=0.6, color=colors,
-        edgecolor="gray", linewidth=0.5,
+        y_pos, f1_scores, xerr=[err_low, err_high], height=0.6,
+        color=colors, edgecolor="gray", linewidth=0.5,
         capsize=3, error_kw={"lw": 0.8},
     )
     ax.set_yticks(y_pos)
     ax.set_yticklabels(labels)
-    ax.set_xlabel("Cross-Validation F1 Mean ± SD")
-    ax.set_title("Cross-Validation Stability Across Datasets")
+    ax.set_xlabel("Test-set F1 (bootstrap 95% CI)")
+    ax.set_title("Classification Stability Across Datasets")
     ax.set_xlim(0, 1.15)
     ax.axvline(x=1.0, color="gray", linestyle=":", linewidth=0.6)
 
     # Add value labels
-    for i, (m, s) in enumerate(zip(means, stds)):
-        ax.text(m + s + 0.02, i, f"{m:.2f} ± {s:.2f}", va="center", fontsize=8)
+    for i, (f, lo, hi) in enumerate(zip(f1_scores, ci_lowers, ci_uppers)):
+        ax.text(hi + 0.02, i, f"{f:.2f} [{lo:.2f}\u2013{hi:.2f}]",
+                va="center", fontsize=8)
 
     fig.tight_layout()
     out_path = output_dir / "fig_cv_stability.png"
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
-    print(f"   ✓ {out_path.name}")
+    print(f"   \u2713 {out_path.name}")
     return out_path
 
 
@@ -562,17 +567,36 @@ def generate_metrics_radar(
 ##### MAIN ANALYSIS #####
 
 def find_latest_output_folders(output_dir: Path) -> dict[str, Path]:
-    """Find the most recent output folder for each dataset."""
+    """Find the most recent output folder for each dataset.
+    
+    Searches both the root output directory and organized subdirectories
+    (main_runs/, sensitivity_runs/, classifier_comparison/, etc.).
+    Prioritizes main_runs/ over other locations.
+    """
     folders = {}
-    for folder in sorted(output_dir.iterdir(), reverse=True):
-        if not folder.is_dir():
-            continue
-        match = re.search(r"(GDS\d+)", folder.name)
-        if match:
-            dataset_id = match.group(1)
-            # Only include datasets that are in DATASET_DISEASES
-            if dataset_id not in folders and dataset_id in DATASET_DISEASES:
-                folders[dataset_id] = folder
+    
+    # Search in main_runs/ first (preferred location for production runs)
+    main_runs_dir = output_dir / "main_runs"
+    search_dirs = []
+    if main_runs_dir.is_dir():
+        search_dirs.append(main_runs_dir)
+    # Fall back to root output dir for any runs not yet organized
+    search_dirs.append(output_dir)
+    
+    for search_dir in search_dirs:
+        for folder in sorted(search_dir.iterdir(), reverse=True):
+            if not folder.is_dir():
+                continue
+            # Skip organizational subdirectories when scanning root
+            if folder.name in ("main_runs", "sensitivity_runs", "test_runs", 
+                               "classifier_comparison", "archives"):
+                continue
+            match = re.search(r"(GDS\d+)", folder.name)
+            if match:
+                dataset_id = match.group(1)
+                # Only include datasets that are in DATASET_DISEASES
+                if dataset_id not in folders and dataset_id in DATASET_DISEASES:
+                    folders[dataset_id] = folder
     return folders
 
 
@@ -582,8 +606,8 @@ def main():
     print("📊 GSM Manuscript Results Analysis & Figure Generation")
     print("=" * 70)
 
-    output_dir = Path("/home/yasin/GSM-to-python/output")
-    fig_dir = Path("/home/yasin/GSM-to-python/reports_ARCHIVE/manuscript_figures")
+    output_dir = project_root / "output"
+    fig_dir = project_root / "reports_ARCHIVE" / "manuscript_figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
 
     # Discover dataset folders
@@ -656,9 +680,7 @@ def main():
         "manuscript_figures": fig_paths,
         "dataset_figures": dataset_figure_paths,
     }
-    json_path = Path(
-        "/home/yasin/GSM-to-python/reports_ARCHIVE/manuscript_data.json"
-    )
+    json_path = project_root / "reports_ARCHIVE" / "manuscript_data.json"
     json_path.write_text(json.dumps(structured_data, indent=2))
     print(f"\n📦 Structured data written to: {json_path}")
 
