@@ -1,7 +1,39 @@
-# G-S-M Bioinformatics Data Pipeline Project
+# GSM Bioinformatics Pipeline 🧬
 
-## Purpose
-Implementation of Grouping-Scoring-Modeling (GSM) pipeline for gene analysis. This pipeline helps researchers analyze gene expression data to identify meaningful patterns and make predictions.
+> **Grouping–Scoring–Modeling (GSM):** A modular Python pipeline for
+> identifying disease-associated gene groups from GEO expression data
+> using machine learning and biological knowledge (DisGeNET).
+
+[![Tests](https://github.com/shiny-apricot/GSM-to-python/actions/workflows/tests.yml/badge.svg)](https://github.com/shiny-apricot/GSM-to-python/actions)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+---
+
+## How It Works
+
+```
+GEO Expression Data + DisGeNET Gene-Disease Knowledge
+                │
+    ┌───────────┼───────────┐
+    ▼           ▼           ▼
+ GROUPING    SCORING     MODELING
+ (Phase I)  (Phase II)  (Phase III)
+    │           │           │
+    ▼           ▼           ▼
+ Disease-gene  Group      Final classifier +
+ group         ranking    ranked features +
+ projection    by ML      biological validation
+```
+
+1. **Filter** — Welch t-test + Benjamini–Hochberg FDR (α = 0.05)
+2. **Group** — Project surviving genes onto DisGeNET disease-gene groups
+3. **Score** — Evaluate each group with 3-fold stratified CV (Random Forest)
+4. **Model** — Train final classifier on top-ranked groups (5-fold CV)
+5. **Rank** — Robust Rank Aggregation across 100 iterations
+6. **Validate** — Enrichr + STRING-db + DisGeNET biological enrichment
+
+---
 
 ## Latest Results (7 Cancer Datasets)
 
@@ -15,189 +47,204 @@ Implementation of Grouping-Scoring-Modeling (GSM) pipeline for gene analysis. Th
 | GDS3837 | Colorectal | 70 | 1.000 | 1.000 | 2 | 442 |
 | GDS5499 | Pancreatic | 140 | 1.000 | 1.000 | 5 | 51 |
 
-**Mean F1 = 0.937 | Mean AUC = 0.947 | 4/7 datasets perfect (F1 = 1.00)**
+**Mean F1 = 0.937 | Mean AUC = 0.947 | 4/7 datasets achieve perfect F1 = 1.00**
 
-Two additional datasets (GDS3268 Breast, GDS4206 HCC) were excluded due to severe t-test filtering issues — see [DATASET_EXCLUSIONS.md](DATASET_EXCLUSIONS.md).
+> Two additional datasets (GDS3268 Breast, GDS4206 HCC) were excluded due
+> to severe t-test filtering issues — see [DATASET_EXCLUSIONS.md](DATASET_EXCLUSIONS.md).
 
-## Project Overview
-This project implements a modular data pipeline for bioinformatics analysis using the GSM approach:
-1. **Load**: Load and validate input data
-2. **Filter**: Preliminary gene filtering using t-test
-3. **Group**: Group genes based on gene-group coupling data
-4. **Score**: Evaluate groups using ML models
-5. **Model**: Train ML models on best-performing groups
-6. **Predict**: Generate predictions using trained models
+---
 
-## Documentation & Guides
+## Documentation
 
-We have detailed documentation available in the `DOCS/` folder:
+| Guide | Description |
+|-------|-------------|
+| [Installation (WSL/Linux)](DOCS/INSTALL_WSL.md) | Step-by-step setup for Windows (WSL2) and native Linux |
+| [Running the Pipeline](DOCS/RUNNING.md) | CLI, batch runner, Streamlit UI, `screen` for long jobs |
+| [Development Guide](DOCS/DEVELOPMENT.md) | Project structure, testing, coding standards |
+| [GitHub Workflow](DOCS/GITHUB_WORKFLOW.md) | Branching, PRs, and safe collaboration |
+| [Troubleshooting](DOCS/TROUBLESHOOTING.md) | Common errors and fixes |
+| [GitHub Copilot Guide](DOCS/COPILOT.md) | AI-assisted coding setup |
+| [Project Map](PROJECT_MAP.md) | Complete file/folder/function reference |
+| [Dataset Exclusions](DATASET_EXCLUSIONS.md) | Why GDS3268 and GDS4206 were dropped |
 
-- **[Installation Guide (WSL/Linux)](DOCS/INSTALL_WSL.md)**: Step-by-step setup instructions.
-- **[Running the Pipeline](DOCS/RUNNING.md)**: How to use the Web UI and scripts.
-- **[Development Guide](DOCS/DEVELOPMENT.md)**: Project structure and coding standards.
-- **[GitHub Workflow](DOCS/GITHUB_WORKFLOW.md)**: How to contribute, branch, and submit PRs.
-- **[GitHub Copilot Pro Guide](DOCS/COPILOT.md)**: How to install Copilot Pro and use it for coding.
-- **[Troubleshooting](DOCS/TROUBLESHOOTING.md)**: Common fixes for installation and runtime errors.
+---
 
-## VS Code Extensions
-Recommended: Python, Rainbow CSV, TODO Highlight, Remote - WSL.
+## Quick Start
 
-## Getting Started (Quick)
-
-### Setup Video Tutorial
-For a visual walkthrough of setting up this project, watch our tutorial video:
+### Video Tutorial
 
 [![Project Setup Tutorial](https://img.youtube.com/vi/brYpWo7VfK0/0.jpg)](https://www.youtube.com/watch?v=brYpWo7VfK0&feature=youtu.be)
 
-**Video Link**: [GSM Pipeline Setup Tutorial](https://www.youtube.com/watch?v=brYpWo7VfK0&feature=youtu.be)
+### Prerequisites
 
-### Quick Setup
-1. **Clone the repository** (requires [Git LFS](https://git-lfs.com/)):
-    ```sh
-    # Install Git LFS first (once per machine)
-    # Ubuntu/Debian: sudo apt install git-lfs
-    # macOS:         brew install git-lfs
-    git lfs install
+- **Python 3.10+** (3.11 or 3.12 recommended)
+- **Git** with [Git LFS](https://git-lfs.com/) installed
+- **Linux** or **Windows with WSL2** (see [Installation Guide](DOCS/INSTALL_WSL.md))
 
-    git clone https://github.com/shiny-apricot/GSM-to-python.git
-    cd GSM-to-python
+### 1. Clone & Fetch Data
 
-    # If data files are pointer stubs (< 1 KB), pull the real files:
-    git lfs pull
-    ```
+```bash
+# Install Git LFS (once per machine)
+sudo apt install git-lfs   # Ubuntu/Debian
+# brew install git-lfs      # macOS
 
-2. **Create a virtual environment**:
-    ```sh
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
+git lfs install
+git clone https://github.com/shiny-apricot/GSM-to-python.git
+cd GSM-to-python
 
-3. **Install dependencies**:
-    ```sh
-    pip install -r dependencies.txt
-    ```
+# If data files are pointer stubs (< 1 KB):
+git lfs pull
+```
 
-4. **Run the pipeline**:
-    ```sh
-    # Quick test (recommended first)
-    python run_test.py
-    
-    # Full run with config settings
-    python src/workflows/GSM_workflow.py
-    
-    # Batch run on all datasets
-    python run_all_datasets.py --iterations 100
-    ```
+### 2. Create Virtual Environment
 
-Optional UI (if present):
-```sh
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r dependencies.txt
+```
+
+### 4. Run the Pipeline
+
+```bash
+# Quick test — verify everything works (~1-2 min)
+python run_test.py
+
+# Full single-dataset run (edit config first)
+python src/workflows/GSM_workflow.py
+
+# Batch run on all 7 datasets (100 iterations each)
+python run_all_datasets.py --iterations 100
+
+# Optional: Streamlit Web UI
 streamlit run src/ui/app.py
 ```
 
 For detailed setup, see the [Installation Guide](DOCS/INSTALL_WSL.md).
 
+---
+
 ## Running Options
 
-### 1. Quick Test
-```sh
-python run_test.py                    # Test with sample data (3 iterations)
+### Quick Test
+```bash
+python run_test.py                    # Sample data, 3 iterations (~1 min)
 python run_test.py --iterations 5     # Custom iteration count
-python run_test.py --real-data        # Test with real GDS2545 data
+python run_test.py --real-data        # Real GDS2545 data
 ```
 
-### 2. Single Dataset Run
-Edit `src/workflows/GSM_workflow_config.py` to configure your data and settings, then:
-```sh
+### Single Dataset
+Edit `src/workflows/GSM_workflow_config.py`, then:
+```bash
 python src/workflows/GSM_workflow.py
+# If import errors occur:
+python -m src.workflows.GSM_workflow
 ```
 
-### 3. Batch Run (Multiple Datasets)
-```sh
-python run_all_datasets.py                    # All datasets, 100 iterations each
-python run_all_datasets.py --iterations 50    # Custom iterations
-python run_all_datasets.py --datasets GDS2545 GDS3257  # Specific datasets
-python run_all_datasets.py --list             # List available datasets
+### Batch Run (Multiple Datasets)
+```bash
+python run_all_datasets.py                              # All 7 datasets, 100 iterations
+python run_all_datasets.py --iterations 50              # Custom iterations
+python run_all_datasets.py --datasets GDS2545 GDS3257   # Specific datasets
+python run_all_datasets.py --list                       # List available datasets
 ```
 
-For long-running batch jobs, use `screen`:
-```sh
+For long-running jobs, use `screen` to keep them alive after disconnecting:
+```bash
 screen -S gsm_batch
 python run_all_datasets.py --iterations 100
-# Press Ctrl+A, then D to detach
-screen -r gsm_batch  # To reattach
+# Ctrl+A then D to detach — reattach later with: screen -r gsm_batch
 ```
 
-## Usage
+---
 
-### Running from Command Line
-1. **Activate your virtual environment** (if not already active):
-    ```sh
-    # Windows
-    venv\Scripts\activate
-    
-    # macOS and Linux
-    source venv/bin/activate
-    ```
+## Output Structure
 
-2. **Run the pipeline**:
-    ```sh
-    python src/workflows/GSM_workflow.py
-    ```
-    **If it gives error, then try this:**
-    ```
-    python -m src.workflows.GSM_workflow
-    ```
-
-### Outputs
 Each run creates a timestamped folder under `output/` containing:
 
-**Core Results:**
-- `summary_report.txt` - Human-readable summary with best results
-- `modeling_results_all_iterations.json` - Detailed JSON results
-- `modeling_results_statistics.xlsx` - Model performance statistics
+| Category | Files |
+|----------|-------|
+| **Summary** | `summary_report.txt`, `modeling_results_all_iterations.json`, `modeling_results_statistics.xlsx` |
+| **Rankings** | `aggregated_group_ranking_rra.xlsx`, `aggregated_feature_ranking_group_derived_rra.xlsx` ⭐, per-iteration rankings |
+| **Figures** | 15+ publication-ready plots (boxplots, heatmaps, feature importance, ROC curves) in `figures/` |
+| **Statistics** | Performance by group count, feature importance, CV confidence intervals in `figures/` |
+| **Config** | `run_parameters.txt`, `config_used.py`, `gsm_workflow.log` |
+| **Bio Validation** | Enrichr, STRING-db, DisGeNET results in `biological_validation/` (if enabled) |
 
-**Rankings:**
-- `ranked_groups_all_iterations.xlsx` - Group rankings per iteration (by F1 score)
-- `ranked_features_individual_all_iterations.xlsx` - Feature rankings per iteration (by ML importance)
-- `ranked_features_group_derived_all_iterations.xlsx` - Feature rankings per iteration (by group F1 score)
-- `aggregated_group_ranking_rra.xlsx` - Robust Rank Aggregated groups
-- `aggregated_feature_ranking_individual_rra.xlsx` - RRA features (ranked by ML importance)
-- `aggregated_feature_ranking_group_derived_rra.xlsx` - RRA features (ranked by group F1) ⭐ **Recommended**
-- `best_averaged_groups.xlsx` - Average group rankings
-- `best_averaged_features.xlsx` - Average feature rankings
+---
 
-**Figures (in `figures/` subfolder):**
-- Performance plots (boxplots, confidence intervals, heatmaps)
-- Feature importance visualization
-- Group count optimization analysis
-- 15+ publication-ready figures
+## Project Structure
 
-**Statistics Excel Files (in `figures/` subfolder):**
-- `statistics_performance_by_groups.xlsx` - Detailed metrics by group count
-- `statistics_feature_importance.xlsx` - Feature importance statistics
-- `statistics_iteration_summary.xlsx` - Per-iteration performance
-- `statistics_cv_confidence_intervals.xlsx` - Cross-validation and CI data
+```
+GSM-to-python/
+├── src/                        # Core pipeline code
+│   ├── data_processing/        #   Data loading, preprocessing, filtering
+│   ├── feature_selection/      #   t-test, variance, RFE, SelectKBest
+│   ├── grouping/               #   Phase I: gene group projection
+│   ├── scoring/                #   Phase II: group evaluation
+│   ├── modeling/               #   Phase III: final classifier
+│   ├── machine_learning/       #   ML model factory (RF, XGBoost, etc.)
+│   ├── utils/                  #   Logging, saving, visualization, RRA
+│   ├── workflows/              #   Entry points & configs
+│   └── ui/                     #   Streamlit web interface
+├── scripts/                    # Manuscript, baselines, sensitivity analysis
+├── data/                       # GEO expression matrices + DisGeNET mappings
+├── tests/                      # 29+ unit tests (pytest)
+├── output/                     # Pipeline results (gitignored)
+├── DOCS/                       # User & developer documentation
+├── dependencies.txt            # pip requirements
+├── run_test.py                 # Quick test runner
+├── run_all_datasets.py         # Batch runner
+└── PROJECT_MAP.md              # Complete file/function reference
+```
 
-**Configuration:**
-- `run_parameters.txt` - Actual parameters used for this run
-- `config_used.py` - Copy of base config file
-- `gsm_workflow.log` - Detailed run logs
+See [PROJECT_MAP.md](PROJECT_MAP.md) for the full function-level reference.
 
-**Optional (if enabled):**
-- `biological_validation/` - Enrichr, STRING-db, DisGeNET results
+---
 
-## Documentation
-- Maintain comprehensive docstrings
-- Include usage examples
-- Reference official library documentation
-- Document data structures and workflows
-- At the top of each file, include a summary of the file's purpose and functionality along with:
-  - File's primary purpose and role in the pipeline, briefly
-  - List of key functions/classes with brief descriptions
-  - Usage examples where appropriate
-  - Any important notes or caveats
+## Key Parameters
+
+| Parameter | Default |
+|-----------|---------|
+| Classifier | Random Forest (seed = 44) |
+| Iterations | 100 per run |
+| FDR threshold | α = 0.05, Welch t-test + Benjamini–Hochberg |
+| Scoring CV | 3-fold stratified |
+| Validation CV | 5-fold stratified |
+| Feature ranking | Robust Rank Aggregation (Stuart et al.) |
+| Biological validation | Enrichr + STRING-db + DisGeNET |
+
+---
+
+## Recommended VS Code Extensions
+
+- **Python** — IntelliSense, linting, debugging
+- **Remote - WSL** — Develop inside WSL from Windows
+- **GitHub Copilot Chat** — AI-assisted coding and Q&A
+- **Rainbow CSV** — Color-coded CSV viewing
+- **vscode-pdf** — View PDF files directly in VS Code
+- **TODO Highlight** — Track TODOs in code
+- **GitHub Pull Requests** — Review PRs inside VS Code
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and
+[DOCS/GITHUB_WORKFLOW.md](DOCS/GITHUB_WORKFLOW.md) for the branch/PR workflow.
+
+---
 
 ## Troubleshooting
+
+Common issues and fixes are documented in [DOCS/TROUBLESHOOTING.md](DOCS/TROUBLESHOOTING.md).
+WSL-specific problems are covered in [DOCS/INSTALL_WSL.md](DOCS/INSTALL_WSL.md).
 
 ### Common Issues
 1. **ImportError or ModuleNotFoundError**:

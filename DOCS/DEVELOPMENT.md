@@ -1,4 +1,4 @@
-# Development Guide (Beginner-Friendly)
+# Development Guide 🛠️
 
 This guide explains how to *safely* make changes to the project.
 
@@ -9,22 +9,18 @@ If you are new to programming, think of this repo as:
 
 ---
 
-## 1) Open the project in the right place (WSL)
+## 1) Open the Project (WSL)
 
 Make sure you are working inside Ubuntu/WSL, not directly on Windows paths.
 
-### VS Code way (recommended)
+### VS Code (recommended)
 
 1. Open VS Code
-2. Press `Ctrl+Shift+P`
-3. Run: **WSL: New WSL Window**
-4. In that window, open the project folder (`~/GSM-to-python`) via **File → Open Folder**
+2. `Ctrl+Shift+P` → **WSL: New WSL Window**
+3. **File → Open Folder** → `~/GSM-to-python`
+4. Verify: bottom-left should show `WSL: Ubuntu`
 
-Bottom-left should show something like `WSL: Ubuntu`.
-
-### (Fallback) Terminal way
-
-In Ubuntu terminal:
+### Terminal
 
 ```bash
 cd ~/GSM-to-python
@@ -33,110 +29,117 @@ code .
 
 ---
 
-## 2) Use the correct Python environment (VS Code)
+## 2) Use the Correct Python Environment
 
-In VS Code:
-1. Press `Ctrl+Shift+P`
-2. Run: **Python: Select Interpreter**
-3. Choose the `.venv` interpreter for this project
+### VS Code
 
-This is the VS Code equivalent of “activating the environment”.
+`Ctrl+Shift+P` → **Python: Select Interpreter** → choose the `venv` (or `.venv`) interpreter.
 
-### (Fallback) Activate in terminal
-
-Before running or developing (terminal):
+### Terminal
 
 ```bash
-cd ~/GSM-to-python
-source .venv/bin/activate
+source venv/bin/activate
 ```
 
 ---
 
-## 3) High-level project structure (what is where)
+## 3) Project Structure
 
-- `src/` : the main code
-  - `src/workflows/` : “entry points” that run end-to-end workflows
-  - `src/ui/` : Streamlit web UI
-  - Other folders under `src/` : pipeline stages and utilities
-- `data/` : example input datasets
-- `output/` : results from previous runs
-- `DOCS/` : documentation for users and contributors
+```
+src/
+├── data_processing/       # Data loading, preprocessing, normalization
+├── feature_selection/     # t-test, variance, RFE, SelectKBest filters
+├── grouping/              # Phase I: gene group projection (DisGeNET)
+├── scoring/               # Phase II: group evaluation (3-fold CV)
+├── modeling/              # Phase III: final classifier (5-fold CV)
+├── machine_learning/      # ML model factory (RF, XGBoost, SVM, etc.)
+├── utils/                 # Logging, saving, visualization, RRA, bio validation
+├── workflows/             # Entry points + config dataclasses
+└── ui/                    # Streamlit web interface
 
-If you are unsure where to change something, start by searching inside `src/`.
+data/                      # Input datasets (GEO + DisGeNET)
+output/                    # Pipeline results (timestamped folders)
+tests/                     # Unit tests (pytest)
+scripts/                   # Manuscript, baselines, sensitivity analysis
+DOCS/                      # This documentation
+```
+
+For a complete function-level map, see [PROJECT_MAP.md](../PROJECT_MAP.md).
+
+### Data Flow
+
+```
+GSM_workflow.py (entry point)
+  │
+  ├── Load data (data_loader.py)
+  ├── Preprocess (data_preprocess.py)
+  ├── Filter genes (ttest_filter.py)          ← Phase I begins
+  ├── Group genes (run_grouping.py)
+  ├── Score groups (run_scoring.py)            ← Phase II
+  ├── Model top groups (run_modeling.py)        ← Phase III
+  ├── Aggregate rankings (rank_aggregation.py)
+  ├── Generate figures (generate_figures.py)
+  └── Biological validation (biological_validation.py)
+```
 
 ---
 
-## 4) A safe workflow for making changes
+## 4) Making Changes Safely
 
-When you change code, you want to avoid breaking the main branch for others.
+When you change code, avoid breaking the main branch for others.
 
-Use this pattern:
+**The safe pattern:**
 1. Pull latest changes
 2. Create a new branch for your work
-3. Make small changes
-4. Run the UI or workflow to check
+3. Make small changes (one idea at a time)
+4. Run tests to verify nothing broke
 5. Commit and push
 6. Open a Pull Request (PR)
 
-The UI-first Git workflow is explained step-by-step in: [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md)
+The full Git workflow is in [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md).
 
 ---
 
-## 5) Editing code: keep it simple
+## 5) Running Tests
 
-This project aims to be understandable for researchers.
+Tests verify that core functions still work after your edits.
+Think of tests as an **automated checklist** that says "everything still works" or "something broke here".
 
-Suggested habits:
-- Make changes in small steps (one idea at a time)
-- Prefer clear names over short names
-- Add short docstrings to new functions
-- Avoid creating “clever” code that is hard to read
-
----
-
-## 6) Running tests before you change something
-
-Tests verify that core functions still work correctly after your edits.
-Think of tests as a **checklist** that runs automatically and tells you
-"everything still works" or "something broke here".
-
-### Run tests manually (recommended after every change)
+### Run All Tests
 
 ```bash
 # From the project root:
 pytest
 ```
 
-This runs all 29+ unit tests and takes about 2 seconds.
-You will see green PASSED / red FAILED next to each test.
+This runs **29+ unit tests** in about 2 seconds. You'll see green `PASSED` / red `FAILED` next to each test.
 
-### What happens automatically
+### Run a Specific Test
 
-| Trigger | What runs | How |
+```bash
+pytest tests/test_core_functions.py::test_my_function -v
+```
+
+### What Runs Automatically
+
+| Trigger | What Runs | How |
 |---------|-----------|-----|
-| `git push` to `main` or `develop` | Full test suite | GitHub Actions (`.github/workflows/tests.yml`) |
-| Pull Request to `main` or `develop` | Full test suite | GitHub Actions |
-| `git push` (local, if pre-commit installed) | Full test suite | pre-commit hook |
+| `git push` to `main` or `develop` | Full test suite | GitHub Actions |
+| Pull Request | Full test suite | GitHub Actions |
+| `git push` (local, if pre-commit installed) | Full test suite | Pre-commit hook |
 
-**GitHub Actions**: Every push and PR automatically runs the tests on GitHub.
-If tests fail, the PR will show a red ✗. You can see the details
-in the "Actions" tab on GitHub.
+**GitHub Actions:** Every push and PR runs tests automatically. Failed tests show a red ✗ on the PR. Check the "Actions" tab on GitHub for details.
 
-**Pre-commit hook** (optional, local): Runs tests before every `git push`
-so broken code never reaches GitHub. To set up:
+**Pre-commit hook (optional):** Runs tests before every push so broken code never reaches GitHub:
 
 ```bash
 pip install pre-commit
 pre-commit install --hook-type pre-push
 ```
 
-After this, `git push` will automatically run the tests first.
-If any test fails, the push is blocked until you fix it.
+### Writing New Tests
 
-### Writing new tests
-
-Tests live in `tests/test_core_functions.py`. To add a test:
+Tests live in `tests/test_core_functions.py`:
 
 ```python
 def test_my_new_function():
@@ -149,123 +152,126 @@ Guidelines:
 - Test name must start with `test_`
 - Keep each test short and focused on one thing
 - Use small, synthetic data (not real datasets)
+- Run `pytest` after every change
 
 ---
 
-## 7) Running after you change something
+## 6) Coding Standards
 
-After changes, do a quick run:
+This project aims to be understandable by researchers who are not Python experts.
 
-### UI run (VS Code terminal)
+### Keep It Simple
+
+- **One function = one task**, max 20 lines
+- **Clear names** over short names (`calculate_gene_score` not `calc_gs`)
+- **Type hints** on all function signatures
+- **Docstrings** on all public functions
+- **Max 2 levels of nesting** (avoid deep if/else/for chains)
+
+### Use Dataclasses for Data Structures
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class GeneGroup:
+    name: str
+    genes: list[str]
+    score: float = 0.0
+```
+
+**Never** use plain dicts, tuples, or named tuples for structured data.
+
+### Comments and Section Separators
+
+```python
+##### DATA PREPROCESSING #####
+
+def preprocess_data(raw_data: pd.DataFrame, *, logger: Logger) -> pd.DataFrame:
+    """Transform raw gene data into analysis-ready format.
+
+    Args:
+        raw_data: Raw expression matrix
+        logger: Logger instance
+
+    Returns:
+        Cleaned and normalized DataFrame
+    """
+    logger.info("Starting data preprocessing...")
+```
+
+### Error Handling
+
+```python
+class GeneAnalysisError(Exception):
+    """Base exception for gene analysis errors."""
+    pass
+
+def analyze_genes(genes: list[str], *, logger: Logger) -> GeneResults:
+    try:
+        logger.info(f"Analyzing {len(genes)} genes...")
+        # ...
+    except ValueError as e:
+        logger.error(f"Analysis failed: {e}")
+        raise GeneAnalysisError(f"Gene analysis failed: {e}")
+```
+
+---
+
+## 7) Testing Your Changes
+
+After editing code, always verify:
+
+### Quick Smoke Test
+
+```bash
+python run_test.py
+```
+
+### Full Test Suite
+
+```bash
+pytest
+```
+
+### Streamlit UI
 
 ```bash
 streamlit run src/ui/app.py
 ```
 
-### CLI workflow run (VS Code terminal)
+### Full Pipeline
 
 ```bash
 python -m src.workflows.GSM_workflow
 ```
 
-If something breaks, check errors carefully. Most issues are missing packages or import paths.
+---
+
+## 8) Share Your Changes
+
+See [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md) for the complete guide on branching, committing, and submitting Pull Requests.
+
+**TL;DR:**
+1. Create a branch (`yourname-short-task`)
+2. Make changes + run tests
+3. Commit with a clear message
+4. Push to GitHub
+5. Open a Pull Request
+6. Wait for review + merge
 
 ---
 
-## 8) Share your changes on GitHub (integrate your code)
+## 9) Getting Help
 
-If you want your changes to become part of the shared project, the safe way is:
-**Branch → Commit → Push → Pull Request → Review → Merge**.
+If you get stuck:
+1. Copy the **exact command** you ran
+2. Copy the **full error message**
+3. Note whether you're in **WSL** or **Windows**
+4. Ask a colleague, open a GitHub issue, or ask GitHub Copilot
 
-### Why we do it this way (with lab analogies)
+> **Important:** Avoid pasting sensitive patient data into AI tools.
 
-If you skip these steps, it’s easy to accidentally break the project for everyone.
-
-- `main` is the **official lab protocol** (the “approved” version).
-- A **branch** is a **separate bench / draft copy** of the protocol.
-  - You can try changes without touching the official protocol.
-  - Everyone can work in parallel without overwriting each other.
-- A **commit** is a **lab notebook entry**: “I changed X because Y”.
-  - Small, clear commits make it easier to understand and undo mistakes.
-- **Push** is **uploading your bench work to the shared freezer (GitHub)**.
-  - It also prevents losing work if your laptop dies.
-- A **Pull Request (PR)** is a **formal request**: “Please review my proposed protocol update.”
-  - It creates a discussion thread, shows the diffs, and allows approvals.
-- **Review** is the **buddy-check** step: another person (or you, later) verifies it makes sense.
-- **Merge** is when your update becomes the **new official protocol** on `main`.
-
-### VS Code way (recommended, step-by-step)
-
-Important: do **not** work directly on `main`.
-
-#### Step A — Create a branch (your private bench)
-
-1. Look at the bottom-left of VS Code: it shows your current branch (often `main`)
-2. Click the branch name
-3. Choose **Create new branch…**
-4. Name it like:
-   - `yourname-short-task` (example: `yasin-fix-upload`)
-   - or `feature-short-task` (example: `feature-new-plot`)
-
-Rule of thumb: one branch = one idea.
-
-#### Step B — Make and check your changes
-
-1. Edit files
-2. Run the UI or workflow to ensure it still works (see section 6)
-
-#### Step C — Commit (write a notebook entry)
-
-1. Open **Source Control** (left sidebar)
-2. Click files to review the diff
-3. Stage the files that belong to this change:
-   - Click **+** next to a file to stage it
-   - Or use **Stage All** if everything is part of the same change
-4. Write a short commit message in the message box
-   - Good: `Fix upload validation in UI`
-   - Avoid: `update` or `changes`
-5. Click **Commit**
-
-If VS Code asks you to configure your name/email, follow the prompt.
-
-#### Step D — Push (upload your branch to GitHub)
-
-1. In **Source Control**, click **Sync Changes** or **Push**
-2. Sign in to GitHub if prompted
-
-After this, your work is safely on GitHub.
-
-#### Step E — Pull Request (ask for review)
-
-1. Open GitHub in your browser
-2. You will often see a banner suggesting: **Compare & pull request**
-3. Create the PR
-4. In the PR description, write:
-   - What you changed
-   - Why you changed it
-   - How someone can test it
-
-#### Step F — After merge (get the official version back)
-
-Once your PR is merged by a maintainer:
-1. Switch back to `main` (click branch name bottom-left)
-2. Pull the latest `main` (Source Control → **…** → Pull)
-
-Optional cleanup: you can delete your old branch after merge.
-
-### Full GitHub guide
-
-This process is explained in more detail (with screenshot placeholders and terminal fallbacks) in:
-- [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md)
-
----
-
-## 9) Asking for help (recommended)
-
-If you get stuck, copy:
-- The command you ran
-- The full error message
-
-Then ask a colleague (or GitHub Copilot / ChatGPT) for help.
-
-Important: avoid pasting sensitive patient data into AI tools.
+See also:
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — Common fixes
+- [INSTALL_WSL.md](INSTALL_WSL.md) — WSL-specific issues

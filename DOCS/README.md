@@ -1,24 +1,42 @@
-# DOCS (Beginner Guides)
+# DOCS — Guides for Lab Members 🧬
 
-These guides are written for lab members who are not computer scientists.
-Think of them like a “lab protocol” for running and contributing to this codebase.
+These guides are written for lab members who are **not** computer scientists.
+Think of them like a "lab protocol" for running and contributing to this codebase.
+
+---
 
 ## Start Here
 
-1. **Install on Windows (WSL)**: [INSTALL_WSL.md](INSTALL_WSL.md)
-2. **Run the project (UI + command line)**: [RUNNING.md](RUNNING.md)
-3. **Common problems**: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+| Step | Guide | What You'll Learn |
+|------|-------|-------------------|
+| 1 | **[Install on Windows (WSL)](INSTALL_WSL.md)** | Set up WSL2, Python, VS Code, and clone the project |
+| 2 | **[Run the Pipeline](RUNNING.md)** | Quick test, full runs, batch runs, Streamlit UI |
+| 3 | **[Common Problems](TROUBLESHOOTING.md)** | Fixes for the most frequent errors |
 
-## If You Want to Contribute / Modify Code
+## If You Want to Contribute or Modify Code
 
-4. **Development basics**: [DEVELOPMENT.md](DEVELOPMENT.md)
-5. **Git + GitHub workflow (safe collaboration)**: [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md)
-6. **GitHub Copilot Pro (AI coding assistant)**: [COPILOT.md](COPILOT.md)
+| Step | Guide | What You'll Learn |
+|------|-------|-------------------|
+| 4 | **[Development Basics](DEVELOPMENT.md)** | Project structure, testing, coding habits |
+| 5 | **[Git + GitHub Workflow](GITHUB_WORKFLOW.md)** | Branching, committing, Pull Requests |
+| 6 | **[GitHub Copilot (AI Assistant)](COPILOT.md)** | Installing and using Copilot for coding |
 
-## Optional screenshots
+## Reference
 
-If we decide screenshots are needed, add them under `DOCS/images/` and replace placeholders like:
+| Document | Description |
+|----------|-------------|
+| **[Project Map](../PROJECT_MAP.md)** | Every file, folder, and key function |
+| **[Dataset Exclusions](../DATASET_EXCLUSIONS.md)** | Why GDS3268 and GDS4206 were dropped |
+| **[Contributing](../CONTRIBUTING.md)** | How to report bugs, suggest features, submit PRs |
 
-- `![Screenshot: VS Code WSL](images/vscode-wsl.png)`
+---
+
+## Adding Screenshots
+
+If screenshots are needed, add them under `DOCS/images/` and reference them like:
+
+```markdown
+![Screenshot: VS Code WSL](images/vscode-wsl.png)
+```
 
 For now, the guides are usable without screenshots.

@@ -1,28 +1,22 @@
-# Git + GitHub Workflow (for Lab Teams)
+# Git + GitHub Workflow 🔄
 
 GitHub is where we store and share the project.
 Git is the tool that records changes.
 
-Analogy:
+**Lab analogies:**
 - **Project files** = your experiment materials
-- **Git commit** = a lab notebook entry (“what I changed and why”)
+- **Git commit** = a lab notebook entry ("what I changed and why")
 - **Branch** = a separate bench where you can work without disturbing others
 - **Pull Request (PR)** = asking the team to review your work before it becomes the official protocol
+- **Merge** = your update becomes the new official protocol
 
 ---
 
-## 1) One-time setup
+## 1) One-Time Setup
 
-### Recommended: let VS Code guide you
+### Configure Your Name/Email
 
-When you commit for the first time, VS Code may ask for your name/email.
-Fill it in when prompted.
-
-If VS Code does not ask and commits fail due to missing identity, use the terminal fallback below.
-
-### (Fallback) Configure name/email (terminal)
-
-Open a VS Code terminal (**Terminal → New Terminal**) and run:
+VS Code will usually prompt you the first time you commit. If it doesn't:
 
 ```bash
 git config --global user.name "Your Name"
@@ -31,28 +25,25 @@ git config --global user.email "you@example.com"
 
 ### Authenticate with GitHub
 
-Simplest for beginners: use HTTPS (no SSH keys needed).
-VS Code will usually help you sign in when you push.
+Simplest for beginners: use **HTTPS** (no SSH keys needed). VS Code will help you sign in when you push.
+
+> **Tip:** If you're asked for credentials repeatedly, set up credential caching:
+> ```bash
+> git config --global credential.helper store
+> ```
 
 ---
 
-## 2) Get the project on your computer
+## 2) Get the Project
 
-### Recommended: Clone with VS Code (no terminal navigation)
+### VS Code (recommended)
 
-In VS Code (in a WSL window if you are on Windows):
-1. Press `Ctrl+Shift+P`
-2. Run: **Git: Clone**
-3. Paste the repository URL
-4. Choose a folder
-5. Click **Open** when VS Code asks
+1. Open VS Code in WSL: `Ctrl+Shift+P` → **WSL: New WSL Window**
+2. `Ctrl+Shift+P` → **Git: Clone**
+3. Paste: `https://github.com/shiny-apricot/GSM-to-python.git`
+4. Choose a folder → click **Open**
 
-Screenshot placeholder (optional):
-- `![VS Code: Clone repository](images/vscode-clone.png)`
-
-### (Fallback) Clone using terminal
-
-In terminal:
+### Terminal
 
 ```bash
 cd ~
@@ -60,172 +51,204 @@ git clone https://github.com/shiny-apricot/GSM-to-python.git
 cd GSM-to-python
 ```
 
-### If you want to contribute (recommended)
+### Contributing Access
 
-You have two common cases:
-
-#### Case A: You are a collaborator (you can push branches)
-You can use the repo directly.
-
-#### Case B: You are not a collaborator
-Use a **fork** (your own copy on GitHub):
-1. On GitHub, click **Fork**
-2. Clone *your fork* URL instead of the main repo URL
-
-Screenshot placeholder (optional):
-- `![Fork button location](images/github-fork.png)`
+| Situation | What to Do |
+|-----------|------------|
+| You're a collaborator (can push) | Use the repo directly |
+| You're not a collaborator | Fork on GitHub, then clone your fork |
 
 ---
 
-## 3) Daily workflow (the safe way)
+## 3) Daily Workflow
 
-This section is written “VS Code first”. Terminal commands are included as a backup.
+> **Rule #1:** Never work directly on `main`. Always create a branch.
 
-### Step 1: Pull latest changes (VS Code)
+### Step 1: Pull Latest Changes
 
-1. Click **Source Control** (left sidebar)
-2. Click **…** (More Actions)
-3. Choose **Pull**
+**VS Code:** Source Control → **...** → **Pull**
 
-If you have multiple branches, make sure you are on `main` first.
-
-#### (Fallback) Terminal pull
-
+**Terminal:**
 ```bash
 git checkout main
 git pull
 ```
 
-### Step 2: Create a new branch for your task (VS Code)
+### Step 2: Create a New Branch
 
-Name it like a short sentence:
+Name it like a short description of your task:
 
-1. Look at the bottom-left status bar: you’ll see the current branch name
-2. Click the branch name
-3. Choose **Create new branch…**
-4. Type a name like `fix-ui-upload`
+**VS Code:**
+1. Click the branch name (bottom-left)
+2. Choose **Create new branch...**
+3. Name it: `yourname-short-task` (e.g., `yasin-fix-upload`)
 
-#### (Fallback) Terminal branch
-
+**Terminal:**
 ```bash
-git checkout -b fix-ui-upload
+git checkout -b yasin-fix-upload
 ```
 
-### Step 3: Make your changes
+### Step 3: Make Your Changes
 
-Edit files in VS Code.
+Edit files in VS Code. Keep changes focused on one task.
 
-### Step 4: See what changed (VS Code)
+### Step 4: Review What Changed
 
-1. Open **Source Control**
-2. You will see a list of changed files
-3. Click a file to see the diff (before/after)
+**VS Code:** Open **Source Control** (left sidebar) → click files to see diffs.
 
-This is like reviewing what changed in your protocol before signing it.
-
-#### (Fallback) Terminal status
-
+**Terminal:**
 ```bash
-git status
+git status        # See changed files
+git diff           # See what changed
 ```
 
-### Step 5: Save the changes as a commit (VS Code)
+### Step 5: Commit (Save to Git History)
 
-1. Open **Source Control**
-2. Hover a file and click **+** (Stage) to select it
-	- Or click **Stage All** if everything is part of the same change
-3. Write a message in the message box (example: `Fix upload validation in UI`)
-4. Click **Commit**
+**VS Code:**
+1. Source Control → click **+** next to files to stage them
+2. Write a commit message (e.g., "Fix upload validation in UI")
+3. Click **Commit**
 
-#### (Fallback) Terminal commit
-
+**Terminal:**
 ```bash
 git add -A
 git commit -m "Fix upload validation in UI"
 ```
 
-Commit message tip:
-- Good: “Fix UI upload validation”
-- Avoid: “update” / “stuff”
+**Commit message tips:**
+- Good: "Fix upload validation in UI", "Add boxplot for group scores"
+- Bad: "update", "changes", "stuff"
 
-### Step 6: Push your branch to GitHub (VS Code)
+### Step 6: Push to GitHub
 
-1. Open **Source Control**
-2. Click **Sync Changes** or **Push** (wording depends on VS Code version)
-3. If asked to sign in to GitHub, follow the prompts
+**VS Code:** Source Control → **Sync Changes** or **Push**
 
-#### (Fallback) Terminal push
-
+**Terminal:**
 ```bash
-git push -u origin fix-ui-upload
+git push -u origin yasin-fix-upload
 ```
 
-### Step 7: Open a Pull Request (PR)
+### Step 7: Open a Pull Request
 
-#### Option A (simple): GitHub website
+1. Go to the GitHub repo in your browser
+2. Click the banner: **Compare & pull request**
+3. Write what you changed, why, and how to test it
+4. Submit the PR
 
-After pushing, GitHub will usually show a button like “Compare & pull request”.
+### Step 8: After Merge
 
-#### Option B (inside VS Code): GitHub Pull Requests extension
+Once your PR is merged:
 
-If your team uses it:
-1. Install the extension **GitHub Pull Requests**
-2. Sign in to GitHub in VS Code
-3. Open the Pull Requests view and create a PR from your branch
+**VS Code:**
+1. Switch back to `main` (click branch name)
+2. Source Control → **...** → **Pull**
 
-In your PR description, write:
-- What you changed
-- Why you changed it
-- How someone can test it
-
-Screenshot placeholder (optional):
-- `![Open PR button](images/github-open-pr.png)`
-
----
-
-## 4) If your branch gets behind main
-
-git checkout fix-ui-upload
-git merge main
-### VS Code way
-
-1. Checkout `main` (click branch name bottom-left)
-2. Pull (Source Control → **…** → Pull)
-3. Checkout your feature branch again
-4. Merge `main` into your branch:
-	- Source Control → **…** → Branch → Merge Branch… → select `main`
-
-### (Fallback) Terminal way
-
+**Terminal:**
 ```bash
 git checkout main
 git pull
-git checkout fix-ui-upload
-git merge main
 ```
-
-If merge conflicts happen, ask for help. Conflicts are not “dangerous”; they are Git asking you to choose between two edits.
 
 ---
 
-## 5) Very small emergency undo
+## 4) Keeping Your Branch Up-to-Date
 
-### Discard local edits
+If `main` has been updated while you're working on your branch:
 
-VS Code way:
-1. Source Control
-2. Right-click a changed file → **Discard Changes**
+**VS Code:**
+1. Switch to `main` → Pull
+2. Switch back to your branch
+3. Source Control → **...** → **Branch** → **Merge Branch...** → select `main`
 
-Terminal fallback:
-
+**Terminal:**
 ```bash
-git restore .
+git checkout main
+git pull
+git checkout yasin-fix-upload
+git merge main
 ```
 
-If you committed but want to undo the last commit (local only):
+### If There Are Merge Conflicts
+
+Conflicts happen when two people edited the same lines. Git will mark the conflicting sections:
+
+```
+<<<<<<< HEAD
+your version of the code
+=======
+their version of the code
+>>>>>>> main
+```
+
+**To resolve:**
+1. Open the conflicting file
+2. Choose which version to keep (or combine them)
+3. Remove the `<<<`, `===`, `>>>` markers
+4. Save, stage, and commit
+
+VS Code has a built-in merge editor that makes this easier — look for the "Resolve in Merge Editor" button.
+
+---
+
+## 5) Emergency Undo
+
+### Discard Local Edits (Not Committed)
+
+**VS Code:** Right-click file in Source Control → **Discard Changes**
+
+**Terminal:**
+```bash
+git restore .          # Discard all uncommitted changes
+git restore file.py    # Discard changes in one file
+```
+
+### Undo Last Commit (Keep Changes)
 
 ```bash
 git reset --soft HEAD~1
 ```
 
-Use these carefully.
+### Undo Last Commit (Discard Changes)
+
+```bash
+git reset --hard HEAD~1
+# Warning: This permanently deletes the changes!
+```
+
+---
+
+## 6) Branch Naming Conventions
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Feature | `feature-description` | `feature-new-plot` |
+| Bug fix | `fix-description` | `fix-upload-crash` |
+| Personal | `yourname-task` | `yasin-refactor-scoring` |
+
+One branch = one task. Keep branches short-lived.
+
+---
+
+## 7) Common Git Mistakes and Fixes
+
+| Mistake | Fix |
+|---------|-----|
+| Committed to `main` by accident | `git reset --soft HEAD~1`, create branch, re-commit |
+| Pushed sensitive data | Contact a maintainer immediately |
+| Wrong commit message | `git commit --amend -m "new message"` (only if not pushed) |
+| Need to update from main | `git merge main` (from your branch) |
+| Conflicts scare me | They're safe — Git is asking you to choose. See Section 4 |
+
+---
+
+## Quick Reference Card
+
+```
+git checkout main && git pull          # Get latest
+git checkout -b my-branch              # Create branch
+# ... make changes ...
+git add -A && git commit -m "message"  # Save
+git push -u origin my-branch           # Upload
+# Open PR on GitHub → get review → merge
+git checkout main && git pull          # Get merged result
+```

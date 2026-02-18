@@ -3,7 +3,8 @@
 > **Living document** — Single source of truth for the project's
 > file/folder layout, key functions, and current conventions.
 >
-> For coding standards see
+> Update this file whenever files are added/removed, functions are
+> renamed, or defaults change. For coding standards, see
 > [`.github/copilot-instructions.md`](.github/copilot-instructions.md).
 
 ---
@@ -11,18 +12,20 @@
 ## Pipeline Overview
 
 ```
-GEO Data + DisGeNET Knowledge
-        │
-        ▼
-   ┌──────────┐     ┌──────────┐     ┌──────────┐
-   │ GROUPING │ ──▶ │ SCORING  │ ──▶ │ MODELING │
-   │ (Phase I)│     │(Phase II)│     │(Phase III)│
-   └──────────┘     └──────────┘     └──────────┘
-        │                                  │
-        ▼                                  ▼
-  Disease-gene           Final classifier + ranked
-  group projection       features + bio validation
+GEO Expression Data + DisGeNET Gene-Disease Knowledge
+                │
+    ┌───────────┼───────────┐
+    ▼           ▼           ▼
+ GROUPING    SCORING     MODELING
+ (Phase I)  (Phase II)  (Phase III)
+    │           │           │
+    ▼           ▼           ▼
+ Disease-gene  Group      Final classifier +
+ group         ranking    ranked features +
+ projection    by ML      biological validation
 ```
+
+**Entry point:** `src/workflows/GSM_workflow.py` → `gsm_workflow()`
 
 ---
 
@@ -205,18 +208,18 @@ supplementary PDFs, and related publications.
 
 ## Key Conventions
 
-| Parameter | Value |
-|-----------|-------|
-| Default classifier | Random Forest |
-| Seed | 44 (deterministic derivation per iteration) |
-| Iterations | 100 per run |
-| FDR threshold | α = 0.05, Welch t-test + Benjamini–Hochberg |
-| CV folds (scoring) | 3-fold stratified |
-| CV folds (validation) | 5-fold stratified |
-| Feature ranking | Robust Rank Aggregation (Stuart et al.) |
-| Biological validation | Enrichr + STRING-db + DisGeNET |
-| Excluded datasets | GDS3268 (breast), GDS4206 (HCC) |
-| Supported classifiers | RandomForest, XGBoost, DecisionTree, SVM, KNN, MLP |
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Default classifier | Random Forest | seed = 44, deterministic derivation per iteration |
+| Iterations | 100 per run | Each iteration: new train/test split |
+| FDR threshold | α = 0.05 | Welch t-test + Benjamini–Hochberg correction |
+| CV folds (scoring) | 3-fold stratified | Phase II group evaluation |
+| CV folds (validation) | 5-fold stratified | Phase III final model |
+| Feature ranking | Robust Rank Aggregation | Stuart et al. method |
+| Biological validation | Enrichr + STRING-db + DisGeNET | Optional, external APIs |
+| Excluded datasets | GDS3268 (breast), GDS4206 (HCC) | See `DATASET_EXCLUSIONS.md` |
+| Supported classifiers | RF, XGBoost, DecisionTree, SVM, KNN, MLP | Via `get_classifier()` factory |
+| Python version | 3.10+ | 3.11 or 3.12 recommended |
 
 ---
 

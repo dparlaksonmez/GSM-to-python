@@ -1,225 +1,647 @@
-# Installation Guide (Windows + WSL)
+# Installation Guide (Windows + WSL) 🖥️
 
 This project runs best in Linux. On Windows, the easiest way is **WSL2** (Windows Subsystem for Linux).
 
 If you are new to this:
-- **Windows** is the “outside building”.
-- **WSL (Ubuntu)** is a “small Linux lab inside Windows”.
+- **Windows** is the "outside building".
+- **WSL (Ubuntu)** is a "small Linux lab inside Windows".
 - We will run the pipeline inside that Linux lab.
+
+> **Native Linux / macOS users:** Skip to [Step 3](#3-install-basic-tools-inside-ubuntu) — you already have a Linux terminal.
 
 ---
 
-## 0) What you need
+## 0) What You Need
 
-- Windows 10/11
+- Windows 10 (version 2004+, Build 19041+) or Windows 11
 - Internet connection
-- Enough disk space for Python packages and datasets
+- At least **4 GB free disk space** for Python packages and datasets
+- Admin access on your computer
 
 ---
 
 ## 1) Install WSL + Ubuntu
 
-### Option A (recommended): one command
+### Option A (recommended): One Command
 
-1. Open **PowerShell as Administrator**
+1. Open **PowerShell as Administrator** (right-click Start → "Windows Terminal (Admin)" or search "PowerShell" → Run as Admin)
 2. Run:
 
 ```powershell
 wsl --install
 ```
 
-3. Restart your computer when it asks.
+3. **Restart your computer** when it asks.
 
-### Option B (if Option A does not work)
+After restart, Ubuntu should open automatically. If not, search "Ubuntu" in the Start Menu.
 
-Search Microsoft docs for “Install WSL” and follow the official steps.
+### Option B: If Option A Did Not Work
+
+```powershell
+# Enable the required Windows features manually
+dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+
+# Restart your computer, then set WSL 2 as default
+wsl --set-default-version 2
+
+# Install Ubuntu
+wsl --install -d Ubuntu
+```
 
 ---
 
 ## 2) Open Ubuntu (WSL)
 
 - Open **Start Menu** → search **Ubuntu** → open it.
-- The first time, it will ask you to create a Linux username + password.
-  - The password will not show when typing (this is normal).
+- The first time, it asks you to create a Linux **username + password**.
+  - The password will **not** show when typing — this is normal Linux behavior.
+  - Pick something simple you can remember (e.g., `labuser`).
 
 ---
 
-## 3) Install basic tools inside Ubuntu
+## 3) Install Basic Tools Inside Ubuntu
 
 In the Ubuntu terminal:
 
 ```bash
-sudo apt update
-sudo apt install -y git python3 python3-venv python3-pip
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git git-lfs python3 python3-venv python3-pip build-essential curl
 ```
 
-(If `sudo` asks for your password, use the password you created for Ubuntu.)
+(`sudo` will ask for the password you created for Ubuntu.)
 
 ---
 
-## 4) Install VS Code + WSL extension
+## 4) Install VS Code + WSL Extension
 
 ### Install VS Code
 
-- Download and install Visual Studio Code from the official Microsoft website.
+Download and install from [https://code.visualstudio.com/](https://code.visualstudio.com/).
 
-### Install the WSL extension (important)
+> **Important:** Install VS Code on **Windows**, not inside WSL.
+
+### Install the WSL Extension
 
 In VS Code:
-1. Open Extensions (left sidebar)
+1. Open Extensions (`Ctrl+Shift+X`)
 2. Search: **WSL**
-3. Install: **Remote - WSL**
+3. Install: **Remote - WSL** (by Microsoft)
 
-Why? Because it lets VS Code edit and run code *inside* Ubuntu/WSL.
+This lets VS Code edit and run code *inside* Ubuntu/WSL seamlessly.
 
----
+### Recommended Extensions
 
-## 5) Get the project into WSL (VS Code way)
-
-If you are new, this is the easiest method because VS Code guides you.
-
-### Step 1: Open a WSL window
-
-In VS Code:
-1. Press `Ctrl+Shift+P` (Command Palette)
-2. Run: **WSL: New WSL Window**
-
-You should now see `WSL: Ubuntu` in the bottom-left.
-
-### Step 2: Clone using the VS Code interface
-
-In that WSL window:
-1. Press `Ctrl+Shift+P`
-2. Run: **Git: Clone**
-3. Paste the repo URL: `https://github.com/shiny-apricot/GSM-to-python.git`
-4. Choose a folder inside Linux home, like `/home/<you>/` (VS Code will show it as `~`)
-5. When prompted, click **Open** to open the cloned repo
-
-Screenshot placeholder (optional):
-- `![VS Code: Git Clone](images/vscode-git-clone.png)`
+While you're at it, also install:
+- **Python** (by Microsoft)
+- **GitHub Copilot Chat** — AI-assisted coding and Q&A
+- **Rainbow CSV** — color-coded CSV viewing
+- **vscode-pdf** — view PDF files directly in VS Code
+- **TODO Highlight** — highlight TODOs in code
 
 ---
 
-## 6) (Fallback) Clone using Ubuntu terminal
+## 5) Clone the Project into WSL
 
-Inside **Ubuntu terminal** (recommended location is your Linux home directory):
+### Method A: VS Code (easiest)
+
+1. In VS Code, press `Ctrl+Shift+P` → **WSL: New WSL Window**
+2. Verify `WSL: Ubuntu` appears in the bottom-left corner
+3. Press `Ctrl+Shift+P` → **Git: Clone**
+4. Paste: `https://github.com/shiny-apricot/GSM-to-python.git`
+5. Choose your Linux home folder (`/home/<you>/`)
+6. Click **Open** when prompted
+
+### Method B: Terminal
 
 ```bash
 cd ~
+git lfs install
 git clone https://github.com/shiny-apricot/GSM-to-python.git
 cd GSM-to-python
+git lfs pull    # Download actual data files (not just LFS pointers)
 ```
 
-Tip: Avoid cloning into `/mnt/c/...` at first. For beginners, keeping the code inside Linux (`/home/<you>/...`) is simpler and usually faster.
+> **Tip:** Avoid cloning into `/mnt/c/...` (Windows filesystem). Keeping the code inside Linux (`/home/<you>/...`) is **significantly faster** for file I/O.
 
 ---
 
-## 7) Create a Python virtual environment (VS Code way)
+## 6) Create a Python Virtual Environment
 
-A virtual environment is like a **clean bench space** in the lab: it keeps packages for this project separate from other projects.
+### Method A: VS Code
 
-In VS Code:
-1. Press `Ctrl+Shift+P`
-2. Run: **Python: Create Environment**
-3. Choose **Venv**
-4. Select the default Python interpreter it suggests
-5. Wait for it to finish
+1. Press `Ctrl+Shift+P` → **Python: Create Environment**
+2. Choose **Venv**
+3. Select the default Python 3 interpreter
+4. Wait for it to finish
 
-Then in VS Code, check the bottom-right Python version/venv indicator.
-
-Screenshot placeholder (optional):
-- `![VS Code: Python Create Environment](images/vscode-python-create-env.png)`
-
----
-
-## 8) (Fallback) Create a virtual environment in terminal
-
-From the project root (Ubuntu terminal or VS Code terminal):
+### Method B: Terminal
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+cd ~/GSM-to-python
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-You should see `(.venv)` at the start of your terminal prompt.
+You should see `(venv)` at the start of your terminal prompt.
 
 ---
 
-## 9) Install Python dependencies (VS Code terminal)
+## 7) Install Python Dependencies
 
-Installing packages still runs a command, but you can do it from VS Code without “learning terminal navigation”.
-
-In VS Code:
-1. **Terminal → New Terminal**
-2. Make sure you are in the project folder (VS Code usually opens the terminal there)
-3. If needed, activate the environment (VS Code may do this automatically)
-4. Run:
+In the VS Code terminal (or Ubuntu terminal with venv active):
 
 ```bash
+pip install --upgrade pip
 pip install -r dependencies.txt
 ```
 
-If installation fails, check: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+This installs pandas, numpy, scikit-learn, xgboost, streamlit, and all other requirements.
 
 ---
 
-## 10) Open the project in VS Code (inside WSL)
+## 8) Verify the Installation
 
-If you used the VS Code clone flow, you are already done.
+```bash
+# Quick test — should complete in ~1-2 minutes
+python run_test.py
+```
 
-If you cloned in a terminal, you can open VS Code from Ubuntu.
+If you see a summary with F1/AUC scores, everything is working!
 
-From the project root (terminal), run:
+---
+
+## 9) Open the Project in VS Code (If You Cloned via Terminal)
+
+From the project root:
 
 ```bash
 code .
 ```
 
-VS Code should show you are connected to **WSL: Ubuntu** (bottom-left).
+VS Code should open and show `WSL: Ubuntu` in the bottom-left.
 
 ---
 
-## 11) Quick “it works” check
+## 10) Updating the Project Later
 
-### Run the UI (Streamlit)
+### VS Code Way
+
+1. Open **Source Control** (left sidebar)
+2. Click **...** → **Pull**
+
+### Terminal Way
+
+```bash
+cd ~/GSM-to-python
+source venv/bin/activate
+git pull
+pip install -r dependencies.txt   # In case dependencies changed
+```
+
+---
+
+## 11) Optional: Run the Streamlit UI
 
 ```bash
 streamlit run src/ui/app.py
 ```
 
-It should print a local URL like `http://localhost:8501`.
-Open that in your browser.
+It will print a URL like `http://localhost:8501`. Open that in your Windows browser.
+
+> **WSL tip:** If the URL doesn't auto-open, manually copy it into Chrome/Edge.
 
 ---
 
-## 12) Updating the project later (VS Code way)
+---
 
-In VS Code:
-1. Open **Source Control** (left sidebar icon)
-2. Click **…** (More Actions)
-3. Choose **Pull**
+# WSL Troubleshooting Guide 🔧
 
-Then, if dependencies changed, run the install command again in the VS Code terminal.
+This section covers the most common WSL problems people encounter.
+For pipeline-specific issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ---
 
-## 13) (Fallback) Updating in terminal
+## WSL Installation Issues
 
-Whenever you come back to the project:
+### "WSL is not recognized" or "wsl --install" does nothing
+
+**Cause:** Your Windows version is too old or WSL features are not enabled.
+
+**Fix:**
+1. Check your Windows version: press `Win+R`, type `winver`. You need **Windows 10 version 2004** (Build 19041) or later.
+2. If your version is old, update Windows via Settings → Update & Security → Windows Update.
+3. If version is fine but WSL still won't install, enable features manually:
+
+```powershell
+# Run in PowerShell as Administrator
+dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+```
+
+4. Restart your computer, then run:
+
+```powershell
+wsl --set-default-version 2
+wsl --install -d Ubuntu
+```
+
+---
+
+### "WslRegisterDistribution failed with error: 0x80370102"
+
+**Cause:** Hyper-V / virtualization is not enabled in BIOS.
+
+**Fix:**
+1. Restart your computer and enter **BIOS/UEFI** (usually by pressing `F2`, `F10`, `Del`, or `Esc` during boot — depends on your manufacturer).
+2. Find **Virtualization Technology** (may be called "Intel VT-x", "AMD-V", "SVM Mode", or "Virtualization") and **enable** it.
+3. Save and exit BIOS.
+4. Try `wsl --install` again.
+
+> **Lenovo laptops:** Look under Security → Virtualization.
+> **HP laptops:** Look under System Configuration → Virtualization Technology.
+> **Dell laptops:** Look under Virtualization Support → Virtualization.
+
+---
+
+### "WslRegisterDistribution failed with error: 0x800701bc"
+
+**Cause:** WSL 2 Linux kernel update is missing.
+
+**Fix:**
+1. Download the WSL 2 kernel update from: https://aka.ms/wsl2kernel
+2. Run the installer.
+3. Restart your terminal and try again.
+
+---
+
+### "WslRegisterDistribution failed with error: 0x80370114"
+
+**Cause:** Nested virtualization conflict (common in VMs or with other hypervisors).
+
+**Fix:**
+```powershell
+# In PowerShell as Admin
+bcdedit /set hypervisorlaunchtype auto
+# Restart your computer
+```
+
+If you use VMware or VirtualBox, they may conflict with Hyper-V. You can either:
+- Use WSL 2 (and keep those VMs turned off), or
+- Switch VirtualBox/VMware to use Hyper-V backend.
+
+---
+
+### "Error: 0x80004002" or "The Virtual Machine could not be started"
+
+**Cause:** Windows Hypervisor Platform feature is not enabled.
+
+**Fix:**
+```powershell
+# Run in PowerShell as Administrator
+Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -NoRestart
+Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart
+# Restart
+```
+
+---
+
+### WSL installs but Ubuntu is stuck at "Installing, this may take a few minutes..."
+
+**Fix:**
+1. Wait up to 10 minutes — first-time setup can be slow.
+2. If still stuck, close the window and try:
+
+```powershell
+wsl --shutdown
+wsl
+```
+
+3. If that fails, unregister and reinstall:
+
+```powershell
+wsl --unregister Ubuntu
+wsl --install -d Ubuntu
+```
+
+---
+
+## WSL Runtime Issues
+
+### "WSL is extremely slow" (file operations, pip install, git)
+
+**Cause:** You're working on files stored in `/mnt/c/` (Windows filesystem), which is very slow from WSL.
+
+**Fix:**
+- Always keep your project in the **Linux filesystem**: `/home/<you>/GSM-to-python`
+- Never clone or work in `/mnt/c/Users/...` paths
+- If you already cloned there, move it:
+
+```bash
+cp -r /mnt/c/Users/YourName/GSM-to-python ~/GSM-to-python
+cd ~/GSM-to-python
+```
+
+> **Performance difference:** Linux filesystem is **5–10x faster** than `/mnt/c/` for file I/O.
+
+---
+
+### "Cannot connect to localhost" / Streamlit URL doesn't open
+
+**Cause:** WSL networking sometimes doesn't forward ports automatically.
+
+**Fixes (try in order):**
+1. Copy the exact URL from the terminal (e.g., `http://localhost:8501`) and paste it in your Windows browser.
+2. Try `http://127.0.0.1:8501` instead of `localhost`.
+3. If neither works, find WSL's IP address:
+
+```bash
+hostname -I
+# Example output: 172.28.176.1
+```
+
+Then open `http://172.28.176.1:8501` in your Windows browser.
+
+4. If using WSL2 on an older Windows build, you may need to add a port proxy:
+
+```powershell
+# Run in PowerShell as Admin
+netsh interface portproxy add v4tov4 listenport=8501 listenaddress=0.0.0.0 connectport=8501 connectaddress=$(wsl hostname -I)
+```
+
+---
+
+### "DNS resolution failed" / `sudo apt update` fails / `pip install` can't download
+
+**Cause:** WSL's DNS resolver can break, especially on corporate/university networks or VPNs.
+
+**Fix:**
+```bash
+# Create a custom resolv.conf
+sudo rm /etc/resolv.conf
+sudo bash -c 'echo "nameserver 8.8.8.8" > /etc/resolv.conf'
+sudo bash -c 'echo "nameserver 8.8.4.4" >> /etc/resolv.conf'
+
+# Prevent WSL from overwriting it
+sudo bash -c 'echo "[network]" > /etc/wsl.conf'
+sudo bash -c 'echo "generateResolvConf = false" >> /etc/wsl.conf'
+```
+
+Then restart WSL:
+```powershell
+# In PowerShell
+wsl --shutdown
+```
+
+---
+
+### WSL "out of memory" or process killed
+
+**Cause:** By default, WSL 2 can use up to 80% of your system RAM, which may not be enough for large datasets.
+
+**Fix:** Create/edit `C:\Users\<YourName>\.wslconfig`:
+
+```ini
+[wsl2]
+memory=8GB
+swap=4GB
+processors=4
+```
+
+Then restart WSL:
+```powershell
+wsl --shutdown
+```
+
+---
+
+### "Permission denied" when running scripts
+
+**Fix:**
+```bash
+# Check if the file is executable
+ls -la run_test.py
+
+# If not, make it executable
+chmod +x run_test.py
+
+# Or just run via python (recommended)
+python run_test.py
+```
+
+---
+
+### Clock skew / "file has modification time in the future"
+
+**Cause:** WSL's clock can drift out of sync with Windows after sleep/hibernate.
+
+**Fix:**
+```bash
+sudo hwclock -s
+```
+
+Or restart WSL entirely:
+```powershell
+wsl --shutdown
+```
+
+---
+
+### VS Code says "WSL: Cannot connect" or extensions don't load
+
+**Fixes:**
+1. Make sure the **Remote - WSL** extension is installed in VS Code (on the Windows side).
+2. Restart VS Code completely.
+3. Try opening from the Ubuntu terminal:
 
 ```bash
 cd ~/GSM-to-python
-source .venv/bin/activate
+code .
+```
 
-git pull
+4. If still broken, reinstall the VS Code Server inside WSL:
+
+```bash
+rm -rf ~/.vscode-server
+# Then reopen VS Code — it will reinstall automatically
+```
+
+---
+
+### "git: command not found" inside WSL
+
+**Fix:**
+```bash
+sudo apt update
+sudo apt install -y git
+```
+
+---
+
+### WSL takes forever to start / hangs on "Starting"
+
+**Fixes:**
+1. Close all WSL terminals and PowerShell windows.
+2. Force shutdown:
+
+```powershell
+wsl --shutdown
+```
+
+3. Wait 10 seconds, then reopen Ubuntu.
+4. If persistent, check for Windows updates — some builds have WSL bugs.
+5. As a last resort, reset WSL:
+
+```powershell
+wsl --unregister Ubuntu
+wsl --install -d Ubuntu
+# Warning: This deletes all data inside that Ubuntu instance!
+```
+
+---
+
+## Python & Package Issues in WSL
+
+### "command not found: python"
+
+Ubuntu uses `python3` by default, not `python`.
+
+**Fix:**
+```bash
+# Option 1: Use python3 everywhere
+python3 run_test.py
+
+# Option 2: Create an alias (add to ~/.bashrc)
+echo 'alias python=python3' >> ~/.bashrc
+source ~/.bashrc
+```
+
+---
+
+### `pip install` fails with "error: externally-managed-environment"
+
+**Cause:** Newer Ubuntu versions (23.04+) prevent installing packages globally to protect the system Python.
+
+**Fix:** Always use a virtual environment (which we do):
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r dependencies.txt
+```
+
+If you need to force a global install (not recommended):
+
+```bash
+pip install --break-system-packages <package>
+```
+
+---
+
+### `pip install` fails with compiler errors (gcc, g++)
+
+Some packages (like `scipy`, `scikit-learn`) need C/C++ compilers.
+
+**Fix:**
+```bash
+sudo apt update
+sudo apt install -y build-essential python3-dev gfortran libopenblas-dev
 pip install -r dependencies.txt
 ```
 
 ---
 
-## Screenshot placeholders (optional)
+### "No module named 'tkinter'" or matplotlib backend errors
 
-If you want to add screenshots later:
+**Fix:**
+```bash
+sudo apt install -y python3-tk
+```
 
-- `![Ubuntu terminal opened](images/ubuntu-open.png)`
-- `![VS Code connected to WSL](images/vscode-wsl.png)`
+For headless environments (remote servers), set the matplotlib backend:
+
+```bash
+export MPLBACKEND=Agg
+# Or add to ~/.bashrc:
+echo 'export MPLBACKEND=Agg' >> ~/.bashrc
+```
+
+---
+
+## Git LFS Issues
+
+### Data files are tiny (~130 bytes) and contain "version https://git-lfs.github.com/spec/v1"
+
+**Cause:** Git LFS wasn't installed when you cloned.
+
+**Fix:**
+```bash
+sudo apt install -y git-lfs
+git lfs install
+git lfs pull
+```
+
+---
+
+### `git lfs pull` hangs or times out
+
+**Fix:**
+1. Check your internet connection.
+2. Try pulling specific files:
+
+```bash
+git lfs pull --include="data/main_data/*.csv"
+```
+
+3. If on a corporate network, you may need to configure a proxy:
+
+```bash
+git config --global http.proxy http://proxy.company.com:8080
+```
+
+---
+
+## VPN and Firewall Issues
+
+### WSL loses network when VPN is connected
+
+This is one of the most common WSL complaints. VPN software (Cisco AnyConnect, GlobalProtect, etc.) often breaks WSL networking.
+
+**Fix 1: Update WSL** (Microsoft has been fixing VPN issues):
+```powershell
+wsl --update
+```
+
+**Fix 2: Configure DNS manually** (see the DNS section above).
+
+**Fix 3: Use WSL mirrored networking** (Windows 11 22H2+):
+
+Edit `C:\Users\<YourName>\.wslconfig`:
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+
+Then restart WSL.
+
+**Fix 4: Cisco AnyConnect specific** — add a routing fix:
+
+```powershell
+# Run in PowerShell as Admin after VPN connects
+Get-NetAdapter | Where-Object {$_.InterfaceDescription -Match "Cisco"} | Set-NetIPInterface -InterfaceMetric 6000
+```
+
+---
+
+## Need More Help?
+
+If none of the above fixes your problem:
+
+1. Copy the **exact error message**.
+2. Note which **step** you were on.
+3. Check if you're inside **WSL** or **Windows** (this matters!).
+4. Ask a colleague, or open an issue on GitHub with this info.
+
+Also see:
+- [General Troubleshooting](TROUBLESHOOTING.md)
+- [Microsoft's official WSL troubleshooting](https://learn.microsoft.com/en-us/windows/wsl/troubleshooting)
