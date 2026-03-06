@@ -61,5 +61,24 @@ class GroupLassoConfig:
     random_seed: int = RANDOM_SEED
     # Proportion of the dataset to be used for testing.
     test_size: float = 0.3
+    # Number of iterations (each with a different random seed) for robust evaluation.
+    n_iterations: int = 10
     # Base directory for all output files.
     output_dir: str = "output"
+
+    # --- Overlap / Duplication Controls ---
+    # Maximum number of groups a single gene can be duplicated into.
+    # Genes in more than this many groups keep only their first max_groups_per_gene
+    # assignments (alphabetical by group name). Set to 0 for no limit.
+    max_groups_per_gene: int = 5
+    # Minimum number of genes that a disease group must have in the expression data
+    # for the group to be kept.  Small groups are noisy and slow down training.
+    min_genes_per_group: int = 10
+
+    # --- Biological Validation ---
+    # Whether to run Enrichr / STRING-db / DisGeNET validation on top genes.
+    run_biological_validation: bool = True
+    # Number of top genes (by selection frequency) to validate.
+    biological_validation_top_genes: int = 20
+    # Optional DisGeNET API key.  If empty, DisGeNET queries are skipped.
+    disgenet_api_key: str = ""

@@ -45,6 +45,7 @@ class ScoringParameters:
     classifier_name: str
     logger: logging.Logger
     cross_validation_folds: int = 5
+    random_state: int = 42
     
 
 def score_data(params: ScoringParameters) -> MetricsData:
@@ -73,8 +74,9 @@ def score_data(params: ScoringParameters) -> MetricsData:
         # logger.info(f"🎬 Starting scoring process with {params.classifier_name} classifier")
         # logger.info(f"📊 Input data shape: {params.data_x.shape}")
 
-        # Get classifier object (with n_jobs for internal parallelism)
-        classifier = get_classifier_object(params.classifier_name)
+        # Get classifier object (with explicit random_state for reproducibility
+        # in parallel worker processes where global np.random.seed is not inherited)
+        classifier = get_classifier_object(params.classifier_name, random_state=params.random_state)
 
         # Convert to numpy arrays for faster sklearn operations
         X = params.data_x.values if hasattr(params.data_x, 'values') else params.data_x

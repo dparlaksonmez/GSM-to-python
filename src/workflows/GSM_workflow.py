@@ -384,10 +384,12 @@ def gsm_run(
 
     # One-time feature scoring on full preprocessed data (reporting only)
     # This is NOT used in group ranking or modeling — purely informational.
+    # Set seed before scoring so results are reproducible across runs.
+    set_random_seed(initial_seed)
     logger.info("Feature scoring (one-time)...")
     X_full = data_preprocessed.drop(columns=[label_column])
     y_full = data_preprocessed[label_column]
-    feature_scores = score_all_features(X_full, y_full, logger)
+    feature_scores = score_all_features(X_full, y_full, logger, random_state=initial_seed)
     logger.info("Feature scoring done")
     features_output = output_folder_path / "individual_feature_scores.csv"
     save_ranked_features(
@@ -637,7 +639,7 @@ def gsm_main_loop(data: pd.DataFrame,
                   best_groups_to_keep: int = BEST_GROUPS_TO_KEEP,
                   cross_validation_folds: int = CROSS_VALIDATION_FOLDS,
                   scoring_model: str = SCORING_MODEL,
-                  iteration_seed: Optional[int] = None,
+                  iteration_seed: int = RANDOM_SEED,
                   save_group_derived_features: bool = False) -> List[ModelingResult]:
     """
     Executes one complete iteration of the GSM workflow.
@@ -713,7 +715,8 @@ def gsm_main_loop(data: pd.DataFrame,
                                 iteration=iteration,
                                 logger=logger,
                                 cross_validation_folds=cross_validation_folds,
-                                should_save_group_features=save_group_derived_features)
+                                should_save_group_features=save_group_derived_features,
+                                random_state=iteration_seed)
 
     # Get ranked groups from scoring results
     ranked_groups = scoring_results.ranked_groups
@@ -767,7 +770,8 @@ def gsm_main_loop(data: pd.DataFrame,
             group_feature_mapping=group_feature_mappings,
             model_name=model_name,
             top_n_groups=selection.used_top_groups,
-            logger=logger
+            logger=logger,
+            random_state=iteration_seed
         )
         modeling_result_list.append(modeling_result)
 

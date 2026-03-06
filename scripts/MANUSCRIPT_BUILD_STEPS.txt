@@ -1,0 +1,178 @@
+===============================================================================
+  GSM Manuscript Build Steps
+  --------------------------
+  Run these scripts IN ORDER before building the manuscript DOCX.
+  Last updated: 2026-03-05
+===============================================================================
+
+Each phase depends on the previous one.  Scripts within the same phase are
+independent and can run in parallel.  Estimated times assume an 8-core
+workstation.
+
+All commands assume you are in the project root (/home/yasin/GSM-to-python)
+with the virtual environment activated.
+
+
+PHASE 0 — Run the main GSM pipeline on all 7 datasets
+-------------------------------------------------------
+This produces the output/gsm_* folders that everything else depends on.
+
+  python run_all_datasets.py
+
+  Output: output/gsm_<timestamp>_<dataset>_seed44_cancer-DisGeNET_gedinet/
+  Time:   ~10-15 hours (7 datasets × 100 iterations)
+
+
+PHASE 1 — Independent experiments (can run in parallel)
+--------------------------------------------------------
+These scripts read raw data or run the pipeline internally.
+None depend on each other.
+
+  1a. python scripts/benchmark_scoring_models.py
+      → output/benchmark/benchmark_results.json
+      Time: ~10 min
+
+  1b. python scripts/compare_classifiers_bio_validation.py
+      → output/classifier_comparison/classifier_comparison_results.json
+      Time: ~2-3 hours (7 datasets × RF + XGBoost × 10 iterations)
+
+  1c. python scripts/run_baselines.py
+      → output/baselines/baseline_results.json
+      Time: ~2-3 hours (4 baselines × 7 datasets × 100 iterations)
+
+  1d. python scripts/run_sensitivity_analysis.py
+      → output/sensitivity_runs/sensitivity_results.json
+      Time: ~3-4 hours (3 parameters × 3 values × 3 datasets)
+
+  1e. python scripts/seed_stability_experiment.py
+      → output/seed_stability/seed_stability_results.json
+      Time: ~4-5 hours (5 seeds × 7 datasets × 10 iterations)
+
+  1f. python scripts/generate_flowchart.py
+      → reports_ARCHIVE/manuscript_figures/fig_pipeline_flowchart.png
+      Time: < 1 min
+
+
+PHASE 2 — Scripts that depend on Phase 1 outputs
+--------------------------------------------------
+
+  2a. python scripts/extend_classifier_comparison.py
+      Depends on: 1b (compare_classifiers_bio_validation.py)
+      → output/classifier_comparison/classifier_comparison_results.json (merged)
+      Time: ~1-2 hours
+
+  2b. python scripts/compute_sensitivity_impact.py
+      Depends on: 1d (run_sensitivity_analysis.py)
+      → output/sensitivity_runs/sensitivity_impact.json
+      Time: < 1 min
+
+  2c. python scripts/rerun_seed_bio_validation.py     [ONLY IF API CALLS FAILED]
+      Depends on: 1e (seed_stability_experiment.py)
+      → output/seed_stability/seed_stability_results.json (updated in-place)
+      Time: ~5 min
+
+  2d. python scripts/rerun_bio_validation.py           [ONLY IF API CALLS FAILED]
+      Depends on: Phase 0 (main pipeline runs)
+      → output/gsm_*/biological_validation/ (updated in-place)
+      Time: ~5 min
+
+
+PHASE 3 — Data aggregation
+----------------------------
+Aggregates all pipeline output into a single JSON + 6 publication figures.
+
+  python scripts/analyze_manuscript_results.py
+
+  Depends on: Phase 0 (pipeline output folders must exist)
+  Output:
+    - reports_ARCHIVE/manuscript_data.json
+    - reports_ARCHIVE/manuscript_figures/fig_performance_comparison.png
+    - reports_ARCHIVE/manuscript_figures/fig_groups_features_scatter.png
+    - reports_ARCHIVE/manuscript_figures/fig_cv_stability.png
+    - reports_ARCHIVE/manuscript_figures/fig_metrics_radar.png
+    - reports_ARCHIVE/manuscript_figures/fig_biological_validation.png
+    - reports_ARCHIVE/manuscript_figures/fig_enrichment_heatmap.png
+  Time: < 1 min
+
+
+PHASE 4 — Baseline comparison figure
+--------------------------------------
+Needs both baseline results and manuscript data.
+
+  python scripts/generate_baseline_comparison.py
+
+  Depends on: 1c (run_baselines.py) AND Phase 3 (analyze_manuscript_results.py)
+  → reports_ARCHIVE/manuscript_figures/fig_baseline_comparison.png
+  Time: < 1 min
+
+
+PHASE 5 — Quality assurance (optional but recommended)
+-------------------------------------------------------
+Cross-checks hardcoded gene lists in build_manuscript_docx.py against
+actual pipeline outputs.
+
+  python scripts/verify_gene_lists.py
+
+  Depends on: Phase 0 (pipeline outputs)
+  → reports_ARCHIVE/gene_verification_report.txt + stdout
+  Time: < 1 min
+
+
+PHASE 6 — Build the manuscript
+--------------------------------
+Reads all upstream artifacts and generates the Word document.
+
+  python scripts/build_manuscript_docx.py
+
+  Depends on: ALL phases above
+  → reports_ARCHIVE/GSM_Manuscript_v{N}.docx
+  Time: < 1 min
+
+
+===============================================================================
+  Quick reference: Minimal rebuild (no new experiments)
+  Use this when you only changed text/formatting in build_manuscript_docx.py
+===============================================================================
+
+  python scripts/build_manuscript_docx.py
+
+  This works as long as all JSON/figure artifacts from previous runs
+  still exist in output/ and reports_ARCHIVE/.
+
+
+===============================================================================
+  Quick reference: After a new experiment run
+===============================================================================
+
+  1. python run_all_datasets.py              # or run specific datasets
+  2. python scripts/analyze_manuscript_results.py
+  3. python scripts/generate_baseline_comparison.py   # if baselines changed
+  4. python scripts/verify_gene_lists.py              # optional QA
+  5. python scripts/build_manuscript_docx.py
+
+
+===============================================================================
+  File dependency graph (→ means "produces input for")
+===============================================================================
+
+  run_all_datasets.py
+    → rerun_bio_validation.py (if API failed)
+    → analyze_manuscript_results.py
+        → generate_baseline_comparison.py (+ run_baselines.py)
+        → build_manuscript_docx.py
+
+  benchmark_scoring_models.py → (data used in manuscript text, Table 4)
+
+  compare_classifiers_bio_validation.py
+    → extend_classifier_comparison.py
+    → (data used in manuscript text, Tables 5b/5c)
+
+  run_sensitivity_analysis.py
+    → compute_sensitivity_impact.py
+    → (data used in manuscript text)
+
+  seed_stability_experiment.py
+    → rerun_seed_bio_validation.py (if API failed)
+    → build_manuscript_docx.py (reads seed_stability_results.json directly)
+
+  generate_flowchart.py → build_manuscript_docx.py (Figure 1)

@@ -54,7 +54,8 @@ def _compute_mutual_info_fast(
     data_x: pd.DataFrame,
     labels: pd.Series,
     n_neighbors: int = 3,
-    logger=None
+    logger=None,
+    random_state: int = 42
 ) -> np.ndarray:
     """
     Compute mutual information scores efficiently.
@@ -72,6 +73,7 @@ def _compute_mutual_info_fast(
         labels: Target labels
         n_neighbors: Number of neighbors for MI estimation (default: 3, lower = faster)
         logger: Optional logger for progress messages
+        random_state: Random seed for reproducibility
         
     Returns:
         Array of mutual information scores for each feature
@@ -85,11 +87,11 @@ def _compute_mutual_info_fast(
     
     # Compute all at once with fewer neighbors (faster than batching)
     # n_neighbors=3 is much faster than default n_neighbors=5
-    # No hardcoded random_state — relies on global np.random.seed()
-    # set per iteration for proper variation across runs
+    # Explicit random_state for reproducibility
     mutual_info = mutual_info_classif(
         X, y,
         n_neighbors=n_neighbors,
+        random_state=random_state,
     )
     
     return mutual_info
@@ -99,7 +101,8 @@ def score_features(
     data_x: pd.DataFrame,
     labels: pd.Series,
     feature_names: List[str],
-    logger: logging.Logger
+    logger: logging.Logger,
+    random_state: int = 42
 ) -> List[FeatureScore]:
     """
     Score individual features using multiple metrics.
@@ -109,6 +112,7 @@ def score_features(
         labels: Target labels
         feature_names: List of feature names
         logger: Logger instance
+        random_state: Random seed for reproducibility
 
     Returns:
         List of FeatureScore objects for each feature
@@ -122,12 +126,11 @@ def score_features(
 
         logger.info(f"Feature scoring: {len(feature_names)} features (MI + RF + F1)")
 
-        mutual_info = _compute_mutual_info_fast(data_x, labels, n_neighbors=3, logger=logger)
+        mutual_info = _compute_mutual_info_fast(data_x, labels, n_neighbors=3, logger=logger, random_state=random_state)
 
-        # No hardcoded random_state — relies on global np.random.seed()
-        # set per iteration so feature scores vary across iterations
+        # Explicit random_state for reproducibility
         # 50 trees is sufficient for ranking features by importance
-        rf = RandomForestClassifier(n_estimators=50, n_jobs=1)
+        rf = RandomForestClassifier(n_estimators=50, n_jobs=1, random_state=random_state)
         rf.fit(data_x, labels)
         importance_scores = rf.feature_importances_
 

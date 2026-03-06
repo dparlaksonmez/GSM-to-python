@@ -813,6 +813,40 @@ def write_methods(doc, perf, figs):
          "negatives in their particular setting (e.g. 0.3 for screening, "
          "0.7 for confirmatory diagnosis).")
 
+    # Why tree-based models are preferred for biomarker discovery
+    para(doc,
+         "Why tree-based models are preferred for biomarker discovery.  "
+         "Although the framework is classifier-agnostic and supports "
+         "non-tree methods (SVM, KNN, MLP), tree-based ensembles such "
+         "as Random Forest and XGBoost are preferred in both the scoring "
+         "and modeling phases for four reasons that are specific to "
+         "biomarker-discovery pipelines.  "
+         "First, tree-based models produce native per-feature importance "
+         "scores (Gini impurity for RF, gain for XGBoost), which feed "
+         "directly into the dual-metric Robust Rank Aggregation used "
+         "to rank genes across iterations (Section 2.7); SVM (with "
+         "non-linear kernels), KNN and standard MLP do not provide "
+         "analogous per-gene attributions without post-hoc methods such "
+         "as SHAP, which would multiply the already dominant scoring "
+         "time by an order of magnitude.  "
+         "Second, decision trees handle mixed-scale and high-dimensional "
+         "feature spaces without requiring feature normalisation, which "
+         "simplifies the preprocessing pipeline when genes from "
+         "heterogeneous disease groups are pooled.  "
+         "Third, the hierarchical split structure of trees captures "
+         "gene-gene interactions implicitly — an important property when "
+         "the selected features are biologically co-regulated within "
+         "disease groups.  "
+         "Fourth, ensemble trees (bagging in RF, boosting in XGBoost) "
+         "are inherently robust to irrelevant features because each "
+         "tree only considers a random subset, reducing the risk that "
+         "noise genes from low-scoring groups dominate the model.  "
+         "These properties make tree-based classifiers the natural "
+         "default, though users with specific requirements — for instance, "
+         "neural-network interpretability via gradient-based saliency "
+         "maps — can switch to MLP or other models with a single "
+         "configuration parameter.")
+
     # 2.2
     heading(doc, "2.2 Statistical Validation", 2)
     para(doc,

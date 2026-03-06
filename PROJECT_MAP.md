@@ -120,8 +120,10 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 | `GSM_workflow_config.py` | `GSMConfig` dataclass |
 | `classification_workflow.py` | `classification_workflow()` — plain classification baseline |
 | `classification_workflow_config.py` | `ClassificationConfig` dataclass |
-| `group_lasso_workflow.py` | `group_lasso_workflow()` — group-lasso baseline |
-| `group_lasso_workflow_config.py` | `GroupLassoConfig` dataclass |
+| `group_lasso_workflow.py` | `group_lasso_workflow()` — Group Lasso with overlap-aware feature duplication, multi-iteration evaluation, and integrated biological validation (Enrichr + STRING-db) |
+| `group_lasso_workflow_config.py` | `GroupLassoConfig` dataclass — includes `run_biological_validation`, `biological_validation_top_genes`, `disgenet_api_key`, `max_groups_per_gene`, `min_genes_per_group` |
+| `stability_selection_gl.py` | `run_stability_selection()` — **Novel**: combines Meinshausen & Bühlmann (2010) stability selection with Latent Group Lasso; B subsamples, per-gene Π̂ probabilities, provable FDR upper bound via Theorem 1 |
+| `gl_rf_hybrid.py` | `gl_rf_hybrid_workflow()` — **Novel**: Two-Stage GL→RF Hybrid Pipeline; Stage 1 = Group Lasso feature pre-selection, Stage 2 = Random Forest classification on GL-selected genes |
 
 ### `src/ui/`
 | File | Purpose |
@@ -138,6 +140,11 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 | `build_manuscript_docx.py` | Generate Word manuscript | `reports_ARCHIVE/GSM_Manuscript_v*.docx` |
 | `generate_flowchart.py` | Figure 1: pipeline flowchart | `reports_ARCHIVE/manuscript_figures/` |
 | `generate_baseline_comparison.py` | Baseline comparison figure | `reports_ARCHIVE/manuscript_figures/` |
+| `compare_gl_vs_gsm.py` | GSM vs Group Lasso side-by-side comparison (metrics, gene overlap, figures) | `output/comparison_gl_vs_gsm/` |
+| `gl_ablation_study.py` | Compare 3 overlap strategies: duplication (=Latent GL), naive single-group, no-group L1 | `output/gl_ablation_<dataset>_<ts>/` |
+| `run_gl_all_datasets.py` | Run GL workflow on all 7 cancer datasets with cross-dataset summary | `output/gl_all_datasets_<ts>/` |
+| `gl_hyperparameter_search.py` | Grid search over λ₁, λ₂ and filter thresholds with heatmap output | `output/gl_hyperparam_<dataset>_<ts>/` |
+| `MANUSCRIPT_BUILD_STEPS.txt` | Build order documentation for GSM manuscript | — |
 | `run_baselines.py` | Non-GSM baseline classifiers | `output/baselines/baseline_results.json` |
 | `run_sensitivity_analysis.py` | One-at-a-time sensitivity analysis | `output/sensitivity_runs/sensitivity_results.json` |
 | `compute_sensitivity_impact.py` | Δ-F1 impact rankings | `output/sensitivity_runs/sensitivity_impact.json` |
@@ -177,6 +184,13 @@ Each pipeline run creates a timestamped folder. Organized subdirectories:
 | Subfolder | Contents |
 |-----------|----------|
 | `main_runs/` | Production pipeline runs (7 datasets × RF) |
+| `glasso_<timestamp>/` | Group Lasso runs (includes `group_lasso_results.json`, `gene_selection_frequency.xlsx`, `biological_validation/`) |
+| `stability_test/` or `stability_gl_<ts>/` | Stability selection runs (`stability_results.json`, `stability_gene_probabilities.xlsx`, probability figures) |
+| `gl_rf_hybrid_<dataset>_<ts>/` | GL→RF hybrid runs (`gl_rf_hybrid_results.json`, `hybrid_gene_frequency.xlsx`, comparison figures) |
+| `comparison_gl_vs_gsm/` | GSM vs GL comparison (metrics, gene overlap, figures) |
+| `gl_ablation_<dataset>_<ts>/` | Ablation study: duplication vs naive vs no-group L1 |
+| `gl_all_datasets_<ts>/` | Multi-dataset GL evaluation with cross-dataset summary |
+| `gl_hyperparam_<dataset>_<ts>/` | Hyperparameter grid search results and heatmaps |
 | `classifier_comparison/` | XGBoost vs RF and extended classifier runs |
 | `seed_stability/` | Seed stability experiment results |
 | `sensitivity_runs/` | Sensitivity analysis runs + results JSON |
@@ -191,6 +205,10 @@ Each pipeline run creates a timestamped folder. Organized subdirectories:
 `manuscript_data.json`, `manuscript_figures/`, generated `.docx` files,
 supplementary PDFs, and related publications.
 
+| Subfolder | Contents |
+|-----------|----------|
+| `group_lasso_manuscript/` | GL manuscript builder (`build_gl_manuscript.py`) and generated `GL_Manuscript_v*.docx` files. Accepts `--comparison-dir` for GSM vs GL data and reads bio validation results automatically. |
+
 ---
 
 ## `DOCS/` — Documentation
@@ -200,6 +218,7 @@ supplementary PDFs, and related publications.
 | `DEVELOPMENT.md` | Project structure & coding standards |
 | `RUNNING.md` | How to run the pipeline |
 | `INSTALL_WSL.md` | WSL/Linux setup |
+
 | `GITHUB_WORKFLOW.md` | Branching & PR guidelines |
 | `COPILOT.md` | GitHub Copilot usage |
 | `TROUBLESHOOTING.md` | Common fixes |
@@ -223,4 +242,4 @@ supplementary PDFs, and related publications.
 
 ---
 
-*Last updated: 2026-02-18*
+*Last updated: 2026-03-06*

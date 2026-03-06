@@ -126,7 +126,8 @@ def compute_bootstrap_confidence_interval(
     y_proba: Optional[np.ndarray],
     metric_name: str,
     n_bootstrap: int = BOOTSTRAP_SAMPLES,
-    confidence: float = CONFIDENCE_LEVEL
+    confidence: float = CONFIDENCE_LEVEL,
+    random_state: int = 42
 ) -> ConfidenceInterval:
     """
     Compute confidence interval for a metric using bootstrapping.
@@ -141,6 +142,7 @@ def compute_bootstrap_confidence_interval(
         metric_name: One of 'accuracy', 'f1', 'precision', 'recall', 'auc_roc'
         n_bootstrap: Number of bootstrap samples (default: 100, reduced for speed)
         confidence: Confidence level (default: 0.95 for 95% CI)
+        random_state: Random seed for reproducible bootstrap sampling
     
     Returns:
         ConfidenceInterval with lower, upper bounds and point estimate
@@ -148,8 +150,9 @@ def compute_bootstrap_confidence_interval(
     n_samples = len(y_true)
     bootstrap_scores = []
     
-    # Pre-generate all bootstrap index arrays at once (vectorized)
-    all_indices = np.random.randint(0, n_samples, size=(n_bootstrap, n_samples))
+    # Use a dedicated RNG for reproducible bootstrap sampling
+    rng = np.random.RandomState(random_state)
+    all_indices = rng.randint(0, n_samples, size=(n_bootstrap, n_samples))
     
     for i in range(n_bootstrap):
         indices = all_indices[i]
@@ -193,7 +196,8 @@ def perform_cross_validation(
     X: pd.DataFrame,
     y: pd.Series,
     cv_folds: int = DEFAULT_CV_FOLDS,
-    logger: Optional[logging.Logger] = None
+    logger: Optional[logging.Logger] = None,
+    random_state: int = 42
 ) -> CrossValidationMetrics:
     """
     Perform stratified cross-validation for robust performance estimation.
@@ -214,8 +218,8 @@ def perform_cross_validation(
     from sklearn.model_selection import cross_validate as sklearn_cv
     from sklearn.base import clone
     
-    # Use global random state for reproducible CV folds within each iteration
-    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=np.random.randint(0, 2**31))
+    # Use explicit random_state for reproducible CV fold splits
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
     
     # Single cross_validate call for all metrics (more efficient than 4 separate calls)
     scoring = ['accuracy', 'f1', 'precision', 'recall']
@@ -302,7 +306,8 @@ def train_and_evaluate_model(
     test_x: pd.DataFrame,
     test_y: pd.Series,
     logger: logging.Logger,
-    perform_cv: bool = True
+    perform_cv: bool = True,
+    random_state: int = 42
 ) -> ModelTrainingResult:
     """
     Train a model and evaluate its performance with comprehensive metrics.
@@ -322,23 +327,20 @@ def train_and_evaluate_model(
         test_y: Testing labels
         logger: Logger for tracking progress
         perform_cv: Whether to perform cross-validation (default: True)
+        random_state: Random seed for reproducibility
         
     Returns:
         ModelTrainingResult with trained model, metrics, probabilities, and CV results
-        
-    Note:
-        No random_state is set - relies on global np.random.seed() 
-        which is set per iteration for proper variation across runs.
         
     Methodology Notes (addressing reviewer concerns):
         - Multiple ML methods supported for comparative analysis
         - Probability outputs enable threshold optimization for disease prediction
         - AUC-ROC provides classification quality independent of threshold choice
     """
-    # Select model type (no random_state - uses global seed per iteration)
+    # Select model type with explicit random_state for reproducibility
     # n_jobs=-1 for final modeling RF to use all cores (this is NOT nested inside joblib)
     if model_name == "RandomForest":
-        model = RandomForestClassifier(n_estimators=100, n_jobs=-1)
+        model = RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=random_state)
     elif model_name == "XGBoost":
         # Gradient boosting: fast, accurate, with native feature importance
         model = XGBClassifier(
@@ -348,16 +350,17 @@ def train_and_evaluate_model(
             use_label_encoder=False,
             eval_metric='logloss',
             verbosity=0,
+            random_state=random_state,
             n_jobs=-1
         )
     elif model_name == "DecisionTree":
-        model = DecisionTreeClassifier()
+        model = DecisionTreeClassifier(random_state=random_state)
     elif model_name == "SVM":
-        model = SVC(probability=True)  # Enable probability estimates
+        model = SVC(probability=True, random_state=random_state)  # Enable probability estimates
     elif model_name == "KNN":
-        model = KNeighborsClassifier(n_neighbors=5, n_jobs=-1)
+        model = KNeighborsClassifier(n_neighbors=5, n_jobs=-1)  # Deterministic algorithm
     elif model_name == "MLP":
-        model = MLPClassifier(hidden_layer_sizes=(100,), max_iter=500)
+        model = MLPClassifier(hidden_layer_sizes=(100,), max_iter=500, random_state=random_state)
     else:
         logger.error(f"Unsupported model: {model_name}")
         raise ValueError(f"Unsupported model type: {model_name}")
@@ -398,9 +401,9 @@ def train_and_evaluate_model(
     test_y_arr = np.array(test_y)
     y_pred_arr = np.array(y_pred)
     
-    acc_ci = compute_bootstrap_confidence_interval(test_y_arr, y_pred_arr, y_proba, 'accuracy')
-    f1_ci = compute_bootstrap_confidence_interval(test_y_arr, y_pred_arr, y_proba, 'f1')
-    auc_ci = compute_bootstrap_confidence_interval(test_y_arr, y_pred_arr, y_proba, 'auc_roc')
+    acc_ci = compute_bootstrap_confidence_interval(test_y_arr, y_pred_arr, y_proba, 'accuracy', random_state=random_state)
+    f1_ci = compute_bootstrap_confidence_interval(test_y_arr, y_pred_arr, y_proba, 'f1', random_state=random_state + 1)
+    auc_ci = compute_bootstrap_confidence_interval(test_y_arr, y_pred_arr, y_proba, 'auc_roc', random_state=random_state + 2)
     
     metrics = {
         "accuracy": acc,
@@ -424,7 +427,10 @@ def train_and_evaluate_model(
     cv_metrics = None
     if perform_cv and len(train_x) >= DEFAULT_CV_FOLDS * 2:
         try:
-            cv_metrics = perform_cross_validation(model, train_x, train_y, DEFAULT_CV_FOLDS, logger)
+            cv_metrics = perform_cross_validation(
+                model, train_x, train_y, DEFAULT_CV_FOLDS, logger,
+                random_state=random_state
+            )
             metrics["cv_accuracy_mean"] = cv_metrics.accuracy_mean
             metrics["cv_accuracy_std"] = cv_metrics.accuracy_std
             metrics["cv_f1_mean"] = cv_metrics.f1_mean
@@ -469,7 +475,8 @@ def run_modeling(
     group_feature_mapping: List[GroupFeatureMappingData],
     model_name: str,
     top_n_groups: int,
-    logger: logging.Logger
+    logger: logging.Logger,
+    random_state: int = 42
 ) -> ModelingResult:
     """
     Train and evaluate a model using features from top-ranked groups.
@@ -484,6 +491,7 @@ def run_modeling(
         model_name: Name of ML model to use
         top_n_groups: Number of top groups to use
         logger: Logger for tracking progress
+        random_state: Random seed for reproducibility
         
     Returns:
         ModelingResult with model performance metrics
@@ -528,7 +536,8 @@ def run_modeling(
             data_train_y,
             test_x,
             data_test_y,
-            logger
+            logger,
+            random_state=random_state
         )
         
         # Create and return result with all metrics including CI and CV

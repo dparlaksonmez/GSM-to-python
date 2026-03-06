@@ -54,7 +54,8 @@ def _score_single_group(
     group_name: str,
     labels,  # np.ndarray or pd.Series — pre-converted for speed
     model_name: str,
-    cross_validation_folds: int
+    cross_validation_folds: int,
+    random_state: int = 42
 ) -> Optional[MetricsData]:
     """
     Score a single group in a worker process.
@@ -68,6 +69,8 @@ def _score_single_group(
         labels: Target labels
         model_name: Classifier name
         cross_validation_folds: Number of CV folds
+        random_state: Explicit random seed for this group (required because
+            joblib worker processes do not inherit the global np.random.seed)
         
     Returns:
         MetricsData with scoring results, or None if scoring fails
@@ -84,7 +87,8 @@ def _score_single_group(
             labels=labels,
             classifier_name=model_name,
             cross_validation_folds=cross_validation_folds,
-            logger=worker_logger
+            logger=worker_logger,
+            random_state=random_state
         )
         
         result = score_data(scoring_params)
@@ -154,7 +158,8 @@ def run_scoring(
     cross_validation_folds: int = DEFAULT_CROSS_VALIDATION_FOLDS,
     feature_scores: Optional[List[FeatureScore]] = None,
     should_save_group_features: bool = False,
-    n_jobs: int = DEFAULT_N_JOBS
+    n_jobs: int = DEFAULT_N_JOBS,
+    random_state: int = 42
 ) -> ScoringResults:
     """
     Run the complete scoring pipeline for both groups and features.
@@ -173,6 +178,8 @@ def run_scoring(
         feature_scores: Pre-computed feature scores (optional)
         should_save_group_features: Whether to save group-derived feature scores
         n_jobs: Number of parallel jobs (-1 = all CPUs, 1 = sequential)
+        random_state: Base random seed for deterministic scoring across parallel
+            workers. Each group gets a unique seed derived from this value.
         
     Returns:
         ScoringResults containing ranked groups and feature scores
@@ -207,15 +214,19 @@ def run_scoring(
         # interfering with joblib's lazy dispatch
         # Pre-convert labels to numpy once to avoid serializing a pandas Series per task
         labels_np = labels.values if hasattr(labels, 'values') else labels
+        # Generate a deterministic per-group seed so each parallel worker
+        # produces the same result regardless of execution order.
+        # Using enumerate index (not group_name hash) keeps it simple and stable.
         scoring_tasks = [
             delayed(_score_single_group)(
                 group_data=data_x[task.available_features],
                 group_name=task.group_name,
                 labels=labels_np,
                 model_name=model_name,
-                cross_validation_folds=cross_validation_folds
+                cross_validation_folds=cross_validation_folds,
+                random_state=random_state + idx
             )
-            for task in tasks
+            for idx, task in enumerate(tasks)
         ]
         results = list(Parallel(n_jobs=n_jobs, verbose=0)(tqdm(scoring_tasks, desc="📊 Scoring groups")))
         
@@ -287,13 +298,15 @@ def run_scoring(
 def score_all_features(
     data_x: pd.DataFrame,
     labels: pd.Series,
-    logger
+    logger,
+    random_state: int = 42
 ) -> List[FeatureScore]:
     """Score all features in the dataset."""
     feature_scores = score_features(
         data_x=data_x,
         labels=labels,
         feature_names=list(data_x.columns),
-        logger=logger
+        logger=logger,
+        random_state=random_state
     )
     return feature_scores
