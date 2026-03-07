@@ -14,7 +14,7 @@ malik-burcu-PUBLICATIONS/
 ~$*
 
 # data/grouping_data/
-# data/main_data
+# data/expression_data
 data/test/*.py
 
 # Byte-compiled / optimized / DLL files

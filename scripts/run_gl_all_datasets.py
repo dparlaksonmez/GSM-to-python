@@ -114,7 +114,7 @@ def run_all(
         ds_output.mkdir(parents=True, exist_ok=True)
 
         config = GroupLassoConfig()
-        config.main_data_path = f"data/main_data/{ds_id}.csv"
+        config.main_data_path = f"data/expression_data/{ds_id}.csv"
         config.n_iterations = n_iterations
         config.run_biological_validation = run_bio_validation
 

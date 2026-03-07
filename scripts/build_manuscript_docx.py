@@ -418,7 +418,12 @@ def write_abstract(doc, perf):
         "the selected genes overlap with established disease pathways "
         "and form functionally connected networks.  "
         "The complete pipeline and a browser-based interface are "
-        "released as open-source software."
+        "released as open-source software.  "
+        "Additionally, the framework introduces a clinical inference mode "
+        "that saves an ensemble of trained models as a portable model "
+        "bundle (.gsm.zip), enabling researchers to apply the trained "
+        "classifier to new patient samples and generate confidence-scored "
+        "diagnostic reports — a capability absent from all prior G-S-M tools."
     )
     p = doc.add_paragraph(text)
     for r in p.runs:
@@ -451,6 +456,7 @@ def write_highlights(doc, perf):
         "DisGeNET knowledge base drives disease-specific grouping",
         f"Mean F1 {avg_f1:.2f} and AUC {avg_auc:.2f} on seven cancer datasets",
         "Selected genes map to known disease pathways (STRING/Enrichr)",
+        "First G-S-M tool with clinical inference via model bundles",
         "Open-source pipeline with browser interface for reproducibility",
     ]
     for h in highlights:
@@ -639,7 +645,9 @@ def write_introduction(doc):
             "graphical interface for non-programmers — is released as "
             "open-source software.  "
             "The rest of the paper is organised as follows: Section 2 "
-            "covers materials and methods, Section 3 presents the "
+            "covers materials and methods — including a new clinical "
+            "inference pipeline that saves trained model ensembles for "
+            "patient-level diagnosis, Section 3 presents the "
             "experimental results, Section 4 discusses strengths, "
             "limitations and future work, and Section 5 concludes."
         ),
@@ -853,9 +861,9 @@ def write_methods(doc, perf, figs):
          "Four safeguards were applied throughout.  "
          "(i) Benjamini-Hochberg FDR correction during preliminary gene "
          "filtering (α = 0.05).  "
-         "(ii) Bootstrap 95 % confidence intervals (1 000 resamples) for "
+         "(ii) Bootstrap 95 % confidence intervals (100 resamples) for "
          "each reported metric.  "
-         "(iii) Stratified five-fold cross-validation within every iteration "
+         "(iii) Stratified three-fold cross-validation within every iteration "
          "to avoid optimistic bias from a single random split.  "
          "(iv) AUC-ROC as a threshold-free measure of discrimination, "
          "which is especially useful when classes are imbalanced [10].")
@@ -865,9 +873,9 @@ def write_methods(doc, perf, figs):
                   ["BH FDR correction", "Control false discoveries",
                    "α = 0.05 on Welch t-test p-values"],
                   ["Bootstrap CI", "Quantify metric uncertainty",
-                   "1 000 resamples; percentile method"],
+                   "100 resamples; percentile method"],
                   ["Stratified k-fold CV", "Robust mean performance",
-                   "k = 5; class balance preserved"],
+                   "k = 3; class balance preserved"],
                   ["AUC-ROC", "Threshold-free evaluation",
                    "From probability predictions"],
               ],
@@ -942,7 +950,7 @@ def write_methods(doc, perf, figs):
                    "Fraction of samples for training"],
                   ["CV folds (scoring)", "3", "Folds for group scoring"],
                   ["FDR threshold", "0.05", "BH-adjusted significance level"],
-                  ["Bootstrap samples", "1 000", "Resamples for CI estimation"],
+                  ["Bootstrap samples", "100", "Resamples for CI estimation"],
                   ["Max. groups", "10", "Upper bound on groups retained"],
                   ["Classifier", "Random Forest", "Default bagging ensemble"],
                   ["Class balancing", "Enabled (undersampling)",
@@ -1237,6 +1245,56 @@ def write_methods(doc, perf, figs):
          "differences showed up only in the harder GDS2545 dataset.  "
          "These numbers support the default settings used throughout "
          "the study.")
+
+    # 2.9 Clinical Inference Pipeline
+    heading(doc, "2.9 Clinical Inference Pipeline", 2)
+    para(doc,
+         "A limitation common to all prior G-S-M tools — and, more broadly, "
+         "most published biomarker-discovery pipelines — is that trained "
+         "models are evaluated, reported, and then discarded.  The models "
+         "never leave the training environment, so the entire workflow "
+         "terminates at the performance-reporting stage with no mechanism "
+         "for applying the classifier to new patient samples.  To bridge "
+         "this gap, we implemented a clinical inference mode that operates "
+         "in three stages: model bundling, ensemble inference, and "
+         "structured reporting.")
+    para(doc, "Model bundling.", bold_prefix="Model bundling.")
+    para(doc,
+         "At the end of each pipeline run, the top-K models (default "
+         "K = 10) are selected by held-out F1 score and packaged into a "
+         "self-contained archive (.gsm.zip) together with the fitted "
+         "normalization scaler, the ordered feature list, disease-group "
+         "names, and full training metadata (dataset, random seed, "
+         "iteration count, per-model metrics, sklearn version).  This "
+         "bundle is portable across machines and requires only scikit-learn "
+         "and joblib to load.")
+    para(doc, "Ensemble inference.", bold_prefix="Ensemble inference.")
+    para(doc,
+         "Given a bundle and a new patient expression matrix, the "
+         "inference engine applies the saved scaler to align the patient "
+         "data with the training distribution, then passes each sample "
+         "through all K models.  Two aggregation strategies are supported: "
+         "mean probability (default), which averages the predicted class "
+         "probabilities, and majority vote.  For each sample, the engine "
+         "computes a confidence score (the absolute distance from the "
+         "decision boundary, scaled to [0, 1]), a model-agreement ratio "
+         "(fraction of ensemble members that concur), and a clinical risk "
+         "level (HIGH ≥ 0.80, MEDIUM ≥ 0.55, LOW < 0.55).  Per-sample "
+         "feature importance is estimated by measuring how the ensemble "
+         "prediction shifts when each candidate gene is zeroed out — a "
+         "fast, model-agnostic local-importance approximation.")
+    para(doc, "Clinical report.", bold_prefix="Clinical report.")
+    para(doc,
+         "The results are collected into a structured report with a "
+         "per-patient summary table (predicted class, confidence, risk "
+         "level, agreement ratio, top contributing genes) and a prominent "
+         "research-only disclaimer.  Reports are saved in both plain-text "
+         "and Excel formats.  The inference pipeline is accessible through "
+         "three interfaces — a command-line tool (python -m gsm infer), "
+         "a Python API (from src.inference import load_bundle, infer), "
+         "and a dedicated Clinical Inference tab in the Streamlit web "
+         "interface — making it usable by bioinformaticians, clinician-"
+         "researchers, and hospital IT systems alike.")
 
 
 def write_results(doc, perf, val, m_figs, ds_figs):
@@ -1876,7 +1934,13 @@ def write_discussion(doc, perf, val):
             "[60].  Fourth, the Streamlit-based graphical interface "
             "(Section 2) makes the full pipeline accessible to "
             "non-programmers, whereas all prior G-S-M tools required "
-            "either R/KNIME expertise [22] or command-line usage."
+            "either R/KNIME expertise [22] or command-line usage.  "
+            "Fifth, the clinical inference pipeline described in "
+            "Section 2.9 is, to our knowledge, the first time any "
+            "G-S-M tool has offered a production-ready path from "
+            "trained models to patient-level predictions, complete "
+            "with ensemble confidence scoring, risk classification, "
+            "and structured clinical reports."
         ),
         (
             "One obvious concern with knowledge-driven methods is that "
@@ -2033,8 +2097,43 @@ def write_discussion(doc, perf, val):
          "patterns, which translates into more biologically integrated "
          "gene panels.")
 
-    # 4.7
-    heading(doc, "4.7 Limitations", 2)
+    # 4.7 – From Research to Clinic: Inference Bundles
+    heading(doc, "4.7 From Research to Clinic: Inference Bundles", 2)
+    para(doc,
+         "Perhaps the most significant practical contribution of this work "
+         "is the clinical inference pipeline (Section 2.9).  In our review "
+         "of the G-S-M literature — spanning SVM-RCE [22], maTE [59], "
+         "CogNet [59], GediNET [57], miRGediNET [60], 3Mint [43], "
+         "3Mont [67], ReScore [61], and CCPred [63] — none provides a "
+         "mechanism for saving trained classifiers and applying them to "
+         "unseen patient data.  The workflow in every published tool "
+         "terminates at the evaluation stage: metrics and gene rankings "
+         "are reported, and the trained model objects are discarded.")
+    para(doc,
+         "The model bundle approach introduced here addresses this gap.  "
+         "By packaging the top-K models, the fitted scaler, and the "
+         "feature metadata into a single portable archive, we enable a "
+         "clinician-researcher to train once and predict many times.  "
+         "The ensemble of K models (default K = 10) provides per-patient "
+         "consensus confidence scores, which are more informative than "
+         "a single binary prediction and align with the clinical need for "
+         "graded risk assessment.  The model-agreement ratio offers an "
+         "additional quality signal: if only 6 of 10 models agree, the "
+         "prediction is flagged as uncertain regardless of the nominal "
+         "confidence score.")
+    para(doc,
+         "We deliberately included a research-only disclaimer in every "
+         "generated report.  The bundles are intended for exploratory "
+         "clinical research, not for regulatory-grade diagnostics, which "
+         "would additionally require prospective validation under "
+         "controlled clinical conditions, IVD certification, and ongoing "
+         "performance monitoring.  Nevertheless, the infrastructure is "
+         "now in place: the bundle format is versioned, tracks sklearn "
+         "compatibility, and validates feature alignment at inference "
+         "time — all prerequisites for a future regulatory pathway.")
+
+    # 4.8
+    heading(doc, "4.8 Limitations", 2)
     limitations = [
         ("Knowledge-base dependency.  "
          "How good the groups are depends on how complete the external "
@@ -2061,8 +2160,8 @@ def write_discussion(doc, perf, val):
     for l in limitations:
         bullet(doc, l)
 
-    # 4.8
-    heading(doc, "4.8 Future Directions", 2)
+    # 4.9
+    heading(doc, "4.9 Future Directions", 2)
     futures = [
         "Extending the framework to multi-class classification and "
         "time-to-event (survival) modelling.",
@@ -2091,6 +2190,9 @@ def write_discussion(doc, perf, val):
         "Running prospective validation on independent clinical "
         "cohorts to see how well the predictions hold up outside "
         "retrospective GEO data.",
+        "Expanding the clinical inference pipeline with SHAP-based "
+        "per-patient explanations, regulatory-grade audit trails, "
+        "and integration with FHIR/HL7 clinical data standards.",
     ]
     for f in futures:
         numbered(doc, f)
@@ -2141,6 +2243,12 @@ def write_conclusions(doc, perf, val):
         "verification and to lower the barrier for researchers who "
         "do not write code, the complete implementation, together with "
         "a browser-based interface, is released as open-source software.",
+        "Clinical inference.  The framework is the first in the G-S-M "
+        "lineage to save trained model ensembles as portable bundles "
+        "and support patient-level diagnosis with confidence-scored "
+        "predictions, risk classification, and per-sample feature "
+        "importance — bridging the gap between research pipelines "
+        "and clinical decision-support tools.",
     ]
     for c in conclusions:
         numbered(doc, c)

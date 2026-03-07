@@ -55,13 +55,13 @@ from src.utils.biological_validation import (
 ##### Configuration #####
 
 DATASETS = {
-    "GDS1962": "data/main_data/GDS1962.csv",
-    "GDS2545": "data/main_data/GDS2545.csv",
-    "GDS2547": "data/main_data/GDS2547.csv",
-    "GDS2771": "data/main_data/GDS2771.csv",
-    "GDS3257": "data/main_data/GDS3257.csv",
-    "GDS3837": "data/main_data/GDS3837.csv",
-    "GDS5499": "data/main_data/GDS5499.csv",
+    "GDS1962": "data/expression_data/GDS1962.csv",
+    "GDS2545": "data/expression_data/GDS2545.csv",
+    "GDS2547": "data/expression_data/GDS2547.csv",
+    "GDS2771": "data/expression_data/GDS2771.csv",
+    "GDS3257": "data/expression_data/GDS3257.csv",
+    "GDS3837": "data/expression_data/GDS3837.csv",
+    "GDS5499": "data/expression_data/GDS5499.csv",
 }
 
 GROUPING_FILE = "data/grouping_data/cancer-DisGeNET_gedinet.txt"

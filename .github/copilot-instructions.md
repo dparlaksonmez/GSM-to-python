@@ -7,6 +7,11 @@
 > defaults) see **[`PROJECT_MAP.md`](../PROJECT_MAP.md)** in the repo root.
 > That file is the living document that AI agents and contributors should
 > update whenever files are added, removed, or renamed.
+> Check and analyze `PROJECT_MAP.md` before making any code changes to understand the current structure and conventions.
+> Generation of to-do steps in the agent model is not efficient. Because it has a limited number to generate to-do steps. Instead, write temporary roadmap files to plan out the implementation in detail, then execute the plan in one go.
+> When we provide a prompt, do not strictly follow the instructions in the prompt. 
+> Instead, use your judgement and creativity to decide how to best respond to the prompt
+> while still adhering to the overall goals and principles of the project.
 
 ---
 
@@ -195,7 +200,7 @@ Full list: `dependencies.txt`
 - **Default classifier**: Random Forest (seed = 44) for both scoring and modeling.
 - **Iterations**: 100 per run, each with a new random seed.
 - **FDR threshold**: α = 0.05, Welch t-test + Benjamini–Hochberg.
-- **CV folds**: 5-fold stratified within each iteration.
+- **CV folds**: 3-fold stratified (scoring and modeling).
 - **Feature ranking**: Robust Rank Aggregation (Stuart et al.).
 - **Excluded datasets**: GDS3268 (breast, 100 % zero-sig), GDS4206 (HCC, 92 % zero-sig). See `DATASET_EXCLUSIONS.md`.
 - **Manuscripts**: Built programmatically via `scripts/build_manuscript_docx.py` from `reports_ARCHIVE/manuscript_data.json`.

@@ -30,9 +30,9 @@ from sklearn.metrics import make_scorer, f1_score, precision_score, recall_score
 # Pre-create scorer objects to avoid recreation overhead on each call
 _SCORING_METRICS = {
     'accuracy': 'accuracy',
-    'f1_macro': make_scorer(f1_score, average='macro', zero_division=1),
-    'precision_macro': make_scorer(precision_score, average='macro', zero_division=1),
-    'recall_macro': make_scorer(recall_score, average='macro', zero_division=1),
+    'f1_macro': make_scorer(f1_score, average='macro', zero_division=0),
+    'precision_macro': make_scorer(precision_score, average='macro', zero_division=0),
+    'recall_macro': make_scorer(recall_score, average='macro', zero_division=0),
 }
 
 

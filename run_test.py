@@ -17,7 +17,7 @@ Usage:
     python run_test.py --real-data --iterations 3
 
 Output:
-    Results saved to: output/gsm_<timestamp>_test_main_data_test_grouping_data/
+    Results saved to: output/gsm_<timestamp>_test_expression_data_test_grouping_data/
 """
 
 import sys
@@ -46,11 +46,11 @@ from src.workflows.GSM_workflow_config import (
 
 ##### Test Data Paths #####
 TEST_DATA_DIR = Path("data/test")
-TEST_EXPRESSION_FILE = TEST_DATA_DIR / "test_main_data.csv"
+TEST_EXPRESSION_FILE = TEST_DATA_DIR / "test_expression_data.csv"
 TEST_GROUPING_FILE = TEST_DATA_DIR / "test_grouping_data.csv"
 
 # Real data for small test runs
-REAL_DATA_DIR = Path("data/main_data")
+REAL_DATA_DIR = Path("data/expression_data")
 REAL_EXPRESSION_FILE = REAL_DATA_DIR / "GDS2545.csv"
 REAL_GROUPING_FILE = Path("data/grouping_data/cancer-DisGeNET_gedinet.txt")
 

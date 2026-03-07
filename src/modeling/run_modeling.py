@@ -111,6 +111,8 @@ class ModelingResult:
     training_time: float = 0.0
     used_features: List[str] = field(default_factory=list)
     used_groups: List[str] = field(default_factory=list)
+    # Fitted model object (optional, for inference bundle saving)
+    fitted_model: Optional[Any] = field(default=None, repr=False)
 
 
 @dataclass
@@ -564,7 +566,8 @@ def run_modeling(
             training_time=training_result.metrics["training_time"],
             feature_importance=training_result.feature_importance,
             used_features=available_features,
-            used_groups=features_result.used_group_names
+            used_groups=features_result.used_group_names,
+            fitted_model=training_result.model,
         )
         
     except Exception as e:

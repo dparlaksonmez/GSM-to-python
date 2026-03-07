@@ -29,7 +29,7 @@ project_dir = Path(__file__).resolve().parents[2]
 # │  Format: CSV or TSV with samples as rows, genes as columns               │
 # │  Must include a class label column (see LABEL_COLUMN_NAME below)         │
 # └──────────────────────────────────────────────────────────────────────────┘
-INPUT_EXPRESSION_DATA = "data/main_data/GDS2545.csv"
+INPUT_EXPRESSION_DATA = "data/expression_data/GDS2545.csv"
 MAIN_DATA_FILE_SEPARATOR = "auto"       # "auto" detects separator; or use "," / "\t"
 
 # ┌──────────────────────────────────────────────────────────────────────────┐
@@ -250,7 +250,7 @@ LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 # ────────────────────────────────────────────────────────────────────────────
 # PRESET: Quick Test (for debugging/development)
 # ────────────────────────────────────────────────────────────────────────────
-# INPUT_EXPRESSION_DATA = "data/test/test_main_data.csv"
+# INPUT_EXPRESSION_DATA = "data/test/test_expression_data.csv"
 # INPUT_GROUP_DATA = "data/test/test_grouping_data.csv"
 # NUMBER_OF_ITERATIONS = 3
 # BEST_GROUPS_TO_KEEP = 5

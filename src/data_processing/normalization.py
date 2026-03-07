@@ -5,6 +5,7 @@ This module handles data normalization operations in the GSM pipeline.
 
 Key Functions:
 - normalize_data: Main function for normalizing input data
+- fit_scaler: Fit and return a scaler for inference model bundles
 - _minmax_normalize: Min-max normalization implementation
 - _zscore_normalize: Z-score normalization implementation
 - _robust_normalize: Robust scaling implementation
@@ -77,6 +78,40 @@ def _robust_normalize(data: pd.DataFrame) -> pd.DataFrame:
         columns=data.columns,
         index=data.index
     )
+
+def fit_scaler(
+    data: pd.DataFrame,
+    label_column_name: str,
+    method: str = 'zscore',
+) -> object:
+    """Fit a normalization scaler on the data and return it.
+
+    Used by the inference pipeline to save the scaler alongside
+    trained models, ensuring identical preprocessing at inference time.
+
+    Args:
+        data: Input DataFrame (will use all columns except label)
+        label_column_name: Column to exclude from fitting
+        method: 'zscore', 'minmax', or 'robust'
+
+    Returns:
+        Fitted sklearn scaler object (StandardScaler, MinMaxScaler, or RobustScaler)
+    """
+    cols = data.columns.difference([label_column_name])
+    numeric_data = data[cols]
+
+    scaler_map = {
+        'zscore': StandardScaler,
+        'minmax': MinMaxScaler,
+        'robust': RobustScaler,
+    }
+    if method not in scaler_map:
+        raise ValueError(f"Unknown method: {method}. Choose from {list(scaler_map)}")
+
+    scaler = scaler_map[method]()
+    scaler.fit(numeric_data)
+    return scaler
+
 
 def normalize_data(
     data: pd.DataFrame,

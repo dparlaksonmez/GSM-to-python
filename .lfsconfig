@@ -1,2 +1,2 @@
 [lfs]
-	fetchinclude = data/main_data/*, data/grouping_data/*, data/test/*
+	fetchinclude = data/expression_data/*, data/grouping_data/*, data/test/*

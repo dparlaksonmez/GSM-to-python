@@ -35,8 +35,8 @@ class ClassificationWorkflowConfig:
     
     ##### DATA CONFIGURATION #####
     # Input data file path (relative to project root)
-    input_data_path: str = "data/test/test_main_data.csv"
-    # input_data_path: str = "data/main_data/GDS2545.csv"
+    input_data_path: str = "data/test/test_expression_data.csv"
+    # input_data_path: str = "data/expression_data/GDS2545.csv"
 
     
     # Target column name in the dataset

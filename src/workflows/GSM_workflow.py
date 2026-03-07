@@ -99,6 +99,11 @@ from src.utils.rank_aggregation import (
     aggregate_model_feature_importance_rra
 )
 from src.utils.biological_validation import run_biological_validation
+from src.data_processing.normalization import fit_scaler
+from src.inference.model_bundle import (
+    ModelArtifact,
+    save_bundle as save_model_bundle,
+)
 import time
 
 ##### Helper Functions #####
@@ -376,6 +381,16 @@ def gsm_run(
         sampling_method=sampling_method
     )
     logger.info("Data preprocessed.")
+
+    # Fit normalization scaler for inference bundle
+    # This captures the exact scaler parameters used during preprocessing
+    inference_scaler = fit_scaler(
+        data_preprocessed,
+        label_column_name=label_column,
+        method=normalization_method,
+    )
+    logger.debug("Normalization scaler fitted for inference bundle")
+
     group_data_processed = preprocess_grouping_data(group_data, 
                                                     gene_column_name=gene_column,
                                                     group_column_name=group_column,
@@ -405,6 +420,7 @@ def gsm_run(
 
     iteration_results: List[IterationResult] = []
     iteration_times: List[float] = []  # Track iteration durations for ETA estimation
+    collected_model_artifacts: List[ModelArtifact] = []  # For inference bundle
     pipeline_start_time = time.time()
     
     # Changed from range(n_iterations) to range(1, n_iterations + 1)
@@ -444,6 +460,19 @@ def gsm_run(
             random_seed=iteration_seed,
             modeling_results=modeling_result
         ))
+
+        # Collect the best model from this iteration for the inference bundle
+        if modeling_result:
+            best_model_result = max(modeling_result, key=lambda r: r.f1_score)
+            if best_model_result.fitted_model is not None:
+                collected_model_artifacts.append(ModelArtifact(
+                    model=best_model_result.fitted_model,
+                    iteration=i,
+                    f1_score=best_model_result.f1_score,
+                    auc_roc=best_model_result.auc_roc,
+                    num_features_used=best_model_result.num_features_used,
+                    num_groups_used=best_model_result.num_groups_used,
+                ))
         
         # Track iteration timing and compute ETA
         iteration_duration = time.time() - iteration_start_time
@@ -502,6 +531,48 @@ def gsm_run(
     aggregated_features = None
     robust_rank_groups = None
     robust_rank_features = None
+
+    # Consolidate per-iteration ranked group CSVs into a single Excel file
+    # so the RRA aggregation code can consume it.
+    try:
+        ranked_groups_dir = output_folder_path / "ranked_groups"
+        ranked_groups_combined_path = output_folder_path / "ranked_groups_all_iterations.xlsx"
+        if ranked_groups_dir.exists():
+            csv_files = sorted(ranked_groups_dir.glob("iter_*_groups.csv"))
+            if csv_files:
+                frames = [pd.read_csv(f) for f in csv_files]
+                combined_groups_df = pd.concat(frames, ignore_index=True)
+                combined_groups_df.to_excel(ranked_groups_combined_path, index=False)
+                logger.debug(f"Consolidated {len(csv_files)} ranked group files")
+    except Exception as e:
+        logger.warning(f"Failed to consolidate ranked groups: {e}")
+
+    # Build ranked features file from modeling results (feature_importance per iteration)
+    try:
+        ranked_features_combined_path = output_folder_path / "ranked_features_all_iterations.xlsx"
+        if results_json_path.exists():
+            with open(results_json_path, 'r') as f:
+                _results_for_features = json.load(f)
+            feature_rows = []
+            for iter_data in _results_for_features:
+                iter_num = iter_data["metadata"]["iteration"]
+                # Use the result with the most features (last modeling step)
+                results_list = iter_data.get("results", [])
+                if results_list:
+                    best_result = max(results_list, key=lambda r: r.get("num_features_used", 0))
+                    fi = best_result.get("feature_importance", {})
+                    for feat_name, importance in fi.items():
+                        feature_rows.append({
+                            "feature_name": feat_name,
+                            "importance_score": importance,
+                            "iteration": iter_num,
+                        })
+            if feature_rows:
+                features_df = pd.DataFrame(feature_rows)
+                features_df.to_excel(ranked_features_combined_path, index=False)
+                logger.debug(f"Built ranked features file: {len(feature_rows)} entries")
+    except Exception as e:
+        logger.warning(f"Failed to build ranked features file: {e}")
     
     if results_json_path.exists():
         with open(results_json_path, 'r') as f:
@@ -617,6 +688,51 @@ def gsm_run(
             logger.warning(f"Biological validation failed: {e}")
     elif run_biological_validation_flag:
         logger.warning("Biological validation skipped: results JSON not found")
+
+    # ── Save Model Bundle for Clinical Inference ──
+    if collected_model_artifacts:
+        try:
+            # Determine feature names and group names from the best overall model
+            best_overall = max(collected_model_artifacts, key=lambda m: m.f1_score)
+            # Find the corresponding ModelingResult to get feature/group names
+            best_features: List[str] = []
+            best_groups: List[str] = []
+            for res in iteration_results:
+                for mr in res.modeling_results:
+                    if (mr.f1_score == best_overall.f1_score
+                            and mr.used_features):
+                        best_features = mr.used_features
+                        best_groups = mr.used_groups
+                        break
+                if best_features:
+                    break
+
+            if best_features:
+                bundle_path = save_model_bundle(
+                    models=collected_model_artifacts,
+                    feature_names=best_features,
+                    group_names=best_groups,
+                    scaler=inference_scaler,
+                    normalization_method=normalization_method,
+                    label_mapping={
+                        "positive": positive_class_label,
+                        "negative": negative_class_label,
+                    },
+                    dataset_name=main_data_stem,
+                    model_name=model_name,
+                    n_training_samples=len(data_preprocessed),
+                    n_iterations_total=n_iterations,
+                    random_seed=initial_seed,
+                    output_dir=output_folder_path,
+                    logger=logger,
+                )
+                logger.info(f"🏥 Clinical inference bundle: {bundle_path.name}")
+            else:
+                logger.warning("No feature names found; skipping bundle save")
+        except Exception as e:
+            logger.warning(f"Model bundle save failed: {e}")
+    else:
+        logger.warning("No models collected; skipping bundle save")
 
     logger.info("✅ GSM pipeline completed successfully")
     return output_folder_path

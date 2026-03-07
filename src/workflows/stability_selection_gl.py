@@ -294,7 +294,7 @@ def run_stability_selection(
 
     ##### STEP 1: Load data #####
     config = GroupLassoConfig()
-    config.main_data_path = f"data/main_data/{dataset}.csv"
+    config.main_data_path = f"data/expression_data/{dataset}.csv"
     X, y = _load_expression_data(config, logger)
     group_df = _load_grouping_data(config, logger)
     dup_result = _build_duplication_map(X, group_df, config, logger)

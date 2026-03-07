@@ -83,7 +83,7 @@ CV_FOLDS = 5               # stratified CV folds
 TTEST_TOP_K = 100          # genes to keep for RF-ttest baseline
 RANDOM_SEED_BASE = 42
 project_root = Path(__file__).resolve().parent.parent
-DATA_DIR = project_root / "data" / "main_data"
+DATA_DIR = project_root / "data" / "expression_data"
 
 
 ##### HELPER FUNCTIONS #####

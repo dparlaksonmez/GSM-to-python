@@ -54,7 +54,7 @@ MODELS_TO_BENCHMARK = [
 ]
 
 # Use real data for meaningful benchmarks
-EXPRESSION_FILE = str(PROJECT_ROOT / "data" / "main_data" / "GDS2545.csv")
+EXPRESSION_FILE = str(PROJECT_ROOT / "data" / "expression_data" / "GDS2545.csv")
 GROUPING_FILE = str(PROJECT_ROOT / "data" / "grouping_data" / "cancer-DisGeNET_gedinet.txt")
 
 # Pipeline settings (match production config)

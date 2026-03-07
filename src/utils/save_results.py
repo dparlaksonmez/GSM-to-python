@@ -17,6 +17,27 @@ import shutil  # Added for file copying
 
 from src.modeling.run_modeling import ModelingResult
 
+# Fields that hold non-JSON-serializable objects (e.g., sklearn models)
+_NON_SERIALIZABLE_FIELDS = {"fitted_model"}
+
+
+def _strip_non_serializable(obj: Any) -> Any:
+    """Recursively remove non-serializable fields from nested dicts/lists.
+
+    Used before json.dump to drop fitted model objects that cannot be
+    converted to JSON.
+    """
+    if isinstance(obj, dict):
+        return {
+            k: _strip_non_serializable(v)
+            for k, v in obj.items()
+            if k not in _NON_SERIALIZABLE_FIELDS
+        }
+    if isinstance(obj, list):
+        return [_strip_non_serializable(item) for item in obj]
+    return obj
+
+
 @dataclass
 class IterationMetadata:
     """Metadata for a single iteration of the modeling process."""
@@ -137,7 +158,7 @@ def adjust_column_width(worksheet):
             try:
                 if len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
-            except:
+            except Exception:
                 pass
         adjusted_width = (max_length + 2) * 1.2
         worksheet.column_dimensions[column_letter].width = adjusted_width
@@ -200,8 +221,11 @@ def save_modeling_results(
             )
 
         output_file = output_path / f"{experiment_name}_all_iterations.json"
+        serializable = _strip_non_serializable(
+            [asdict(payload) for payload in payloads]
+        )
         with open(output_file, 'w') as f:
-            json.dump([asdict(payload) for payload in payloads], f, indent=2)
+            json.dump(serializable, f, indent=2)
 
         logger.debug(f"Saved results: {output_file}")
 
@@ -309,7 +333,7 @@ def save_summary_report(
             f.write("     provide feature importance for biological interpretation.\n\n")
             f.write("4. VALIDATION:\n")
             f.write("   - Stratified K-fold cross-validation for robust estimates\n")
-            f.write("   - Bootstrap confidence intervals (1000 samples, 95% CI)\n")
+            f.write("   - Bootstrap confidence intervals (100 resamples, 95% CI)\n")
             f.write("   - AUC-ROC for threshold-independent classification quality\n")
             f.write("   - Probability predictions for risk stratification\n\n")
             

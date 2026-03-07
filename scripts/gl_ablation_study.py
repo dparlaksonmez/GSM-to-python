@@ -497,7 +497,7 @@ def run_ablation(
 
     # Build config
     config = GroupLassoConfig()
-    config.main_data_path = f"data/main_data/{dataset}.csv"
+    config.main_data_path = f"data/expression_data/{dataset}.csv"
     config.n_iterations = n_iterations
 
     # Load data using existing workflow loader (handles duplication).

@@ -20,7 +20,7 @@ class GroupLassoConfig:
     """Configuration for the Group Lasso workflow."""
     # --- File Paths ---
     # Path to the main dataset containing features and the target variable.
-    main_data_path: str = "data/main_data/GDS1962.csv"
+    main_data_path: str = "data/expression_data/GDS1962.csv"
     # Path to the file defining the groups for features.
     group_data_path: str = "data/grouping_data/cancer-DisGeNET_gedinet.txt"
 

@@ -24,6 +24,17 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
  Disease-gene  Group      Final classifier +
  group         ranking    ranked features +
  projection    by ML      biological validation
+                               │
+                               ▼
+                         MODEL BUNDLE (.gsm.zip)
+                               │
+                    ┌──────────┼──────────┐
+                    ▼          ▼          ▼
+                  CLI      Web UI     Python API
+                    │          │          │
+                    ▼          ▼          ▼
+              CLINICAL INFERENCE
+              (ensemble prediction + report)
 ```
 
 1. **Filter** — Welch t-test + Benjamini–Hochberg FDR (α = 0.05)
@@ -32,6 +43,8 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 4. **Model** — Train final classifier on top-ranked groups (5-fold CV)
 5. **Rank** — Robust Rank Aggregation across 100 iterations
 6. **Validate** — Enrichr + STRING-db + DisGeNET biological enrichment
+7. **Bundle** — Save top-10 models as a `.gsm.zip` for clinical inference
+8. **Infer** — Diagnose new patient samples using ensemble predictions
 
 ---
 
@@ -66,6 +79,104 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 | [GitHub Copilot Guide](DOCS/COPILOT.md) | AI-assisted coding setup |
 | [Project Map](PROJECT_MAP.md) | Complete file/folder/function reference |
 | [Dataset Exclusions](DATASET_EXCLUSIONS.md) | Why GDS3268 and GDS4206 were dropped |
+| [Web Deployment](DOCS/WEB_DEPLOYMENT.md) | Options for publishing inference as a website |
+
+---
+
+## Clinical Inference 🏥
+
+After training, the pipeline automatically saves a **model bundle** (`.gsm.zip`)
+containing the top-10 fitted models, the normalization scaler, feature names,
+and full training metadata. This bundle can be used to diagnose new patient
+samples via **three interfaces**.
+
+**Multi-Bundle Inference:** Combine models from multiple datasets (e.g. prostate
++ lung + colorectal) for more robust, cross-validated predictions. Each bundle
+contributes independently; the consensus is weighted by training F1.
+
+### Quick Start — Interactive CLI (Recommended)
+
+```bash
+# Launch the interactive guided menu — no arguments needed
+python -m gsm
+```
+
+The interactive mode walks you through dataset selection, classifier choice,
+iteration count, and more — with numbered menus and color-coded output.
+
+![GSM CLI Interactive Menu](assets/gsm_cli.png)
+
+### Quick Start — Direct Commands
+
+```bash
+# 1. Train and produce a model bundle
+python -m gsm train --data data/expression_data/GDS2545.csv \
+                     --groups data/grouping_data/cancer-DisGeNET_gedinet.txt
+
+# 2. Inspect the bundle
+python -m gsm bundle-info --bundle output/.../bundles/bundle_GDS2545_*.gsm.zip
+
+# 3. Run inference on new patient samples
+python -m gsm infer --bundle output/.../bundles/bundle_GDS2545_*.gsm.zip \
+                     --patients new_patients.csv \
+                     --output results/
+
+# 4. Multi-bundle inference (combine multiple datasets)
+python -m gsm multi-infer \
+    -b output/.../bundle_GDS2545_*.gsm.zip \
+       output/.../bundle_GDS3257_*.gsm.zip \
+    -p new_patients.csv
+```
+
+### Quick Start — Python API
+
+```python
+from src.inference import load_bundle, infer
+from src.inference.clinical_report import save_clinical_report
+import pandas as pd, logging
+
+logger = logging.getLogger("inference")
+bundle = load_bundle("output/.../bundles/bundle_GDS2545.gsm.zip", logger=logger)
+patients = pd.read_csv("new_patients.csv")
+
+summary = infer(bundle, patients, logger=logger)
+for r in summary.results:
+    print(f"{r.sample_id}: {r.predicted_label} "
+          f"(confidence={r.confidence:.1%}, risk={r.risk_level})")
+
+save_clinical_report(summary, Path("results/"), logger)
+```
+
+### Quick Start — Streamlit Web UI
+
+```bash
+streamlit run src/ui/app.py
+# Click "🏥 Clinical Inference" → upload bundle → upload patient CSV → Run
+```
+
+### What the Report Contains
+
+Each patient receives:
+- **Predicted class** (disease / control) with mapped label
+- **Confidence score** (0–100%, distance from decision boundary)
+- **Risk level** — HIGH (≥ 80%), MEDIUM (≥ 55%), LOW (< 55%)
+- **Model agreement** — fraction of ensemble models that concur
+- **Top contributing genes** — per-sample feature importance
+- **Research disclaimer** — not a clinical diagnosis
+
+Reports are saved as both `.txt` (human-readable) and `.xlsx` (machine-readable).
+
+### Patient Data Format
+
+The patient CSV should have **gene names as column headers**, matching the
+training data platform. Missing features are zero-filled; if >50% are
+missing, inference is refused. A sample-ID column is optional.
+
+```csv
+sample_id,TP53,BRCA1,EGFR,MYC,...
+patient_001,5.23,3.11,7.89,2.45,...
+patient_002,4.87,2.99,6.54,3.01,...
+```
 
 ---
 
@@ -122,8 +233,17 @@ python src/workflows/GSM_workflow.py
 # Batch run on all 7 datasets (100 iterations each)
 python run_all_datasets.py --iterations 100
 
-# Optional: Streamlit Web UI
+# Streamlit Web UI (training + inference)
 streamlit run src/ui/app.py
+
+# Interactive CLI (guided menu — recommended for first use)
+python -m gsm
+
+# Direct CLI commands
+python -m gsm train --test --iterations 3
+python -m gsm infer --bundle output/.../bundle.gsm.zip --patients data.csv
+python -m gsm bundle-info --bundle output/.../bundle.gsm.zip
+python -m gsm ui                    # Launch Streamlit dashboard
 ```
 
 For detailed setup, see the [Installation Guide](DOCS/INSTALL_WSL.md).
@@ -162,6 +282,16 @@ python run_all_datasets.py --iterations 100
 # Ctrl+A then D to detach — reattach later with: screen -r gsm_batch
 ```
 
+### Clinical Inference (after training)
+```bash
+# Via CLI
+python -m gsm infer --bundle output/.../bundles/bundle_GDS2545.gsm.zip \
+                     --patients new_patients.csv --output inference_results/
+
+# Via Streamlit
+streamlit run src/ui/app.py   # Click "🏥 Clinical Inference" tab
+```
+
 ---
 
 ## Output Structure
@@ -190,14 +320,17 @@ GSM-to-python/
 │   ├── scoring/                #   Phase II: group evaluation
 │   ├── modeling/               #   Phase III: final classifier
 │   ├── machine_learning/       #   ML model factory (RF, XGBoost, etc.)
+│   ├── inference/              #   Clinical inference: bundles, engine, reports
 │   ├── utils/                  #   Logging, saving, visualization, RRA
 │   ├── workflows/              #   Entry points & configs
-│   └── ui/                     #   Streamlit web interface
+│   ├── ui/                     #   Streamlit web interface
+│   └── cli.py                  #   Unified CLI (train / infer / bundle-info)
 ├── scripts/                    # Manuscript, baselines, sensitivity analysis
 ├── data/                       # GEO expression matrices + DisGeNET mappings
-├── tests/                      # 29+ unit tests (pytest)
-├── output/                     # Pipeline results (gitignored)
+├── tests/                      # 38 unit tests (pytest)
+├── output/                     # Pipeline results + model bundles (gitignored)
 ├── DOCS/                       # User & developer documentation
+├── __main__.py                 # python -m gsm support
 ├── dependencies.txt            # pip requirements
 ├── run_test.py                 # Quick test runner
 ├── run_all_datasets.py         # Batch runner
@@ -219,6 +352,9 @@ See [PROJECT_MAP.md](PROJECT_MAP.md) for the full function-level reference.
 | Validation CV | 5-fold stratified |
 | Feature ranking | Robust Rank Aggregation (Stuart et al.) |
 | Biological validation | Enrichr + STRING-db + DisGeNET |
+| Model bundle | Top-10 models by F1 in `.gsm.zip` |
+| Ensemble strategy | Mean probability (also: majority vote) |
+| Risk thresholds | HIGH ≥ 80%, MEDIUM ≥ 55%, LOW < 55% |
 
 ---
 

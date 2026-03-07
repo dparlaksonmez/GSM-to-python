@@ -590,7 +590,7 @@ git lfs pull
 2. Try pulling specific files:
 
 ```bash
-git lfs pull --include="data/main_data/*.csv"
+git lfs pull --include="data/expression_data/*.csv"
 ```
 
 3. If on a corporate network, you may need to configure a proxy:

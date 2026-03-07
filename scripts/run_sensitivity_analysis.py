@@ -87,7 +87,7 @@ MAX_GROUPS_VALUES = [5, 10, 20]
 # Default/baseline values (what the pipeline normally uses)
 BASELINE = {"fdr": 0.05, "cv_folds": 3, "max_groups": 10}
 
-MAIN_DATA_DIR = project_root / "data" / "main_data"
+EXPRESSION_DATA_DIR = project_root / "data" / "expression_data"
 GROUPING_DATA_FILE = project_root / "data" / "grouping_data" / "cancer-DisGeNET_gedinet.txt"
 
 
@@ -402,7 +402,7 @@ def main():
     run_count = 0
 
     for dataset_id in args.datasets:
-        dataset_path = MAIN_DATA_DIR / f"{dataset_id}.csv"
+        dataset_path = EXPRESSION_DATA_DIR / f"{dataset_id}.csv"
         if not dataset_path.exists():
             print(f"⚠️  Dataset not found: {dataset_path}")
             continue

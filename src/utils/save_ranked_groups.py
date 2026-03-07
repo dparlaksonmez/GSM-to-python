@@ -39,7 +39,7 @@ def save_ranked_groups(
             'Iteration': [iteration] * len(group_list),
         })
         
-        df = df.sort_values('Accuracy', ascending=False)
+        df = df.sort_values('F1 Score', ascending=False)
         df['Rank'] = range(1, len(df) + 1)
         df = df[['Rank', 'Group Name', 'Accuracy', 'F1 Score', 'Iteration']]
         

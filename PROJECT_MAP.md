@@ -23,9 +23,23 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
  Disease-gene  Group      Final classifier +
  group         ranking    ranked features +
  projection    by ML      biological validation
+                               │
+                               ▼
+                         MODEL BUNDLE
+                         (.gsm.zip)
+                               │
+                    ┌──────────┼──────────┐
+                    ▼          ▼          ▼
+                  CLI      Web UI     Python API
+                    │          │          │
+                    ▼          ▼          ▼
+              CLINICAL INFERENCE
+              (ensemble prediction + report)
 ```
 
-**Entry point:** `src/workflows/GSM_workflow.py` → `gsm_workflow()`
+**Entry point (training):** `src/workflows/GSM_workflow.py` → `gsm_workflow()`  
+**Entry point (inference):** `src/inference/inference_engine.py` → `infer()`  
+**Entry point (CLI):** `gsm/__main__.py` → `src/cli.py` → `main()` / `python -m gsm`
 
 ---
 
@@ -44,6 +58,12 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 | `CONTRIBUTING.md` | Contribution guidelines |
 | `README.md` | Project overview and quick-start |
 | `PROJECT_MAP.md` | **This file** |
+| `__main__.py` | Fallback entry point — delegates to `src/cli.py` |
+| `gsm/` | Package entry point — makes `python -m gsm` work |
+| `gsm/__init__.py` | Package marker |
+| `gsm/__main__.py` | `python -m gsm` — adds project root to path, calls `src.cli.main()` |
+| `assets/` | Static files (screenshots, images) |
+| `assets/gsm_cli.png` | CLI interactive menu screenshot |
 
 ---
 
@@ -54,7 +74,7 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 |------|---------------|
 | `data_loader.py` | `load_input_file()`, `load_group_file()`, `_detect_separator()` |
 | `data_preprocess.py` | `preprocess_data()` |
-| `normalization.py` | `normalize_expression()` |
+| `normalization.py` | `normalize_expression()`, `fit_scaler()` |
 | `handle_missing_values.py` | `impute_missing()` |
 | `preliminary_filtering.py` | `preliminary_filter()` |
 | `train_test_splitter.py` | `stratified_split()` |
@@ -86,7 +106,7 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 ### `src/modeling/` — Phase III
 | File | Key functions |
 |------|---------------|
-| `run_modeling.py` | `run_modeling()` — orchestrator |
+| `run_modeling.py` | `run_modeling()` — orchestrator; `ModelingResult.fitted_model` propagates trained model for inference bundling |
 | `evaluator.py` | `evaluate_model()` |
 | `modeling_utils.py` | `select_top_groups()`, `pool_group_features()` |
 
@@ -125,10 +145,30 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 | `stability_selection_gl.py` | `run_stability_selection()` — **Novel**: combines Meinshausen & Bühlmann (2010) stability selection with Latent Group Lasso; B subsamples, per-gene Π̂ probabilities, provable FDR upper bound via Theorem 1 |
 | `gl_rf_hybrid.py` | `gl_rf_hybrid_workflow()` — **Novel**: Two-Stage GL→RF Hybrid Pipeline; Stage 1 = Group Lasso feature pre-selection, Stage 2 = Random Forest classification on GL-selected genes |
 
+### `src/inference/` — Clinical Inference
+| File | Key functions / classes |
+|------|------------------------|
+| `__init__.py` | Package exports: `ModelBundle`, `save_bundle`, `load_bundle`, `infer`, `multi_infer`, `InferenceResult`, `InferenceSummary`, `MultiBundleResult`, `MultiBundleSummary` |
+| `model_bundle.py` | `ModelBundle`, `ModelArtifact`, `BundleMetadata` dataclasses; `save_bundle()` — serialize top-K models + scaler + metadata into `.gsm.zip`; `load_bundle()` — deserialize; `bundle_info()` — human-readable summary (reads only metadata from zip, no model deserialization) |
+| `inference_engine.py` | `infer()` — ensemble prediction from a single bundle + patient CSV; `multi_infer()` — **NEW** combine predictions from multiple bundles (different datasets) into weighted consensus; `InferenceResult`, `InferenceSummary`, `MultiBundleResult`, `MultiBundleSummary` dataclasses; `preprocess_patient_data()` — feature alignment + scaling; `_get_per_sample_importance()` — perturbation-based local feature importance; risk classification (HIGH ≥ 0.80, MEDIUM ≥ 0.55, LOW) |
+| `clinical_report.py` | `generate_clinical_report()` — formatted text report; `generate_multi_bundle_report()` — **NEW** multi-bundle consensus report; `generate_report_dataframe()` — tabular export; `save_clinical_report()`, `save_multi_bundle_report()` — write `.txt` + `.xlsx` |
+
 ### `src/ui/`
 | File | Purpose |
 |------|---------|
-| `app.py` | Streamlit web GUI |
+| `app.py` | Streamlit web GUI — Training Pipeline tab + Clinical Inference tab (bundle upload, inference, results dashboard) |
+
+### `src/cli.py` — Rich Interactive CLI
+| Subcommand | Purpose |
+|------------|----------|
+| *(no args)* | Interactive guided menu with `rich` panels & numbered choices |
+| `train` | Run GSM pipeline (wraps `gsm_workflow()`) — rich progress + result panels |
+| `infer` | Load `.gsm.zip` bundle + patient CSV → color-coded result table |
+| `multi-infer` | Combine multiple bundles from different datasets for robust consensus inference |
+| `bundle-info` | Inspect a saved model bundle in a rich panel |
+| `ui` | Launch Streamlit web dashboard |
+
+Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_prompt_yes_no()`, `_execute_train()`, `_execute_infer()`, `_execute_multi_infer()`, `_execute_bundle_info()`, `_discover_datasets()`, `_discover_bundles()`, `_discover_patient_files()`
 
 ---
 
@@ -162,8 +202,9 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 
 | Folder | Contents |
 |--------|----------|
-| `data/main_data/` | GEO expression matrices (`.csv`, tracked by Git LFS) |
+| `data/expression_data/` | GEO expression matrices (`.csv`, tracked by Git LFS) |
 | `data/grouping_data/` | DisGeNET gene-disease mappings |
+| `data/patient_data/` | Patient CSV files for clinical inference (auto-discovered by CLI) |
 | `data/test/` | Small test fixtures for unit tests |
 | `data/data_ARCHIVE/` | Archived/deprecated datasets |
 
@@ -174,6 +215,7 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 | File | Coverage |
 |------|----------|
 | `test_core_functions.py` | 29 tests: data loading, t-test, grouping, scoring, modeling, rank aggregation, bio validation, profiling |
+| `test_inference.py` | 9 tests: model bundle save/load/info (3), inference engine correctness + missing features (4), clinical report generation (2) |
 
 ---
 
@@ -218,9 +260,9 @@ supplementary PDFs, and related publications.
 | `DEVELOPMENT.md` | Project structure & coding standards |
 | `RUNNING.md` | How to run the pipeline |
 | `INSTALL_WSL.md` | WSL/Linux setup |
-
 | `GITHUB_WORKFLOW.md` | Branching & PR guidelines |
 | `COPILOT.md` | GitHub Copilot usage |
+| `WEB_DEPLOYMENT.md` | Web deployment options, costs, and architecture for publishing inference as a website |
 | `TROUBLESHOOTING.md` | Common fixes |
 
 ---
@@ -239,7 +281,11 @@ supplementary PDFs, and related publications.
 | Excluded datasets | GDS3268 (breast), GDS4206 (HCC) | See `DATASET_EXCLUSIONS.md` |
 | Supported classifiers | RF, XGBoost, DecisionTree, SVM, KNN, MLP | Via `get_classifier()` factory |
 | Python version | 3.10+ | 3.11 or 3.12 recommended |
+| Model bundle format | `.gsm.zip` | Top-10 models by F1 + scaler + feature names + metadata |
+| Ensemble strategy | `mean_probability` (default) | Also supports `majority_vote` |
+| Risk thresholds | HIGH ≥ 0.80, MEDIUM ≥ 0.55, LOW < 0.55 | Configurable in `inference_engine.py` |
+| Per-sample importance 8 Perturbation-based local importance | Model-agnostic, ≤200 samples, top-50 candidates |
 
 ---
 
-*Last updated: 2026-03-06*
+*Last updated: 2026-03-07*

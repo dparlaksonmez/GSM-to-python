@@ -36,7 +36,7 @@ git lfs pull
 
 **Verify it worked:**
 ```bash
-ls -lh data/main_data/
+ls -lh data/expression_data/
 # Files should be several MB, not ~130 bytes
 ```
 

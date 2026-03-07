@@ -39,9 +39,9 @@ from src.utils.biological_validation import (
 # Representative datasets: one easy (GDS3257 AML, F1=1.0), one medium (GDS2545 Prostate),
 # one hard (GDS2771 Lung). These span the performance spectrum.
 DATASETS = {
-    "GDS2545": "data/main_data/GDS2545.csv",
-    "GDS2771": "data/main_data/GDS2771.csv",
-    "GDS3257": "data/main_data/GDS3257.csv",
+    "GDS2545": "data/expression_data/GDS2545.csv",
+    "GDS2771": "data/expression_data/GDS2771.csv",
+    "GDS3257": "data/expression_data/GDS3257.csv",
 }
 
 GROUPING_FILE = "data/grouping_data/cancer-DisGeNET_gedinet.txt"

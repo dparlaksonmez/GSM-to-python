@@ -116,7 +116,11 @@ def split_data(
             random_state=random_state
         )
         
-        return TrainTestValSplitData(X_train, X_val, X_test, y_train, y_val, y_test)
+        return TrainTestValSplitData(
+            X_train=X_train, X_test=X_test,
+            y_train=y_train, y_test=y_test,
+            X_val=X_val, y_val=y_val
+        )
     
     # Simple train-test split
     X_train, X_test, y_train, y_test = train_test_split(

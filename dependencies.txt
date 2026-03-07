@@ -15,5 +15,8 @@ group-lasso==1.5.0
 
 streamlit==1.51.0
 
+# CLI
+rich>=13.0.0
+
 # Testing
 pytest

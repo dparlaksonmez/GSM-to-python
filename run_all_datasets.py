@@ -3,7 +3,7 @@
 🧬 Batch Runner for GSM Pipeline
 
 Purpose:
-    Run the GSM pipeline on all datasets in the data/main_data folder
+    Run the GSM pipeline on all datasets in the data/expression_data folder
     with 100 iterations each.
 
 Usage:
@@ -45,14 +45,14 @@ from src.workflows.GSM_workflow_config import (
 
 
 ##### Configuration #####
-MAIN_DATA_DIR = Path("data/main_data")
+EXPRESSION_DATA_DIR = Path("data/expression_data")
 GROUPING_DATA_FILE = Path("data/grouping_data/cancer-DisGeNET_gedinet.txt")
 DEFAULT_ITERATIONS = 100
 
 
 def get_all_datasets() -> list[Path]:
-    """Get all CSV files in the main_data directory."""
-    return sorted(MAIN_DATA_DIR.glob("*.csv"))
+    """Get all CSV files in the expression_data directory."""
+    return sorted(EXPRESSION_DATA_DIR.glob("*.csv"))
 
 
 def run_single_dataset(
@@ -124,7 +124,7 @@ def run_all_datasets(
         datasets = get_all_datasets()
     
     if not datasets:
-        print("❌ No datasets found in data/main_data/")
+        print("❌ No datasets found in data/expression_data/")
         return
     
     grouping_path = project_root / GROUPING_DATA_FILE
