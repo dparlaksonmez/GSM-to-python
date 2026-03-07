@@ -64,6 +64,8 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 | `gsm/__main__.py` | `python -m gsm` — adds project root to path, calls `src.cli.main()` |
 | `assets/` | Static files (screenshots, images) |
 | `assets/gsm_cli.png` | CLI interactive menu screenshot |
+| `assets/figures.png` | General figures image |
+| `assets/gsm_logic_pseudocode.png` | GSM logic pseudocode diagram |
 
 ---
 
@@ -215,7 +217,8 @@ Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_pro
 | File | Coverage |
 |------|----------|
 | `test_core_functions.py` | 29 tests: data loading, t-test, grouping, scoring, modeling, rank aggregation, bio validation, profiling |
-| `test_inference.py` | 9 tests: model bundle save/load/info (3), inference engine correctness + missing features (4), clinical report generation (2) |
+| `test_inference.py` | 14 tests: model bundle save/load/info (3), inference engine correctness + missing features (4), clinical report generation (2), multi-bundle consensus inference (5) |
+| `test_reproducibility.py` | 1 test: pipeline reproducibility verification (marked `@pytest.mark.slow`, excluded from default runs) |
 
 ---
 

@@ -380,3 +380,146 @@ class TestClinicalReport:
         assert "Sample_ID" in df.columns
         assert "Risk_Level" in df.columns
         assert "Confidence" in df.columns
+
+
+##### Tests: Multi-Bundle Consensus Inference #####
+
+class TestMultiBundleInference:
+    """Tests for multi-bundle consensus inference across multiple bundles."""
+
+    def _save_and_load_bundle(
+        self, artifacts, scaler, feature_names, dataset_name="test"
+    ):
+        """Helper: save + load a bundle in one step."""
+        from src.inference.model_bundle import save_bundle, load_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = save_bundle(
+                models=artifacts,
+                feature_names=feature_names,
+                group_names=["group_A"],
+                scaler=scaler,
+                normalization_method="zscore",
+                label_mapping={"positive": "disease", "negative": "control"},
+                dataset_name=dataset_name,
+                model_name="RandomForest",
+                n_training_samples=60,
+                n_iterations_total=5,
+                random_seed=42,
+                output_dir=Path(tmp),
+                logger=_test_logger,
+                max_models=3,
+            )
+            return load_bundle(path, logger=_test_logger)
+
+    def test_multi_infer_basic(
+        self, trained_model_artifacts, fitted_scaler, feature_names
+    ):
+        """multi_infer() with two bundles should produce consensus results."""
+        from src.inference.inference_engine import multi_infer
+
+        b1 = self._save_and_load_bundle(
+            trained_model_artifacts, fitted_scaler, feature_names, "dataset_A"
+        )
+        b2 = self._save_and_load_bundle(
+            trained_model_artifacts, fitted_scaler, feature_names, "dataset_B"
+        )
+
+        patient_data = pd.DataFrame(
+            np.random.randn(4, 20), columns=feature_names
+        )
+
+        summary = multi_infer([b1, b2], patient_data, logger=_test_logger)
+
+        assert summary.n_samples == 4
+        assert summary.n_bundles == 2
+        assert len(summary.results) == 4
+        assert summary.n_positive + summary.n_negative == 4
+
+    def test_multi_infer_result_fields(
+        self, trained_model_artifacts, fitted_scaler, feature_names
+    ):
+        """Each MultiBundleResult should have correct consensus fields."""
+        from src.inference.inference_engine import multi_infer
+
+        b1 = self._save_and_load_bundle(
+            trained_model_artifacts, fitted_scaler, feature_names, "ds_1"
+        )
+        b2 = self._save_and_load_bundle(
+            trained_model_artifacts, fitted_scaler, feature_names, "ds_2"
+        )
+
+        patient_data = pd.DataFrame(
+            np.random.randn(3, 20), columns=feature_names
+        )
+
+        summary = multi_infer([b1, b2], patient_data, logger=_test_logger)
+
+        for r in summary.results:
+            assert r.predicted_class in ("positive", "negative")
+            assert 0.0 <= r.consensus_confidence <= 1.0
+            assert r.risk_level in ("HIGH", "MEDIUM", "LOW")
+            assert r.n_bundles_total == 2
+            assert 0 <= r.n_bundles_positive <= 2
+            assert 0.0 <= r.agreement_ratio <= 1.0
+            assert isinstance(r.bundle_predictions, dict)
+            assert len(r.bundle_predictions) == 2
+
+    def test_multi_infer_single_bundle(
+        self, trained_model_artifacts, fitted_scaler, feature_names
+    ):
+        """multi_infer() with a single bundle should still work."""
+        from src.inference.inference_engine import multi_infer
+
+        b1 = self._save_and_load_bundle(
+            trained_model_artifacts, fitted_scaler, feature_names, "only_one"
+        )
+
+        patient_data = pd.DataFrame(
+            np.random.randn(2, 20), columns=feature_names
+        )
+
+        summary = multi_infer([b1], patient_data, logger=_test_logger)
+
+        assert summary.n_samples == 2
+        assert summary.n_bundles == 1
+        # With a single bundle, agreement should be 1.0
+        for r in summary.results:
+            assert r.agreement_ratio == 1.0
+
+    def test_multi_infer_empty_raises(
+        self, trained_model_artifacts, fitted_scaler, feature_names
+    ):
+        """multi_infer() with no bundles should raise ValueError."""
+        from src.inference.inference_engine import multi_infer
+
+        patient_data = pd.DataFrame(
+            np.random.randn(2, 20), columns=feature_names
+        )
+
+        with pytest.raises(ValueError, match="At least one"):
+            multi_infer([], patient_data, logger=_test_logger)
+
+    def test_multi_bundle_report_generation(
+        self, trained_model_artifacts, fitted_scaler, feature_names
+    ):
+        """generate_multi_bundle_report() should produce structured text."""
+        from src.inference.inference_engine import multi_infer
+        from src.inference.clinical_report import generate_multi_bundle_report
+
+        b1 = self._save_and_load_bundle(
+            trained_model_artifacts, fitted_scaler, feature_names, "gds_A"
+        )
+        b2 = self._save_and_load_bundle(
+            trained_model_artifacts, fitted_scaler, feature_names, "gds_B"
+        )
+
+        patient_data = pd.DataFrame(
+            np.random.randn(3, 20), columns=feature_names
+        )
+
+        summary = multi_infer([b1, b2], patient_data, logger=_test_logger)
+        report = generate_multi_bundle_report(summary)
+
+        assert "MULTI-BUNDLE" in report.upper()
+        assert "CONSENSUS" in report.upper() or "DISCLAIMER" in report.upper()

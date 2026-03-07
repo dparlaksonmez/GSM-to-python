@@ -423,7 +423,10 @@ def write_abstract(doc, perf):
         "that saves an ensemble of trained models as a portable model "
         "bundle (.gsm.zip), enabling researchers to apply the trained "
         "classifier to new patient samples and generate confidence-scored "
-        "diagnostic reports — a capability absent from all prior G-S-M tools."
+        "diagnostic reports — a capability absent from all prior G-S-M tools.  "
+        "A multi-bundle consensus mode further enables cross-dataset "
+        "validation by aggregating F1-weighted predictions from bundles "
+        "trained on different cohorts."
     )
     p = doc.add_paragraph(text)
     for r in p.runs:
@@ -1296,6 +1299,39 @@ def write_methods(doc, perf, figs):
          "interface — making it usable by bioinformaticians, clinician-"
          "researchers, and hospital IT systems alike.")
 
+    # 2.10 Multi-Bundle Consensus Inference
+    heading(doc, "2.10 Multi-Bundle Consensus Inference", 2)
+    para(doc,
+         "While a single model bundle captures the discriminative patterns "
+         "learned from one dataset, clinical confidence may benefit from "
+         "cross-dataset validation.  We therefore introduced a multi-bundle "
+         "consensus mode that aggregates predictions from bundles trained "
+         "on different GEO datasets.")
+    para(doc, "F1-weighted consensus.", bold_prefix="F1-weighted consensus.")
+    para(doc,
+         "Given B bundles and a patient expression matrix, the multi-bundle "
+         "engine runs independent inference through each bundle and merges "
+         "the results via F1-weighted averaging.  Each bundle's predicted "
+         "class probability is weighted by the mean F1 score achieved "
+         "during its training, so bundles that demonstrated stronger "
+         "discriminative ability on their own data contribute more to the "
+         "consensus prediction.  The final per-patient output includes a "
+         "consensus class label, a mean confidence score, a bundle "
+         "agreement ratio (fraction of bundles that concur), and a merged "
+         "gene-importance ranking that pools perturbation-based local "
+         "importances across all B bundles.")
+    para(doc, "Multi-bundle report.", bold_prefix="Multi-bundle report.")
+    para(doc,
+         "The consensus results are collected into a structured multi-bundle "
+         "report that includes (i) a per-patient summary with consensus "
+         "prediction, aggregated confidence, and bundle agreement; "
+         "(ii) a per-bundle breakdown showing individual predictions, "
+         "F1 scores, and dataset provenance; and (iii) summary statistics "
+         "across all bundles.  Reports are saved in plain-text and Excel "
+         "formats.  The multi-bundle mode is accessible through the CLI "
+         "(python -m gsm multi-infer) and the Python API "
+         "(from src.inference import multi_infer).")
+
 
 def write_results(doc, perf, val, m_figs, ds_figs):
     """Results section with tables and embedded figures."""
@@ -2131,6 +2167,16 @@ def write_discussion(doc, perf, val):
          "now in place: the bundle format is versioned, tracks sklearn "
          "compatibility, and validates feature alignment at inference "
          "time — all prerequisites for a future regulatory pathway.")
+    para(doc,
+         "The multi-bundle consensus mode (Section 2.10) extends this "
+         "further by enabling cross-dataset validation at the patient "
+         "level.  When bundles trained on different cancer cohorts agree "
+         "on a prediction, the resulting consensus carries stronger "
+         "evidence than any single bundle alone.  The F1-weighted "
+         "averaging mechanism ensures that high-performing bundles "
+         "dominate the consensus, reducing the influence of weaker "
+         "models.  This design mirrors the clinical practice of seeking "
+         "a second opinion — but automated and quantified.")
 
     # 4.8
     heading(doc, "4.8 Limitations", 2)
@@ -2248,7 +2294,10 @@ def write_conclusions(doc, perf, val):
         "and support patient-level diagnosis with confidence-scored "
         "predictions, risk classification, and per-sample feature "
         "importance — bridging the gap between research pipelines "
-        "and clinical decision-support tools.",
+        "and clinical decision-support tools.  The multi-bundle "
+        "consensus mode further enables cross-dataset validation, "
+        "aggregating predictions from bundles trained on different "
+        "cohorts via F1-weighted averaging.",
     ]
     for c in conclusions:
         numbered(doc, c)

@@ -12,7 +12,7 @@
 > When we provide a prompt, do not strictly follow the instructions in the prompt. 
 > Instead, use your judgement and creativity to decide how to best respond to the prompt
 > while still adhering to the overall goals and principles of the project.
-
+> at the end of each response, run tests and check for errors. If there are any errors, fix them before proceeding to the next step.
 ---
 
 ## Core Development Principles
