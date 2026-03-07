@@ -47,18 +47,14 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 
 | File | Purpose |
 |------|---------|
-| `run_test.py` | Quick single-dataset pipeline run (dev/testing) |
-| `run_all_datasets.py` | Batch-run the pipeline on all 7 GEO datasets |
 | `dependencies.txt` | pip requirements |
 | `pytest.ini` | Pytest configuration |
 | `.pre-commit-config.yaml` | Pre-commit hooks (ruff, trailing whitespace) |
 | `.gitattributes` | Git LFS tracking (`*.csv`) |
 | `.lfsconfig` | LFS fetch-include for `data/` |
-| `DATASET_EXCLUSIONS.md` | Why GDS3268 and GDS4206 were excluded |
 | `CONTRIBUTING.md` | Contribution guidelines |
 | `README.md` | Project overview and quick-start |
 | `PROJECT_MAP.md` | **This file** |
-| `__main__.py` | Fallback entry point — delegates to `src/cli.py` |
 | `gsm/` | Package entry point — makes `python -m gsm` work |
 | `gsm/__init__.py` | Package marker |
 | `gsm/__main__.py` | `python -m gsm` — adds project root to path, calls `src.cli.main()` |
@@ -177,10 +173,12 @@ Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_pro
 
 ---
 
-## `scripts/` — Analysis & Manuscript Tooling
+## `scripts/` — Analysis, Batch Runners & Manuscript Tooling
 
 | File | Purpose | Output location |
 |------|---------|-----------------|
+| `run_test.py` | Quick single-dataset pipeline test (legacy; prefer `python -m gsm train --test`) | `output/gsm_<ts>_test_*/` |
+| `run_all_datasets.py` | Batch-run pipeline on all 7 GEO datasets | `output/gsm_<ts>_*/` |
 | `analyze_manuscript_results.py` | Aggregate metrics → JSON + figures | `reports_ARCHIVE/manuscript_data.json`, `reports_ARCHIVE/manuscript_figures/` |
 | `build_manuscript_docx.py` | Generate Word manuscript | `reports_ARCHIVE/GSM_Manuscript_v*.docx` |
 | `generate_flowchart.py` | Figure 1: pipeline flowchart | `reports_ARCHIVE/manuscript_figures/` |
@@ -284,7 +282,7 @@ supplementary PDFs, and related publications.
 | CV folds (validation) | 5-fold stratified | Phase III final model |
 | Feature ranking | Robust Rank Aggregation | Stuart et al. method |
 | Biological validation | Enrichr + STRING-db + DisGeNET | Optional, external APIs |
-| Excluded datasets | GDS3268 (breast), GDS4206 (HCC) | See `DATASET_EXCLUSIONS.md` |
+| Excluded datasets | GDS3268 (breast), GDS4206 (HCC) | See `DOCS/DATASET_EXCLUSIONS.md` |
 | Supported classifiers | RF, XGBoost, DecisionTree, SVM, KNN, MLP | Via `get_classifier()` factory |
 | Python version | 3.10+ | 3.11 or 3.12 recommended |
 | Model bundle format | `.gsm.zip` | Top-10 models by F1 + scaler + feature names + metadata |

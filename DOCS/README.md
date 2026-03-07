@@ -26,7 +26,7 @@ Think of them like a "lab protocol" for running and contributing to this codebas
 | Document | Description |
 |----------|-------------|
 | **[Project Map](../PROJECT_MAP.md)** | Every file, folder, and key function |
-| **[Dataset Exclusions](../DATASET_EXCLUSIONS.md)** | Why GDS3268 and GDS4206 were dropped |
+| **[Dataset Exclusions](DATASET_EXCLUSIONS.md)** | Why GDS3268 and GDS4206 were dropped |
 | **[Contributing](../CONTRIBUTING.md)** | How to report bugs, suggest features, submit PRs |
 
 ---

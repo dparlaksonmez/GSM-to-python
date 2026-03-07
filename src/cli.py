@@ -356,10 +356,21 @@ def _interactive_train(console) -> None:
     sizes = []
     for d in datasets:
         try:
-            n_rows = sum(1 for _ in open(d)) - 1
-            sizes.append(f"{n_rows} samples")
+            # Fast: read header in binary for column count,
+            # count newlines in 1 MB blocks (avoids full text decode).
+            with open(d, "rb") as fh:
+                header = fh.readline()
+                n_cols = header.count(b",")  # genes (excl. label col)
+                n_rows = 0
+                while True:
+                    chunk = fh.read(1 << 20)
+                    if not chunk:
+                        break
+                    n_rows += chunk.count(b"\n")
+            sizes.append(f"{n_rows} samples × {n_cols} genes")
         except Exception:
-            sizes.append("")
+            mb = d.stat().st_size / (1024 * 1024)
+            sizes.append(f"{mb:.0f} MB")
     idx = _prompt_choice(console, "Available Datasets", names, sizes)
     if idx is None:
         return
@@ -1526,11 +1537,11 @@ def _show_help(console) -> None:
     )
     t.add_row("python -m gsm ui", "Streamlit dashboard", "")
     t.add_row(
-        "python run_test.py", "Quick test (legacy)",
+        "python scripts/run_test.py", "Quick test (legacy)",
         "--iterations 5",
     )
     t.add_row(
-        "python run_all_datasets.py", "Batch all datasets",
+        "python scripts/run_all_datasets.py", "Batch all datasets",
         "--iterations 50",
     )
     console.print(t)

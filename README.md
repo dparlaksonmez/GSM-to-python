@@ -63,7 +63,7 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 **Mean F1 = 0.937 | Mean AUC = 0.947 | 4/7 datasets achieve perfect F1 = 1.00**
 
 > Two additional datasets (GDS3268 Breast, GDS4206 HCC) were excluded due
-> to severe t-test filtering issues — see [DATASET_EXCLUSIONS.md](DATASET_EXCLUSIONS.md).
+> to severe t-test filtering issues — see [DATASET_EXCLUSIONS.md](DOCS/DATASET_EXCLUSIONS.md).
 
 ---
 
@@ -78,7 +78,7 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 | [Troubleshooting](DOCS/TROUBLESHOOTING.md) | Common errors and fixes |
 | [GitHub Copilot Guide](DOCS/COPILOT.md) | AI-assisted coding setup |
 | [Project Map](PROJECT_MAP.md) | Complete file/folder/function reference |
-| [Dataset Exclusions](DATASET_EXCLUSIONS.md) | Why GDS3268 and GDS4206 were dropped |
+| [Dataset Exclusions](DOCS/DATASET_EXCLUSIONS.md) | Why GDS3268 and GDS4206 were dropped |
 | [Web Deployment](DOCS/WEB_DEPLOYMENT.md) | Options for publishing inference as a website |
 
 ---
@@ -225,13 +225,13 @@ pip install -r dependencies.txt
 
 ```bash
 # Quick test — verify everything works (~1-2 min)
-python run_test.py
+python -m gsm train --test
 
 # Full single-dataset run (edit config first)
-python src/workflows/GSM_workflow.py
+python -m gsm train
 
 # Batch run on all 7 datasets (100 iterations each)
-python run_all_datasets.py --iterations 100
+python scripts/run_all_datasets.py --iterations 100
 
 # Streamlit Web UI (training + inference)
 streamlit run src/ui/app.py
@@ -254,9 +254,9 @@ For detailed setup, see the [Installation Guide](DOCS/INSTALL_WSL.md).
 
 ### Quick Test
 ```bash
-python run_test.py                    # Sample data, 3 iterations (~1 min)
-python run_test.py --iterations 5     # Custom iteration count
-python run_test.py --real-data        # Real GDS2545 data
+python -m gsm train --test            # Sample data, 3 iterations (~1 min)
+python -m gsm train --test -n 5       # Custom iteration count
+python -m gsm train                   # Real data (interactive)
 ```
 
 ### Single Dataset
@@ -269,16 +269,16 @@ python -m src.workflows.GSM_workflow
 
 ### Batch Run (Multiple Datasets)
 ```bash
-python run_all_datasets.py                              # All 7 datasets, 100 iterations
-python run_all_datasets.py --iterations 50              # Custom iterations
-python run_all_datasets.py --datasets GDS2545 GDS3257   # Specific datasets
-python run_all_datasets.py --list                       # List available datasets
+python scripts/run_all_datasets.py                              # All 7 datasets, 100 iterations
+python scripts/run_all_datasets.py --iterations 50              # Custom iterations
+python scripts/run_all_datasets.py --datasets GDS2545 GDS3257   # Specific datasets
+python scripts/run_all_datasets.py --list                       # List available datasets
 ```
 
 For long-running jobs, use `screen` to keep them alive after disconnecting:
 ```bash
 screen -S gsm_batch
-python run_all_datasets.py --iterations 100
+python scripts/run_all_datasets.py --iterations 100
 # Ctrl+A then D to detach — reattach later with: screen -r gsm_batch
 ```
 
@@ -325,15 +325,13 @@ GSM-to-python/
 │   ├── workflows/              #   Entry points & configs
 │   ├── ui/                     #   Streamlit web interface
 │   └── cli.py                  #   Unified CLI (train / infer / bundle-info)
-├── scripts/                    # Manuscript, baselines, sensitivity analysis
+├── scripts/                    # Manuscript, baselines, batch runners, analysis
 ├── data/                       # GEO expression matrices + DisGeNET mappings
-├── tests/                      # 38 unit tests (pytest)
+├── tests/                      # 44 unit tests (pytest)
 ├── output/                     # Pipeline results + model bundles (gitignored)
 ├── DOCS/                       # User & developer documentation
-├── __main__.py                 # python -m gsm support
+├── gsm/                        # Package entry point (python -m gsm)
 ├── dependencies.txt            # pip requirements
-├── run_test.py                 # Quick test runner
-├── run_all_datasets.py         # Batch runner
 └── PROJECT_MAP.md              # Complete file/function reference
 ```
 
