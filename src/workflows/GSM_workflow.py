@@ -64,7 +64,7 @@ import src.workflows.GSM_workflow_config as gsm_workflow_config
 
 import pandas as pd
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Callable, List, Optional
 import numpy as np
 import random
 from datetime import datetime, timedelta
@@ -117,6 +117,26 @@ def format_duration(seconds: float) -> str:
         hours = int(seconds // 3600)
         mins = int((seconds % 3600) // 60)
         return f"{hours}h {mins}min"
+
+
+def _write_progress(
+    progress_file: Path,
+    *,
+    phase: str,
+    iteration: int = 0,
+    total: int = 0,
+    elapsed: float = 0.0,
+    eta_seconds: float = 0.0,
+) -> None:
+    """Write a small JSON progress file for background job monitoring."""
+    data = {
+        "phase": phase,
+        "iteration": iteration,
+        "total": total,
+        "elapsed": round(elapsed, 1),
+        "eta_seconds": round(eta_seconds, 1),
+    }
+    progress_file.write_text(json.dumps(data))
 
 
 ##### Data Structures #####
@@ -280,6 +300,8 @@ def gsm_run(
     extra_handlers: Optional[List[logging.Handler]] = None,
     input_data_name: Optional[str] = None,
     group_data_name: Optional[str] = None,
+    progress_callback: Optional[Callable] = None,
+    progress_file: Optional[Path] = None,
 ) -> Path:
     """
     Main entry point for the GSM pipeline execution.
@@ -297,6 +319,10 @@ def gsm_run(
         notebook_mode: Enable notebook-specific optimizations
         input_data_name: Name of input data source (for logging/output folder)
         group_data_name: Name of grouping data source (for logging/output folder)
+        progress_callback: Optional callable(iteration, total, elapsed, eta_seconds)
+            invoked after each iteration for live progress updates (foreground).
+        progress_file: Optional path to a JSON file where iteration progress is
+            written after each iteration (useful for background job monitoring).
         
     Returns:
         Path: The directory where results were saved.
@@ -366,6 +392,14 @@ def gsm_run(
             logger.addHandler(handler)
 
     logger.info("🚀 Starting GSM pipeline")
+
+    # Write initial progress (preprocessing phase)
+    if progress_file is not None:
+        try:
+            _write_progress(progress_file, phase="preprocessing",
+                            iteration=0, total=n_iterations)
+        except Exception:
+            pass
 
     # Run the GSM pipeline
     logger.info("Preprocessing data...")
@@ -492,6 +526,44 @@ def gsm_run(
             )
         else:
             logger.info(f"Iter {i}/{n_iterations} done in {format_duration(iteration_duration)}")
+
+        # ── Progress reporting ──
+        # Notify callers (foreground progress bar) via callback
+        if progress_callback is not None:
+            try:
+                progress_callback(i, n_iterations, elapsed_total,
+                                  estimated_remaining_seconds)
+            except Exception:
+                pass  # Never let progress reporting break the pipeline
+
+        # Write progress file (background job monitoring)
+        if progress_file is not None:
+            try:
+                _write_progress(
+                    progress_file, phase="iteration",
+                    iteration=i, total=n_iterations,
+                    elapsed=elapsed_total,
+                    eta_seconds=estimated_remaining_seconds,
+                )
+            except Exception:
+                pass
+
+    # Mark post-processing phase
+    if progress_file is not None:
+        try:
+            total_elapsed = time.time() - pipeline_start_time
+            _write_progress(progress_file, phase="post-processing",
+                            iteration=n_iterations, total=n_iterations,
+                            elapsed=total_elapsed, eta_seconds=0)
+        except Exception:
+            pass
+    if progress_callback is not None:
+        try:
+            total_elapsed = time.time() - pipeline_start_time
+            progress_callback(n_iterations, n_iterations,
+                              total_elapsed, 0)
+        except Exception:
+            pass
 
     # Save results
     if save_intermediate_results:
@@ -685,7 +757,15 @@ def gsm_run(
             )
             logger.info("✅ Biological validation completed")
         except Exception as e:
-            logger.warning(f"Biological validation failed: {e}")
+            logger.warning(f"⚠️ Biological validation failed: {e}")
+            logger.warning(
+                "💡 You can re-run it later with:  "
+                f"python -m gsm bio-validate --run {output_folder_path}"
+            )
+            logger.warning(
+                "   Or use the CLI: Browse Output Runs → "
+                "Re-run biological validation"
+            )
     elif run_biological_validation_flag:
         logger.warning("Biological validation skipped: results JSON not found")
 

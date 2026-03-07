@@ -138,7 +138,7 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 ### `src/workflows/`
 | File | Key functions |
 |------|---------------|
-| `GSM_workflow.py` | `gsm_workflow()` — **main entry point** |
+| `GSM_workflow.py` | `gsm_run()` — **main entry point**; accepts `progress_callback` (callable for foreground progress bar) and `progress_file` (Path for background monitoring JSON) |
 | `GSM_workflow_config.py` | `GSMConfig` dataclass |
 | `classification_workflow.py` | `classification_workflow()` — plain classification baseline |
 | `classification_workflow_config.py` | `ClassificationConfig` dataclass |
@@ -158,19 +158,22 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 ### `src/ui/`
 | File | Purpose |
 |------|---------|
-| `app.py` | Streamlit web GUI — Training Pipeline tab + Clinical Inference tab (bundle upload, inference, results dashboard) |
+| `app.py` | Streamlit web GUI — 4 tabs: Training Pipeline, Clinical Inference (single-bundle, patient_data/ auto-discovery), Multi-Bundle Consensus Inference, Dataset Explorer (stats & previews for all datasets) |
 
 ### `src/cli.py` — Rich Interactive CLI
 | Subcommand | Purpose |
 |------------|----------|
 | *(no args)* | Interactive guided menu with `rich` panels & numbered choices |
-| `train` | Run GSM pipeline (wraps `gsm_workflow()`) — rich progress + result panels |
+| `train` | Run GSM pipeline (wraps `gsm_workflow()`) — rich iteration progress bar + result panels. `--progress-file` writes JSON for background monitoring |
 | `infer` | Load `.gsm.zip` bundle + patient CSV → color-coded result table |
 | `multi-infer` | Combine multiple bundles from different datasets for robust consensus inference |
 | `bundle-info` | Inspect a saved model bundle in a rich panel |
 | `ui` | Launch Streamlit web dashboard |
+| `runs` | Browse / inspect past output runs (metrics, logs, files, re-run bio validation) |
+| `jobs` | Monitor background training jobs (list, view-log, stop running, clear finished) |
+| `bio-validate` | Re-run biological validation on a completed run (Enrichr + STRING-db + DisGeNET) |
 
-Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_prompt_yes_no()`, `_execute_train()`, `_execute_infer()`, `_execute_multi_infer()`, `_execute_bundle_info()`, `_discover_datasets()`, `_discover_bundles()`, `_discover_patient_files()`
+Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_prompt_yes_no()`, `_execute_train()`, `_execute_infer()`, `_execute_multi_infer()`, `_execute_bundle_info()`, `_execute_bio_validate()`, `_discover_datasets()`, `_discover_bundles()`, `_discover_patient_files()`, `_interactive_browse_outputs()`, `_inspect_run()`, `_launch_background_train_with_config()`, `_interactive_monitor_jobs()`, `_show_bg_jobs_banner()`, `_stop_job()`, `_read_progress_file()`
 
 ---
 

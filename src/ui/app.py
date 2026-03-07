@@ -385,12 +385,37 @@ def render_inference_page():
         bundle = None
 
     # ---- Patient data upload ----
-    st.markdown("### 2. Upload Patient Data")
-    patient_file = st.file_uploader(
-        "Patient expression data (CSV/TXT)",
-        type=["csv", "txt"],
-        help="Gene expression matrix with the same gene names as training data",
+    st.markdown("### 2. Patient Data")
+    patient_method = st.radio(
+        "Patient data source",
+        ["Upload CSV", "Select from data/patient_data/"],
+        horizontal=True,
+        key="single_patient_method",
     )
+
+    patient_file = None
+    patient_data_df = None
+    if patient_method == "Upload CSV":
+        patient_file = st.file_uploader(
+            "Patient expression data (CSV/TXT)",
+            type=["csv", "txt"],
+            help="Gene expression matrix with the same gene names as training data",
+        )
+    else:
+        patient_files = _discover_patient_files()
+        if patient_files:
+            sel = st.selectbox(
+                "Available patient files",
+                list(patient_files.keys()),
+                key="single_patient_select",
+            )
+            if sel:
+                patient_data_df = smart_read_csv(patient_files[sel])
+        else:
+            st.info(
+                "No patient files in data/patient_data/. "
+                "Place CSV files there or use the upload option."
+            )
 
     sample_id_col = st.text_input(
         "Sample ID column (optional)", value="",
@@ -398,7 +423,8 @@ def render_inference_page():
     )
 
     # ---- Run inference ----
-    if bundle and patient_file:
+    has_patient = patient_file is not None or patient_data_df is not None
+    if bundle and has_patient:
         if st.button("🔬 Run Inference", type="primary"):
             pd = _get_pd()
             try:
@@ -409,8 +435,11 @@ def render_inference_page():
                 )
                 from src.utils.logger import setup_logger
 
-                patient_file.seek(0)
-                patient_data = smart_read_csv(patient_file)
+                if patient_file is not None:
+                    patient_file.seek(0)
+                    patient_data = smart_read_csv(patient_file)
+                else:
+                    patient_data = patient_data_df
 
                 st.markdown(f"**Patient data:** {patient_data.shape[0]} samples × "
                             f"{patient_data.shape[1]} features")
@@ -470,8 +499,326 @@ def render_inference_page():
             except Exception as e:
                 st.error(f"Inference failed: {e}")
                 st.exception(e)
-    elif bundle and not patient_file:
-        st.info("👆 Upload patient expression data to run inference.")
+    elif bundle and not has_patient:
+        st.info("👆 Provide patient expression data to run inference.")
+
+
+##### PATIENT DATA DISCOVERY #####
+
+def _discover_patient_files() -> dict[str, Path]:
+    """Find CSV/TXT files in data/patient_data/ for inference."""
+    patient_dir = project_root / "data" / "patient_data"
+    found: dict[str, Path] = {}
+    if patient_dir.exists():
+        for f in sorted(patient_dir.iterdir()):
+            if f.suffix.lower() in (".csv", ".txt") and f.is_file():
+                found[f.name] = f
+    return found
+
+
+##### MULTI-BUNDLE INFERENCE UI #####
+
+def render_multi_bundle_page():
+    """Render the multi-bundle consensus inference page."""
+    st.markdown("## 🏥 Multi-Bundle Consensus Inference")
+    st.markdown(
+        "Combine predictions from **multiple trained bundles** to produce "
+        "a weighted consensus prediction per patient sample."
+    )
+
+    # ---- Bundle selection (multi-select) ----
+    st.markdown("### 1. Select Model Bundles")
+    output_dir = str(project_root / "output")
+    bundles_found = _discover_bundles(output_dir)
+
+    if not bundles_found:
+        st.info(
+            "No model bundles found in output/. Run the training pipeline at "
+            "least twice to use multi-bundle inference."
+        )
+        return
+
+    labels = [f"{b.parent.parent.name} / {b.name}" for b in bundles_found]
+    selected_idxs = st.multiselect(
+        "Select two or more bundles",
+        range(len(labels)),
+        format_func=lambda i: labels[i],
+    )
+    selected_paths = [bundles_found[i] for i in selected_idxs]
+
+    if len(selected_paths) < 2:
+        st.caption("Select at least 2 bundles for consensus inference.")
+
+    # ---- Patient data (upload or select from patient_data/) ----
+    st.markdown("### 2. Patient Data")
+    patient_method = st.radio(
+        "Patient data source",
+        ["Upload CSV", "Select from data/patient_data/"],
+        horizontal=True,
+        key="multi_patient_method",
+    )
+
+    patient_data = None
+    if patient_method == "Upload CSV":
+        patient_file = st.file_uploader(
+            "Patient expression data (CSV/TXT)",
+            type=["csv", "txt"],
+            key="multi_patient_upload",
+            help="Gene expression matrix with the same gene names as training data",
+        )
+        if patient_file:
+            patient_data = smart_read_csv(patient_file)
+    else:
+        patient_files = _discover_patient_files()
+        if patient_files:
+            sel = st.selectbox(
+                "Available patient files",
+                list(patient_files.keys()),
+                key="multi_patient_select",
+            )
+            if sel:
+                patient_data = smart_read_csv(patient_files[sel])
+        else:
+            st.info(
+                "No patient files found in data/patient_data/. "
+                "Place CSV files there or use the upload option."
+            )
+
+    sample_id_col = st.text_input(
+        "Sample ID column (optional)", value="",
+        key="multi_sample_id",
+        help="Column name containing patient/sample identifiers",
+    )
+
+    weight_by_f1 = st.checkbox(
+        "Weight predictions by bundle F1 score",
+        value=True,
+        key="multi_weight_f1",
+    )
+
+    # ---- Run multi-bundle inference ----
+    if len(selected_paths) >= 2 and patient_data is not None:
+        if st.button("🔬 Run Multi-Bundle Inference", type="primary"):
+            try:
+                from src.inference.model_bundle import load_bundle
+                from src.inference.inference_engine import multi_infer
+                from src.inference.clinical_report import (
+                    generate_multi_bundle_report,
+                    generate_multi_bundle_dataframe,
+                )
+                from src.utils.logger import setup_logger
+                import tempfile
+
+                log_path = Path(tempfile.mktemp(suffix=".log"))
+                logger = setup_logger(
+                    str(log_path), logger_name="multi_infer_ui",
+                )
+
+                with st.spinner("Loading bundles..."):
+                    loaded_bundles = [load_bundle(p) for p in selected_paths]
+
+                # Show bundle info
+                with st.expander("📦 Bundle Details", expanded=False):
+                    for b in loaded_bundles:
+                        m = b.metadata
+                        st.markdown(
+                            f"**{m.dataset_name}** — "
+                            f"{m.n_models_saved} models, "
+                            f"{m.n_features} features, "
+                            f"F1={m.ensemble_f1_mean:.3f}, "
+                            f"AUC={m.ensemble_auc_mean:.3f}"
+                        )
+
+                with st.spinner("Running multi-bundle inference..."):
+                    result = multi_infer(
+                        loaded_bundles,
+                        patient_data,
+                        logger=logger,
+                        sample_id_column=sample_id_col or None,
+                        weight_by_f1=weight_by_f1,
+                    )
+
+                # ---- Display results ----
+                st.markdown("### 📊 Consensus Results")
+
+                c1, c2, c3, c4, c5 = st.columns(5)
+                c1.metric("Samples", result.n_samples)
+                c2.metric("Positive", result.n_positive)
+                c3.metric("Negative", result.n_negative)
+                c4.metric("Bundles", result.n_bundles)
+                c5.metric("Mean Confidence", f"{result.mean_confidence:.1%}")
+
+                # Per-sample results table
+                df = generate_multi_bundle_dataframe(result)
+                st.dataframe(df, use_container_width=True)
+
+                # Per-bundle breakdown
+                with st.expander("📋 Per-Bundle Breakdown", expanded=False):
+                    for r in result.results:
+                        st.markdown(f"**{r.sample_id}** — "
+                                    f"consensus: {r.predicted_class} "
+                                    f"(confidence: {r.consensus_confidence:.1%}, "
+                                    f"agreement: {r.agreement_ratio:.0%}, "
+                                    f"{r.n_bundles_positive}/{r.n_bundles_total} "
+                                    f"bundles positive)")
+
+                # Download buttons
+                col_txt, col_xlsx = st.columns(2)
+                report_text = generate_multi_bundle_report(result)
+                with col_txt:
+                    st.download_button(
+                        "📄 Download Report (TXT)",
+                        data=report_text,
+                        file_name="multi_bundle_report.txt",
+                        mime="text/plain",
+                        key="multi_dl_txt",
+                    )
+                with col_xlsx:
+                    import io
+                    buf = io.BytesIO()
+                    df.to_excel(buf, index=False)
+                    st.download_button(
+                        "📊 Download Report (Excel)",
+                        data=buf.getvalue(),
+                        file_name="multi_bundle_report.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="multi_dl_xlsx",
+                    )
+
+                # Full text report
+                with st.expander("📋 Full Multi-Bundle Report"):
+                    st.code(report_text, language=None)
+
+            except Exception as e:
+                st.error(f"Multi-bundle inference failed: {e}")
+                st.exception(e)
+    elif len(selected_paths) >= 2 and patient_data is None:
+        st.info("👆 Provide patient expression data to run inference.")
+
+
+##### DATASET EXPLORER UI #####
+
+def render_dataset_explorer():
+    """Render the dataset explorer page with stats and previews."""
+    st.markdown("## 📊 Dataset Explorer")
+    st.markdown(
+        "Browse available expression and grouping datasets."
+    )
+
+    pd = _get_pd()
+    data_dir = project_root / "data"
+
+    # ---- Expression datasets ----
+    st.markdown("### 🧬 Expression Datasets")
+    expr_dir = data_dir / "expression_data"
+    if expr_dir.exists():
+        csv_files = sorted(expr_dir.glob("*.csv"))
+        if csv_files:
+            for f in csv_files:
+                with st.expander(f"📁 {f.name}", expanded=False):
+                    try:
+                        df = pd.read_csv(f, sep=None, engine="python")
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric("Samples", df.shape[0])
+                        c2.metric("Features", df.shape[1])
+                        size_kb = f.stat().st_size / 1024
+                        c3.metric("File Size", f"{size_kb:.0f} KB")
+
+                        # Class distribution (if label column exists)
+                        if LABEL_COLUMN_NAME in df.columns:
+                            st.markdown("**Class Distribution:**")
+                            counts = df[LABEL_COLUMN_NAME].value_counts()
+                            col_chart, col_table = st.columns(2)
+                            with col_chart:
+                                st.bar_chart(counts)
+                            with col_table:
+                                st.dataframe(
+                                    counts.reset_index().rename(
+                                        columns={"index": "Class",
+                                                 LABEL_COLUMN_NAME: "Count"}
+                                    ),
+                                    use_container_width=True,
+                                )
+
+                        st.markdown("**Preview (first 5 rows):**")
+                        st.dataframe(
+                            df[list(df.columns[:10])].head(5),
+                            use_container_width=True,
+                        )
+                    except Exception as e:
+                        st.error(f"Could not read {f.name}: {e}")
+        else:
+            st.info("No CSV files in data/expression_data/.")
+    else:
+        st.warning("data/expression_data/ folder not found.")
+
+    # ---- Grouping datasets ----
+    st.markdown("### 📂 Grouping Data")
+    group_dir = data_dir / "grouping_data"
+    if group_dir.exists():
+        group_files = sorted(
+            list(group_dir.glob("*.csv")) + list(group_dir.glob("*.txt"))
+        )
+        if group_files:
+            for f in group_files:
+                with st.expander(f"📁 {f.name}", expanded=False):
+                    try:
+                        df = pd.read_csv(f, sep=None, engine="python")
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric("Rows", df.shape[0])
+                        c2.metric("Columns", df.shape[1])
+
+                        if GROUP_COLUMN_NAME in df.columns:
+                            n_groups = df[GROUP_COLUMN_NAME].nunique()
+                            c3.metric("Groups", n_groups)
+                        else:
+                            c3.metric("Groups", "?")
+
+                        st.markdown("**Preview (first 5 rows):**")
+                        st.dataframe(df.head(5), use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Could not read {f.name}: {e}")
+        else:
+            st.info("No files in data/grouping_data/.")
+    else:
+        st.warning("data/grouping_data/ folder not found.")
+
+    # ---- Patient data ----
+    patient_files = _discover_patient_files()
+    if patient_files:
+        st.markdown("### 🏥 Patient Data")
+        for name, fpath in patient_files.items():
+            with st.expander(f"📁 {name}", expanded=False):
+                try:
+                    df = pd.read_csv(fpath, sep=None, engine="python")
+                    c1, c2 = st.columns(2)
+                    c1.metric("Samples", df.shape[0])
+                    c2.metric("Features", df.shape[1])
+                    st.dataframe(
+                        df[list(df.columns[:10])].head(5),
+                        use_container_width=True,
+                    )
+                except Exception as e:
+                    st.error(f"Could not read {name}: {e}")
+
+    # ---- Quick stats summary ----
+    st.markdown("---")
+    st.markdown("### 📈 Summary")
+    total_expr = len(list(expr_dir.glob("*.csv"))) if expr_dir.exists() else 0
+    total_grp = (
+        len(list(group_dir.glob("*.csv")) + list(group_dir.glob("*.txt")))
+        if group_dir.exists() else 0
+    )
+    total_patient = len(patient_files)
+    total_bundles = len(_discover_bundles(str(project_root / "output")))
+    total_runs = len(_discover_output_runs(str(project_root / "output")))
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Datasets", total_expr)
+    c2.metric("Groupings", total_grp)
+    c3.metric("Patient Files", total_patient)
+    c4.metric("Trained Bundles", total_bundles)
+    c5.metric("Total Runs", total_runs)
 
 
 ##### MAIN APPLICATION #####
@@ -489,13 +836,26 @@ def main():
     # ---- Top-level navigation ----
     nav_tab = st.radio(
         "Mode",
-        ["🧪 Training Pipeline", "🏥 Clinical Inference"],
+        [
+            "🧪 Training Pipeline",
+            "🏥 Clinical Inference",
+            "🏥 Multi-Bundle Inference",
+            "📊 Dataset Explorer",
+        ],
         horizontal=True,
         label_visibility="collapsed",
     )
 
     if nav_tab == "🏥 Clinical Inference":
         render_inference_page()
+        return
+
+    if nav_tab == "🏥 Multi-Bundle Inference":
+        render_multi_bundle_page()
+        return
+
+    if nav_tab == "📊 Dataset Explorer":
+        render_dataset_explorer()
         return
 
     # ---- Session state ----

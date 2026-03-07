@@ -107,10 +107,94 @@ def _discover_output_runs() -> list[Path]:
     if not output_dir.exists():
         return []
     runs = []
-    for d in sorted(output_dir.iterdir()):
+    for d in sorted(output_dir.iterdir(), reverse=True):
         if d.is_dir() and d.name.startswith(("gsm_", "gl_")):
             runs.append(d)
     return runs
+
+
+##### Background Job Tracker #####
+
+JOBS_FILE = PROJECT_ROOT / "output" / ".gsm_jobs.json"
+
+
+def _load_jobs() -> list[dict]:
+    """Load background job records from .gsm_jobs.json."""
+    import json
+    if not JOBS_FILE.exists():
+        return []
+    try:
+        return json.loads(JOBS_FILE.read_text())
+    except Exception:
+        return []
+
+
+def _save_jobs(jobs: list[dict]) -> None:
+    """Persist background job records."""
+    import json
+    JOBS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    JOBS_FILE.write_text(json.dumps(jobs, indent=2))
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is still running."""
+    import signal
+    try:
+        os.kill(pid, signal.SIG_DFL)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
+
+
+def _refresh_job_statuses(jobs: list[dict]) -> list[dict]:
+    """Update status of each job based on PID liveness."""
+    for job in jobs:
+        if job.get("status") == "running":
+            if not _is_pid_alive(job["pid"]):
+                job["status"] = "completed"
+    return jobs
+
+
+def _read_progress_file(job: dict) -> Optional[dict]:
+    """Read the progress JSON file for a background job, if it exists."""
+    import json
+    progress_path = job.get("progress_file")
+    if not progress_path:
+        return None
+    p = Path(progress_path)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return None
+
+
+def _show_bg_jobs_banner(console) -> None:
+    """Show a one-line banner if there are running background jobs."""
+    jobs = _load_jobs()
+    jobs = _refresh_job_statuses(jobs)
+    _save_jobs(jobs)
+
+    running = [j for j in jobs if j.get("status") == "running"]
+    if running:
+        parts = []
+        for j in running:
+            name = j.get("dataset", "?")
+            prog = _read_progress_file(j)
+            if prog and prog.get("total"):
+                cur = prog.get("iteration", 0)
+                tot = prog["total"]
+                parts.append(f"{name} ({cur}/{tot})")
+            else:
+                parts.append(name)
+        console.print(
+            f"  [bold yellow]⟳ {len(running)} background job(s) running: "
+            f"{', '.join(parts)}[/bold yellow]"
+        )
+        console.print(
+            "  [dim]Select 'Monitor Background Jobs' to see details.[/dim]\n"
+        )
 
 
 ##### Prompt Helpers #####
@@ -188,6 +272,9 @@ def interactive_menu() -> None:
     )
 
     while True:
+        # Show background job status banner if any are running
+        _show_bg_jobs_banner(console)
+
         choice = _prompt_choice(
             console,
             "What would you like to do?",
@@ -196,15 +283,19 @@ def interactive_menu() -> None:
                 "🏥  Clinical Inference",
                 "🏥  Multi-Bundle Inference",
                 "📦  Inspect Model Bundle",
+                "📂  Browse Output Runs",
+                "📋  Monitor Background Jobs",
                 "📊  Launch Dashboard (Streamlit)",
                 "⚡  Quick Test Run",
                 "❓  Help & Documentation",
             ],
             [
-                "Train classifiers on gene expression data",
+                "Train classifiers (foreground or background)",
                 "Diagnose patients using a single trained model",
                 "Combine multiple dataset models for robust diagnosis",
                 "View metadata of a saved .gsm.zip bundle",
+                "Inspect past pipeline runs and their results",
+                "Check status of background training jobs",
                 "Open the web-based UI for results exploration",
                 "Run a fast test with sample data (3 iterations)",
                 "Show usage guide and available commands",
@@ -225,10 +316,14 @@ def interactive_menu() -> None:
         elif choice == 3:
             _interactive_bundle_info(console)
         elif choice == 4:
-            _launch_streamlit(console)
+            _interactive_browse_outputs(console)
         elif choice == 5:
-            _quick_test(console)
+            _interactive_monitor_jobs(console)
         elif choice == 6:
+            _launch_streamlit(console)
+        elif choice == 7:
+            _quick_test(console)
+        elif choice == 8:
             _show_help(console)
 
 
@@ -338,11 +433,36 @@ def _interactive_train(console) -> None:
     console.print(summary)
     console.print()
 
-    if not _prompt_yes_no(console, "Start training?", default=True):
+    run_mode = _prompt_choice(
+        console,
+        "How to run?",
+        [
+            "▶️  Run in foreground",
+            "🔄  Run in background",
+        ],
+        [
+            "Run here — see live progress (blocks the terminal)",
+            "Launch as a background job — continue using the CLI",
+        ],
+    )
+
+    if run_mode is None:
         console.print("  [dim]Training cancelled.[/dim]\n")
         return
 
-    # Execute training
+    if run_mode == 1:
+        # Background mode
+        _launch_background_train_with_config(
+            console,
+            data_path=data_path,
+            group_path=group_path,
+            model_name=model_name,
+            n_iterations=n_iterations,
+            seed=seed,
+        )
+        return
+
+    # Foreground mode
     _execute_train(
         console,
         data_path=data_path,
@@ -584,6 +704,737 @@ def _interactive_bundle_info(console) -> None:
     _execute_bundle_info(console, bundles[bidx])
 
 
+##### Browse Output Runs #####
+
+def _interactive_browse_outputs(console) -> None:
+    """Browse past pipeline runs and inspect their results."""
+    import json
+    from rich.table import Table
+    from rich.panel import Panel
+
+    console.print(
+        "\n[bold cyan]═══ 📂 BROWSE OUTPUT RUNS ═══[/bold cyan]\n"
+    )
+
+    runs = _discover_output_runs()
+    if not runs:
+        console.print("  [dim]No pipeline runs found in output/.[/dim]\n")
+        return
+
+    # Build a summary table
+    run_summaries = []
+    for run_dir in runs:
+        summary = {"path": run_dir, "name": run_dir.name}
+
+        # Try to get basic metrics from results JSON
+        results_json = run_dir / "modeling_results_all_iterations.json"
+        if results_json.exists():
+            try:
+                data = json.loads(results_json.read_text())
+                last_iter = data[-1] if data else {}
+                best = (
+                    last_iter.get("results", [{}])[0]
+                    if "results" in last_iter else last_iter
+                )
+                summary["f1"] = best.get("f1_score", 0)
+                summary["auc"] = best.get("auc_roc", 0)
+                summary["groups"] = best.get("num_groups_used", "?")
+                summary["features"] = best.get("num_features_used", "?")
+            except Exception:
+                pass
+
+        # Check for bundle
+        bundles_dir = run_dir / "bundles"
+        summary["has_bundle"] = (
+            bundles_dir.exists()
+            and bool(list(bundles_dir.glob("*.gsm.zip")))
+        )
+
+        run_summaries.append(summary)
+
+    # Display overview table
+    overview = Table(
+        title=f"Pipeline Runs ({len(run_summaries)} found)",
+        border_style="cyan",
+        padding=(0, 1),
+    )
+    overview.add_column("#", style="bold cyan", width=3)
+    overview.add_column("Run", style="bold", max_width=55)
+    overview.add_column("F1", justify="center", width=6)
+    overview.add_column("AUC", justify="center", width=6)
+    overview.add_column("Groups", justify="center", width=6)
+    overview.add_column("Features", justify="center", width=8)
+    overview.add_column("Bundle", justify="center", width=6)
+
+    for i, s in enumerate(run_summaries):
+        f1 = f"{s['f1']:.3f}" if "f1" in s else "—"
+        auc = f"{s['auc']:.3f}" if "auc" in s else "—"
+        groups = str(s.get("groups", "—"))
+        features = str(s.get("features", "—"))
+        bundle = "[green]✓[/green]" if s["has_bundle"] else "[dim]—[/dim]"
+
+        overview.add_row(
+            str(i + 1), s["name"], f1, auc, groups, features, bundle,
+        )
+
+    console.print(overview)
+    console.print()
+
+    # Let user drill into a specific run
+    names = [s["name"] for s in run_summaries]
+    idx = _prompt_choice(console, "Select a run to inspect", names)
+    if idx is None:
+        return
+
+    _inspect_run(console, run_summaries[idx])
+
+
+def _inspect_run(console, run_summary: dict) -> None:
+    """Drill into a single run's details."""
+    from rich.panel import Panel
+    from rich.table import Table
+
+    run_dir: Path = run_summary["path"]
+    console.print(
+        f"\n[bold cyan]═══ 📂 {run_dir.name} ═══[/bold cyan]\n"
+    )
+
+    while True:
+        actions = [
+            "📄  View summary report",
+            "📊  Show result metrics",
+            "📁  List output files",
+            "📋  View pipeline log",
+            "🧬  Re-run biological validation",
+        ]
+        descs = [
+            "Display the text summary report",
+            "Show detailed F1, AUC, groups, features",
+            "List all files with sizes",
+            "Show the last 50 lines of the log file",
+            "Run Enrichr + STRING-db + DisGeNET on this run's genes",
+        ]
+
+        # Add bundle-specific option if available
+        if run_summary.get("has_bundle"):
+            actions.append("📦  Inspect model bundle")
+            descs.append("Show metadata of the .gsm.zip bundle")
+
+        action_idx = _prompt_choice(
+            console, "What do you want to view?", actions, descs,
+        )
+        if action_idx is None:
+            return
+
+        if action_idx == 0:
+            _view_summary_report(console, run_dir)
+        elif action_idx == 1:
+            _view_result_metrics(console, run_dir)
+        elif action_idx == 2:
+            _view_output_files(console, run_dir)
+        elif action_idx == 3:
+            _view_pipeline_log(console, run_dir)
+        elif action_idx == 4:
+            _execute_bio_validate(console, run_dir)
+        elif action_idx == 5:
+            _view_run_bundle(console, run_dir)
+
+        console.print()
+
+
+def _view_summary_report(console, run_dir: Path) -> None:
+    """Display the summary report text."""
+    from rich.panel import Panel
+
+    report_path = run_dir / "summary_report.txt"
+    if not report_path.exists():
+        console.print("  [dim]No summary report found.[/dim]")
+        return
+
+    text = report_path.read_text()
+    # Truncate very long reports
+    lines = text.splitlines()
+    if len(lines) > 80:
+        display_text = "\n".join(lines[:80])
+        display_text += f"\n\n... ({len(lines) - 80} more lines)"
+    else:
+        display_text = text
+
+    console.print(Panel(
+        display_text,
+        title="[bold]Summary Report[/bold]",
+        border_style="cyan",
+    ))
+
+
+def _view_result_metrics(console, run_dir: Path) -> None:
+    """Show detailed metrics from results JSON."""
+    import json
+    from rich.table import Table
+
+    results_path = run_dir / "modeling_results_all_iterations.json"
+    if not results_path.exists():
+        console.print("  [dim]No results JSON found.[/dim]")
+        return
+
+    try:
+        data = json.loads(results_path.read_text())
+    except Exception:
+        console.print("  [dim]Could not parse results JSON.[/dim]")
+        return
+
+    # Show per-iteration best results
+    table = Table(
+        title="Per-Iteration Results",
+        border_style="cyan",
+        padding=(0, 1),
+    )
+    table.add_column("Iter", style="bold", width=5)
+    table.add_column("F1", justify="center", width=8)
+    table.add_column("AUC", justify="center", width=8)
+    table.add_column("Accuracy", justify="center", width=8)
+    table.add_column("Groups", justify="center", width=7)
+    table.add_column("Features", justify="center", width=9)
+
+    for i, iteration in enumerate(data):
+        results = iteration.get("results", [])
+        if results:
+            best = results[0]
+            table.add_row(
+                str(i + 1),
+                f"{best.get('f1_score', 0):.4f}",
+                f"{best.get('auc_roc', 0):.4f}",
+                f"{best.get('accuracy', 0):.4f}",
+                str(best.get("num_groups_used", "?")),
+                str(best.get("num_features_used", "?")),
+            )
+
+    console.print(table)
+
+    # Summary stats
+    all_f1 = []
+    for iteration in data:
+        for r in iteration.get("results", []):
+            if "f1_score" in r:
+                all_f1.append(r["f1_score"])
+
+    if all_f1:
+        import numpy as np
+        console.print(
+            f"\n  Mean F1: [bold]{np.mean(all_f1):.4f}[/bold] ± "
+            f"{np.std(all_f1):.4f}  "
+            f"(min={min(all_f1):.4f}, max={max(all_f1):.4f})"
+        )
+
+
+def _view_output_files(console, run_dir: Path) -> None:
+    """List all output files with sizes."""
+    from rich.table import Table
+
+    exts = {".txt", ".json", ".xlsx", ".csv", ".png", ".log", ".zip"}
+    files = []
+    for f in sorted(run_dir.rglob("*")):
+        if f.is_file() and f.suffix in exts:
+            rel = f.relative_to(run_dir)
+            size_kb = f.stat().st_size / 1024
+            files.append((str(rel), size_kb))
+
+    if not files:
+        console.print("  [dim]No recognized output files found.[/dim]")
+        return
+
+    table = Table(
+        title=f"Output Files ({len(files)} files)",
+        border_style="cyan",
+        padding=(0, 1),
+    )
+    table.add_column("File", style="bold", max_width=60)
+    table.add_column("Size", justify="right", width=10)
+
+    for name, size_kb in files:
+        if size_kb >= 1024:
+            size_str = f"{size_kb / 1024:.1f} MB"
+        else:
+            size_str = f"{size_kb:.0f} KB"
+        table.add_row(name, size_str)
+
+    console.print(table)
+
+
+def _view_pipeline_log(console, run_dir: Path) -> None:
+    """Show tail of the pipeline log file."""
+    from rich.panel import Panel
+
+    # Search for log files
+    log_files = list(run_dir.glob("*.log"))
+    if not log_files:
+        log_files = list(run_dir.rglob("*.log"))
+
+    if not log_files:
+        console.print("  [dim]No log files found.[/dim]")
+        return
+
+    log_path = log_files[0]
+    text = log_path.read_text()
+    lines = text.splitlines()
+
+    # Show last 50 lines
+    if len(lines) > 50:
+        display_lines = lines[-50:]
+        header = f"... (showing last 50 of {len(lines)} lines)"
+    else:
+        display_lines = lines
+        header = f"{len(lines)} lines"
+
+    console.print(Panel(
+        "\n".join(display_lines),
+        title=f"[bold]Pipeline Log ({header})[/bold]",
+        border_style="dim",
+    ))
+
+
+def _view_run_bundle(console, run_dir: Path) -> None:
+    """Inspect the bundle in this run."""
+    bundles_dir = run_dir / "bundles"
+    if not bundles_dir.exists():
+        console.print("  [dim]No bundles directory found.[/dim]")
+        return
+
+    bundle_files = list(bundles_dir.glob("*.gsm.zip"))
+    if not bundle_files:
+        console.print("  [dim]No .gsm.zip bundles found.[/dim]")
+        return
+
+    _execute_bundle_info(console, bundle_files[0])
+
+
+##### Re-run Biological Validation #####
+
+def _execute_bio_validate(console, run_dir: Path) -> None:
+    """Re-run biological validation on an existing pipeline run.
+
+    Useful when the original training completed successfully but
+    biological validation was skipped (no internet, API timeout, etc.).
+    """
+    from rich.panel import Panel
+
+    results_json = run_dir / "modeling_results_all_iterations.json"
+    if not results_json.exists():
+        console.print(
+            "  [red]No modeling_results_all_iterations.json found.[/red]"
+        )
+        console.print(
+            "  [dim]This run may not have completed successfully.[/dim]\n"
+        )
+        return
+
+    # Check if bio validation already exists
+    bio_dir = run_dir / "biological_validation"
+    if bio_dir.exists() and list(bio_dir.glob("*")):
+        console.print(
+            "  [yellow]⚠ biological_validation/ already exists "
+            "for this run.[/yellow]"
+        )
+        if not _prompt_yes_no(
+            console,
+            "Overwrite existing validation results?",
+            default=False,
+        ):
+            console.print("  [dim]Cancelled.[/dim]\n")
+            return
+
+    # Warn about internet requirement
+    console.print(Panel(
+        "  This will query external APIs:\n\n"
+        "  • [bold]Enrichr[/bold] — pathway enrichment\n"
+        "  • [bold]STRING-db[/bold] — protein-protein interactions\n"
+        "  • [bold]DisGeNET[/bold] — disease-gene associations "
+        "(requires API key)\n\n"
+        "  [yellow]⚠ Internet connection is required.[/yellow]\n"
+        "  [dim]Typical runtime: 30–60 seconds.[/dim]",
+        title="[bold]Biological Validation[/bold]",
+        border_style="cyan",
+    ))
+
+    if not _prompt_yes_no(console, "Proceed?", default=True):
+        console.print("  [dim]Cancelled.[/dim]\n")
+        return
+
+    # Optional: DisGeNET API key
+    from src.workflows.GSM_workflow_config import (
+        DISGENET_API_KEY, BIOLOGICAL_VALIDATION_TOP_GENES,
+        GENE_COLUMN_NAME, GROUP_COLUMN_NAME,
+    )
+    api_key = DISGENET_API_KEY or ""
+    custom_key = _prompt_text(
+        console,
+        "DisGeNET API key (Enter to skip/use default)",
+        api_key if api_key else "",
+    )
+
+    # Top N genes
+    top_n_str = _prompt_text(
+        console, "Top N genes to validate",
+        str(BIOLOGICAL_VALIDATION_TOP_GENES),
+    )
+    top_n = (
+        int(top_n_str) if top_n_str.isdigit()
+        else BIOLOGICAL_VALIDATION_TOP_GENES
+    )
+
+    # Attempt to find grouping data for group validation
+    grouping_data_path: Optional[Path] = None
+    group_files = _discover_grouping_files()
+    if group_files:
+        if len(group_files) == 1:
+            grouping_data_path = group_files[0]
+        else:
+            console.print()
+            gnames = [p.name for p in group_files]
+            gidx = _prompt_choice(
+                console,
+                "Select grouping file for group validation (optional)",
+                gnames,
+            )
+            if gidx is not None:
+                grouping_data_path = group_files[gidx]
+
+    # Run bio validation
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    console.print()
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        transient=True,
+    ) as progress:
+        task = progress.add_task(
+            "Running biological validation (querying APIs)...",
+            total=None,
+        )
+
+        try:
+            from src.utils.biological_validation import (
+                run_biological_validation,
+            )
+            from src.utils.logger import setup_logger
+            import tempfile
+
+            log_path = Path(tempfile.mktemp(suffix=".log"))
+            logger = setup_logger(
+                str(log_path), logger_name="bio_validate_cli",
+            )
+
+            report = run_biological_validation(
+                output_dir=run_dir,
+                results_json_path=results_json,
+                logger=logger,
+                disgenet_api_key=custom_key or None,
+                top_n_genes=top_n,
+                grouping_data_path=grouping_data_path,
+                gene_column=GENE_COLUMN_NAME,
+                group_column=GROUP_COLUMN_NAME,
+            )
+
+            progress.update(task, description="Done!")
+        except Exception as e:
+            progress.update(task, description="Failed!")
+            console.print(
+                f"\n  [bold red]✗ Biological validation failed: "
+                f"{e}[/bold red]"
+            )
+            console.print(
+                "  [yellow]⚠ Check your internet connection and "
+                "try again.[/yellow]\n"
+            )
+            return
+
+    # Display results summary
+    console.print(Panel(
+        f"  Genes validated:     [bold]{len(report.input_genes)}[/bold]\n"
+        f"  Enrichr results:     [bold]{len(report.enrichr_results)}"
+        f"[/bold]\n"
+        f"  STRING interactions: [bold]"
+        f"{len(report.string_interactions)}[/bold]\n"
+        f"  Disease assocs:      [bold]"
+        f"{len(report.disease_associations)}[/bold]\n\n"
+        f"  Output saved to: [bold]{run_dir.name}/biological_validation/"
+        f"[/bold]",
+        title="[bold green]✅ Biological Validation Complete[/bold green]",
+        border_style="green",
+    ))
+
+    if report.string_network_url:
+        console.print(
+            f"  [dim]STRING network: {report.string_network_url}[/dim]"
+        )
+    console.print()
+
+
+##### Background Training #####
+
+def _launch_background_train_with_config(
+    console,
+    data_path: Path,
+    group_path: Path,
+    model_name: str,
+    n_iterations: int,
+    seed: int,
+) -> None:
+    """Launch a background training subprocess with pre-configured params."""
+    import subprocess
+    import time
+
+    log_dir = PROJECT_ROOT / "output" / ".bg_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    log_path = log_dir / f"bg_{data_path.stem}_{timestamp}.log"
+    progress_path = log_dir / f"bg_{data_path.stem}_{timestamp}.progress.json"
+
+    cmd = [
+        sys.executable, "-m", "gsm", "train",
+        "--data", str(data_path),
+        "--groups", str(group_path),
+        "--iterations", str(n_iterations),
+        "--seed", str(seed),
+        "--model", model_name,
+        "--progress-file", str(progress_path),
+    ]
+
+    console.print(
+        f"\n  [dim]Launching: {' '.join(cmd[-10:])}[/dim]"
+    )
+
+    with open(log_path, "w") as log_file:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            cwd=str(PROJECT_ROOT),
+            start_new_session=True,
+        )
+
+    jobs = _load_jobs()
+    jobs.append({
+        "pid": proc.pid,
+        "dataset": data_path.stem,
+        "model": model_name,
+        "iterations": n_iterations,
+        "seed": seed,
+        "status": "running",
+        "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "log_file": str(log_path),
+        "progress_file": str(progress_path),
+        "command": " ".join(cmd),
+    })
+    _save_jobs(jobs)
+
+    console.print(
+        f"\n  [bold green]✓ Training launched in background![/bold green]"
+    )
+    console.print(
+        f"  [dim]PID: {proc.pid} | Log: {log_path.name}[/dim]"
+    )
+    console.print(
+        f"  [dim]Use 'Monitor Background Jobs' to check progress.[/dim]\n"
+    )
+
+
+def _interactive_monitor_jobs(console) -> None:
+    """Monitor background jobs — view status, logs, stop, clear."""
+    from rich.table import Table
+    from rich.panel import Panel
+
+    console.print(
+        "\n[bold cyan]═══ 📋 BACKGROUND JOBS ═══[/bold cyan]\n"
+    )
+
+    jobs = _load_jobs()
+    jobs = _refresh_job_statuses(jobs)
+    _save_jobs(jobs)
+
+    if not jobs:
+        console.print("  [dim]No background jobs recorded.[/dim]\n")
+        return
+
+    # Show status table
+    table = Table(
+        title=f"Background Jobs ({len(jobs)})",
+        border_style="cyan",
+        padding=(0, 1),
+    )
+    table.add_column("#", style="bold cyan", width=3)
+    table.add_column("Dataset", style="bold", width=15)
+    table.add_column("Iterations", justify="center", width=10)
+    table.add_column("PID", justify="center", width=8)
+    table.add_column("Status", justify="center", width=12)
+    table.add_column("Progress", justify="center", width=14)
+    table.add_column("Started At", width=20)
+
+    for i, job in enumerate(jobs):
+        status = job.get("status", "unknown")
+        if status == "running":
+            status_styled = "[bold yellow]⟳ running[/bold yellow]"
+        elif status == "completed":
+            status_styled = "[bold green]✓ done[/bold green]"
+        elif status == "stopped":
+            status_styled = "[bold red]✗ stopped[/bold red]"
+        else:
+            status_styled = f"[dim]{status}[/dim]"
+
+        # Read progress info
+        prog = _read_progress_file(job)
+        if prog and prog.get("total"):
+            cur = prog.get("iteration", 0)
+            tot = prog["total"]
+            pct = int(100 * cur / tot) if tot else 0
+            progress_str = f"{cur}/{tot} ({pct}%)"
+        else:
+            progress_str = "[dim]—[/dim]"
+
+        table.add_row(
+            str(i + 1),
+            job.get("dataset", "?"),
+            str(job.get("iterations", "?")),
+            str(job.get("pid", "?")),
+            status_styled,
+            progress_str,
+            job.get("started_at", "?"),
+        )
+
+    console.print(table)
+    console.print()
+
+    # Check if there are running jobs (needed for stop option)
+    has_running = any(
+        j.get("status") == "running" for j in jobs
+    )
+
+    # Actions
+    actions = [
+        "📋  View a job's log",
+        "🧹  Clear finished jobs",
+    ]
+    action_desc = [
+        "See output from a background training",
+        "Remove completed/stopped jobs from the tracker",
+    ]
+    if has_running:
+        actions.append("🛑  Stop a running job")
+        action_desc.append(
+            "Send termination signal to a running job"
+        )
+
+    action = _prompt_choice(
+        console, "Action", actions, action_desc,
+    )
+
+    if action is None:
+        return
+    elif action == 0:
+        _view_job_log(console, jobs)
+    elif action == 1:
+        _clear_completed_jobs(console)
+    elif action == 2 and has_running:
+        _stop_job(console, jobs)
+
+
+def _view_job_log(console, jobs: list[dict]) -> None:
+    """Let the user pick a job and view its log."""
+    from rich.panel import Panel
+
+    job_names = [
+        f"{j['dataset']} ({j['status']})" for j in jobs
+    ]
+    jidx = _prompt_choice(console, "View log for", job_names)
+    if jidx is None:
+        return
+
+    log_path = Path(jobs[jidx].get("log_file", ""))
+    if log_path.exists():
+        text = log_path.read_text()
+        lines = text.splitlines()
+        if len(lines) > 40:
+            display = "\n".join(lines[-40:])
+            header = f"last 40 of {len(lines)} lines"
+        else:
+            display = text
+            header = f"{len(lines)} lines"
+
+        console.print(Panel(
+            display or "[dim]Log is empty — job may still be starting.[/dim]",
+            title=f"[bold]Job Log ({header})[/bold]",
+            border_style="dim",
+        ))
+    else:
+        console.print(f"  [dim]Log file not found: {log_path}[/dim]")
+
+
+def _clear_completed_jobs(console) -> None:
+    """Remove completed and stopped jobs from the tracker."""
+    jobs = _load_jobs()
+    jobs = _refresh_job_statuses(jobs)
+
+    before = len(jobs)
+    jobs = [j for j in jobs if j.get("status") == "running"]
+    after = len(jobs)
+    _save_jobs(jobs)
+
+    removed = before - after
+    console.print(
+        f"  [green]Cleared {removed} finished job(s). "
+        f"{after} still running.[/green]\n"
+    )
+
+
+def _stop_job(console, jobs: list[dict]) -> None:
+    """Let the user pick a running job and send SIGTERM to stop it."""
+    import signal
+
+    running = [
+        (i, j) for i, j in enumerate(jobs)
+        if j.get("status") == "running"
+    ]
+    if not running:
+        console.print("  [dim]No running jobs to stop.[/dim]\n")
+        return
+
+    job_labels = [
+        f"{j['dataset']} (PID {j['pid']})" for _, j in running
+    ]
+    pick = _prompt_choice(console, "Stop which job?", job_labels)
+    if pick is None:
+        return
+
+    orig_idx, job = running[pick]
+    pid = job["pid"]
+
+    try:
+        # Process was started with start_new_session=True,
+        # so kill the entire process group to include children.
+        pgid = os.getpgid(pid)
+        os.killpg(pgid, signal.SIGTERM)
+        job["status"] = "stopped"
+        console.print(
+            f"  [bold green]✓ Sent SIGTERM to job "
+            f"{job['dataset']} (PID {pid}).[/bold green]\n"
+        )
+    except ProcessLookupError:
+        job["status"] = "completed"
+        console.print(
+            f"  [dim]Process {pid} already exited.[/dim]\n"
+        )
+    except PermissionError:
+        console.print(
+            f"  [bold red]✗ Permission denied stopping "
+            f"PID {pid}.[/bold red]\n"
+        )
+        return
+
+    # Persist updated status
+    _save_jobs(jobs)
+
+
 ##### Launch Streamlit #####
 
 def _launch_streamlit(console) -> None:
@@ -661,6 +1512,18 @@ def _show_help(console) -> None:
         "python -m gsm bundle-info", "Inspect bundle",
         "-b bundle.gsm.zip",
     )
+    t.add_row(
+        "python -m gsm runs", "Browse output runs",
+        "",
+    )
+    t.add_row(
+        "python -m gsm jobs", "Monitor background jobs",
+        "",
+    )
+    t.add_row(
+        "python -m gsm bio-validate", "Re-run bio validation",
+        "--run output/gsm_2026_...",
+    )
     t.add_row("python -m gsm ui", "Streamlit dashboard", "")
     t.add_row(
         "python run_test.py", "Quick test (legacy)",
@@ -723,11 +1586,13 @@ def _execute_train(
     seed: int,
     run_bio: bool,
     is_test: bool = False,
+    progress_file: Optional[Path] = None,
 ) -> None:
     """Execute the GSM training pipeline with rich progress display."""
     from rich.panel import Panel
     from rich.progress import (
-        Progress, SpinnerColumn, TextColumn,
+        Progress, SpinnerColumn, TextColumn, BarColumn,
+        MofNCompleteColumn, TimeElapsedColumn, TimeRemainingColumn,
     )
     import time
 
@@ -782,36 +1647,60 @@ def _execute_train(
         f"[bold]{group_data.shape[0]}[/bold] gene-group mappings\n"
     )
 
-    # Run pipeline
+    # Run pipeline with a live iteration progress bar
     t0 = time.time()
-    console.print("  [bold]Running GSM pipeline...[/bold]")
-    console.print(
-        "  [dim]Progress details in log output below ↓[/dim]\n"
+
+    # Build a shared progress bar that the callback will update
+    train_progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=30),
+        MofNCompleteColumn(),
+        TextColumn("•"),
+        TimeElapsedColumn(),
+        TextColumn("•"),
+        TimeRemainingColumn(),
+    )
+    train_task = train_progress.add_task(
+        "Preprocessing…", total=n_iterations, completed=0,
     )
 
-    try:
-        output_path = gsm_run(
-            input_data,
-            group_data,
-            n_iterations=n_iterations,
-            model_name=model_name,
-            scoring_model=SCORING_MODEL,
-            initial_seed=seed,
-            sample_ratio=TRAIN_TEST_SPLIT_RATIO,
-            label_column=LABEL_COLUMN_NAME,
-            positive_class_label=CLASS_LABELS_POSITIVE,
-            negative_class_label=CLASS_LABELS_NEGATIVE,
-            gene_column=GENE_COLUMN_NAME,
-            group_column=GROUP_COLUMN_NAME,
-            normalization_method=NORMALIZATION_METHOD,
-            run_biological_validation_flag=run_bio,
-            biological_validation_top_genes=(
-                BIOLOGICAL_VALIDATION_TOP_GENES
-            ),
-            disgenet_api_key=DISGENET_API_KEY,
-            input_data_name=data_path.stem,
-            group_data_name=group_path.stem,
+    def _on_progress(iteration, total, elapsed, eta_seconds):
+        """Callback invoked by gsm_run after each iteration."""
+        train_progress.update(
+            train_task,
+            completed=iteration,
+            description=f"Iteration {iteration}/{total}",
         )
+
+    console.print("  [bold]Running GSM pipeline…[/bold]\n")
+
+    try:
+        with train_progress:
+            output_path = gsm_run(
+                input_data,
+                group_data,
+                n_iterations=n_iterations,
+                model_name=model_name,
+                scoring_model=SCORING_MODEL,
+                initial_seed=seed,
+                sample_ratio=TRAIN_TEST_SPLIT_RATIO,
+                label_column=LABEL_COLUMN_NAME,
+                positive_class_label=CLASS_LABELS_POSITIVE,
+                negative_class_label=CLASS_LABELS_NEGATIVE,
+                gene_column=GENE_COLUMN_NAME,
+                group_column=GROUP_COLUMN_NAME,
+                normalization_method=NORMALIZATION_METHOD,
+                run_biological_validation_flag=run_bio,
+                biological_validation_top_genes=(
+                    BIOLOGICAL_VALIDATION_TOP_GENES
+                ),
+                disgenet_api_key=DISGENET_API_KEY,
+                input_data_name=data_path.stem,
+                group_data_name=group_path.stem,
+                progress_callback=_on_progress,
+                progress_file=progress_file,
+            )
     except Exception as e:
         console.print(
             f"\n  [bold red]✗ Pipeline failed: {e}[/bold red]\n"
@@ -1185,6 +2074,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "Direct commands:\n"
             "  python -m gsm train --data data/expression_data/GDS2545.csv "
             "--iterations 100\n"
+            "  python -m gsm bio-validate --run output/gsm_2026_...\n"
             "  python -m gsm infer -b bundle.gsm.zip -p patients.csv\n"
             "  python -m gsm multi-infer -b b1.gsm.zip b2.gsm.zip "
             "-p patients.csv\n"
@@ -1231,6 +2121,10 @@ def _build_parser() -> argparse.ArgumentParser:
     train_p.add_argument(
         "--no-bio-validation", action="store_true",
         help="Skip biological validation",
+    )
+    train_p.add_argument(
+        "--progress-file", type=str, default=None,
+        help="Path to write iteration progress JSON (used by background jobs)",
     )
 
     # ── infer ──
@@ -1284,6 +2178,38 @@ def _build_parser() -> argparse.ArgumentParser:
     # ── ui ──
     subparsers.add_parser("ui", help="Launch Streamlit dashboard")
 
+    # ── runs ──
+    subparsers.add_parser(
+        "runs", help="Browse and inspect past pipeline output runs",
+    )
+
+    # ── jobs ──
+    subparsers.add_parser(
+        "jobs", help="Monitor background training jobs",
+    )
+
+    # ── bio-validate ──
+    bio_p = subparsers.add_parser(
+        "bio-validate",
+        help="Re-run biological validation on a completed run",
+    )
+    bio_p.add_argument(
+        "--run", "-r", type=str, required=True,
+        help="Path to the output run directory",
+    )
+    bio_p.add_argument(
+        "--top-genes", type=int, default=None,
+        help="Number of top genes to validate (default: config)",
+    )
+    bio_p.add_argument(
+        "--grouping", "-g", type=str, default=None,
+        help="Path to grouping file for group validation",
+    )
+    bio_p.add_argument(
+        "--disgenet-key", type=str, default=None,
+        help="DisGeNET API key",
+    )
+
     return parser
 
 
@@ -1328,6 +2254,9 @@ def _handle_train_args(args: argparse.Namespace) -> None:
             not args.no_bio_validation and RUN_BIOLOGICAL_VALIDATION
         ),
         is_test=args.test,
+        progress_file=(
+            Path(args.progress_file) if args.progress_file else None
+        ),
     )
 
 
@@ -1372,11 +2301,116 @@ def _handle_bundle_info_args(args: argparse.Namespace) -> None:
     _execute_bundle_info(console, bundle_path)
 
 
+def _handle_bio_validate_args(args: argparse.Namespace) -> None:
+    """Handle direct bio-validate command."""
+    from rich.panel import Panel
+
+    console = _get_console()
+    console.print(BANNER)
+
+    run_dir = Path(args.run)
+    if not run_dir.exists():
+        console.print(
+            f"  [bold red]✗ Run directory not found: "
+            f"{run_dir}[/bold red]\n"
+        )
+        sys.exit(1)
+
+    results_json = run_dir / "modeling_results_all_iterations.json"
+    if not results_json.exists():
+        console.print(
+            f"  [bold red]✗ No modeling results JSON in "
+            f"{run_dir.name}[/bold red]\n"
+        )
+        sys.exit(1)
+
+    from src.workflows.GSM_workflow_config import (
+        DISGENET_API_KEY, BIOLOGICAL_VALIDATION_TOP_GENES,
+        GENE_COLUMN_NAME, GROUP_COLUMN_NAME,
+    )
+    from src.utils.biological_validation import run_biological_validation
+    from src.utils.logger import setup_logger
+    import tempfile
+
+    api_key = args.disgenet_key or DISGENET_API_KEY or None
+    top_n = args.top_genes or BIOLOGICAL_VALIDATION_TOP_GENES
+    grouping_path = Path(args.grouping) if args.grouping else None
+
+    console.print(Panel(
+        f"  Run:        [bold]{run_dir.name}[/bold]\n"
+        f"  Top genes:  [bold]{top_n}[/bold]\n"
+        f"  Grouping:   [bold]"
+        f"{grouping_path.name if grouping_path else 'None'}[/bold]\n"
+        f"  DisGeNET:   [bold]"
+        f"{'yes' if api_key else 'no key'}[/bold]",
+        title="[bold cyan]🧬 Biological Validation[/bold cyan]",
+        border_style="cyan",
+    ))
+
+    console.print(
+        "  [yellow]⚠ Internet connection is required for API queries."
+        "[/yellow]\n"
+    )
+
+    log_path = Path(tempfile.mktemp(suffix=".log"))
+    logger = setup_logger(str(log_path), logger_name="bio_validate_cli")
+
+    try:
+        report = run_biological_validation(
+            output_dir=run_dir,
+            results_json_path=results_json,
+            logger=logger,
+            disgenet_api_key=api_key,
+            top_n_genes=top_n,
+            grouping_data_path=grouping_path,
+            gene_column=GENE_COLUMN_NAME,
+            group_column=GROUP_COLUMN_NAME,
+        )
+        console.print(Panel(
+            f"  Genes validated:     [bold]{len(report.input_genes)}"
+            f"[/bold]\n"
+            f"  Enrichr results:     [bold]"
+            f"{len(report.enrichr_results)}[/bold]\n"
+            f"  STRING interactions: [bold]"
+            f"{len(report.string_interactions)}[/bold]\n"
+            f"  Disease assocs:      [bold]"
+            f"{len(report.disease_associations)}[/bold]\n\n"
+            f"  Output: [bold]{run_dir.name}/biological_validation/"
+            f"[/bold]",
+            title="[bold green]✅ Validation Complete[/bold green]",
+            border_style="green",
+        ))
+    except Exception as e:
+        console.print(
+            f"\n  [bold red]✗ Biological validation failed: "
+            f"{e}[/bold red]"
+        )
+        console.print(
+            "  [yellow]⚠ Check your internet connection and "
+            "try again.[/yellow]\n"
+        )
+        sys.exit(1)
+
+
 def _handle_ui_args(args: argparse.Namespace) -> None:
     """Handle direct ui command."""
     console = _get_console()
     console.print(BANNER)
     _launch_streamlit(console)
+
+
+def _handle_runs_args(args: argparse.Namespace) -> None:
+    """Handle direct runs command."""
+    console = _get_console()
+    console.print(BANNER)
+    _interactive_browse_outputs(console)
+
+
+def _handle_jobs_args(args: argparse.Namespace) -> None:
+    """Handle direct jobs command."""
+    console = _get_console()
+    console.print(BANNER)
+    _interactive_monitor_jobs(console)
 
 
 def _handle_multi_infer_args(args: argparse.Namespace) -> None:
@@ -1453,6 +2487,12 @@ def main() -> None:
         _handle_bundle_info_args(args)
     elif args.command == "ui":
         _handle_ui_args(args)
+    elif args.command == "runs":
+        _handle_runs_args(args)
+    elif args.command == "jobs":
+        _handle_jobs_args(args)
+    elif args.command == "bio-validate":
+        _handle_bio_validate_args(args)
     else:
         parser.print_help()
         sys.exit(1)
