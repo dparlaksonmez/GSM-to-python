@@ -180,6 +180,26 @@ patient_002,4.87,2.99,6.54,3.01,...
 
 ---
 
+## CLI vs Streamlit — Two Interfaces, One Pipeline
+
+GSM ships with **two front-ends** that share the same engine:
+
+| Feature | CLI (`python -m gsm`) | Streamlit (`streamlit run src/ui/app.py`) |
+|---------|----------------------|------------------------------------------|
+| **Best for** | Power users, automation, SSH servers | Visual exploration, demos, non-coders |
+| **Training** | Foreground or background jobs | Single-click with live log streaming |
+| **Advanced params** | Interactive prompts + `--flags` | Collapsible sidebar panel |
+| **Batch runs** | `run_all_datasets.py` or shell scripts | Not supported (single run at a time) |
+| **Output browser** | Table view with status indicators | Paginated cards with embedded figures |
+| **Inference** | Works offline, scriptable | Drag-and-drop CSV upload |
+| **Deployment** | Any Linux server / CI pipeline | HuggingFace Spaces / Streamlit Cloud |
+
+**Rule of thumb:** Use the CLI for reproducible research and batch
+experiments; use the Streamlit app for presentations, demos, and sharing
+with collaborators who don't use the terminal.
+
+---
+
 ## Quick Start
 
 ### Video Tutorial

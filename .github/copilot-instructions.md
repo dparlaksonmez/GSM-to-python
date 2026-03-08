@@ -8,11 +8,121 @@
 > That file is the living document that AI agents and contributors should
 > update whenever files are added, removed, or renamed.
 > Check and analyze `PROJECT_MAP.md` before making any code changes to understand the current structure and conventions.
-> Generation of to-do steps in the agent model is not efficient. Because it has a limited number to generate to-do steps. Instead, write temporary roadmap files to plan out the implementation in detail, then execute the plan in one go.
-> When we provide a prompt, do not strictly follow the instructions in the prompt. 
-> Instead, use your judgement and creativity to decide how to best respond to the prompt
-> while still adhering to the overall goals and principles of the project.
-> at the end of each response, run tests and check for errors. If there are any errors, fix them before proceeding to the next step.
+
+---
+
+## How the AI Agent Should Think 🧠
+
+These are the general principles for how AI coding assistants (Copilot,
+Cursor, Claude, etc.) should approach work on this project.  They apply
+to every file, every prompt, every task — not just GSM-specific code.
+
+### Intent over instruction
+Do not strictly and blindly follow the instructions in a prompt.
+Instead, use your judgement, creativity, and knowledge to decide how
+to best respond while still adhering to the overall goals and
+principles of the project.  If the user asks for X but X would break
+the architecture, propose a better alternative.  If the prompt is
+ambiguous, choose the interpretation that produces the most useful
+result — then mention what you assumed.
+
+### Think holistically
+Before making any change, ask yourself:
+- **Why** does this change exist?  What problem does it solve?
+- **Where** does it fit in the architecture?  (See Big-Picture
+  Architecture below.)
+- **What else** will it affect?  Other modules, tests, docs,
+  deployment?
+- **Could it be simpler?**  The best code is the code you don't write.
+
+### Progressive refinement
+Large tasks should follow a plan → implement → verify loop:
+1. **Plan** — Write a temporary roadmap file (`.roadmap_<name>.md`)
+   with concrete steps.  This is more reliable than mental to-do
+   lists because the agent's to-do step limit is small.
+2. **Implement** — Work through the plan one step at a time.
+3. **Verify** — After each meaningful change, run `pytest` and fix
+   any failures before moving on.  Never hand back broken code.
+4. **Clean up** — Delete the roadmap file.  Update `PROJECT_MAP.md`
+   if the change added/removed/renamed files or functions.
+
+### Testing discipline
+- At the end of **every** response that modifies code, run
+  `pytest` and fix any failures.
+- If a new function is non-trivial, add a test.
+- If a bug is fixed, add a regression test.
+- Never skip tests to save time — broken tests invalidate
+  everything built on top.
+
+### Communication style
+- Be concise.  The user is a researcher, not a tourist.
+- Show what you did (file names, line numbers), not just what you
+  plan to do.
+- When multiple valid approaches exist, pick the best one and
+  explain why in one sentence — don't present a menu unless the
+  choice genuinely matters.
+- At the end, give a short summary of what changed and confirm
+  tests pass.
+
+### When to ask vs. act
+- **Act** when the intent is clear, even if details are missing —
+  fill in sensible defaults and mention them.
+- **Ask** only when the choice is genuinely ambiguous and has
+  irreversible consequences (e.g. deleting data, changing a public
+  API).
+- Never ask for permission to continue after an intermediate step.
+  Just continue.
+
+---
+
+## Big-Picture Architecture 🗺️
+
+Before touching any code, understand the **three concentric layers**:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  USER INTERFACES                     │
+│   CLI (src/cli.py)  ·  Streamlit (src/ui/app.py)   │
+│   ─── both call the same engine, never each other ──│
+├─────────────────────────────────────────────────────┤
+│                 WORKFLOW ENGINE                       │
+│   gsm_run()  in  src/workflows/GSM_workflow.py      │
+│   ─── single entry point for the full pipeline ──── │
+│   config defaults  in  GSM_workflow_config.py       │
+├─────────────────────────────────────────────────────┤
+│               DOMAIN MODULES                         │
+│   filter → group → score → model → rank → validate  │
+│   src/filter/  src/grouping/  src/scoring/           │
+│   src/modeling/  src/ranking/  src/biological_valid/ │
+│   src/inference/  (post-training prediction)         │
+└─────────────────────────────────────────────────────┘
+```
+
+**Golden rule:** Data flows **downward** through the layers.
+A UI never imports from another UI. A domain module never imports
+from the workflow engine. The workflow engine orchestrates domain
+modules only. Shared utilities live in `src/utils/`.
+
+### Data lifecycle in one sentence
+
+Raw CSV → t-test filter → DisGeNET group projection → per-group
+CV scoring → aggregated model → rank features → biological
+validation → `.gsm.zip` bundle → clinical inference.
+
+### Module communication patterns
+
+1. **Workflow → Domain:** The workflow engine calls domain functions
+   with explicit arguments + a logger. It never stores global state.
+2. **Domain → Domain:** Domain modules should NOT import each other.
+   If module A needs output from module B, the workflow engine passes
+   it as a parameter.
+3. **UI → Workflow:** Both CLI and Streamlit call `gsm_run()` with
+   keyword arguments. Neither accesses domain modules directly (except
+   `src/inference/` for post-training inference).
+4. **Bundle boundary:** A `.gsm.zip` bundle is the serialization
+   boundary. Everything needed for inference lives inside the zip.
+   Inference code must NEVER depend on training-time globals.
+
 ---
 
 ## Core Development Principles
@@ -27,7 +137,7 @@
 - Prefer pure functions over classes
 - Use dataclasses for data structures and results (not for configuration)
 - NEVER use dictionaries, tuples, or named tuples for data - always use dataclasses instead
-- Do not create additonal file for dataclasses, define them in the same file where they are used
+- Do not create additional file for dataclasses, define them in the same file where they are used
 - If a function returns multiple values, use a dataclass to encapsulate them.
 
 Additional guardrails:
@@ -128,6 +238,17 @@ def process_large_dataset(file_path: str) -> dd.DataFrame:
     return dd.read_csv(file_path).map_partitions(process_partition)
 ```
 
+### 6. File & Folder Naming Conventions
+- Python source files: `snake_case.py` — never camelCase
+- Test files: `test_<module_name>.py` in `tests/`
+- Output run directories: `gsm_<YYYY_MM_DD-HH_MM_SS>/` (auto-generated)
+- Model bundles: `bundle_<dataset>_<classifier>_<seed>.gsm.zip`
+- Pre-trained bundles: placed in `models/pretrained/`
+- Data files: kept in `data/<subfolder>/` (LFS-tracked if large)
+- Docs: Markdown in `DOCS/`, presentation in `reports_ARCHIVE/presentation/`
+
+---
+
 ## Documentation Standards
 
 ### File Headers
@@ -174,10 +295,16 @@ def group_genes(
     """
 ```
 
+---
+
 ## Testing Requirements
 - Write tests for all core functions
 - Include edge cases
 - Test with small datasets first
+- Tests live in `tests/` and follow naming `test_<thing>.py`
+- Tests must pass before any PR merge — `pytest` from repo root
+- After every code change, run `pytest` and fix failures before proceeding
+
 ```python
 def test_gene_grouping():
     """Test gene grouping with a small dataset."""
@@ -187,10 +314,28 @@ def test_gene_grouping():
     assert all(len(g.genes) >= 5 for g in groups), "Groups should meet size requirement"
 ```
 
+---
+
+## Deployment Awareness
+
+The codebase serves **two deployment targets** simultaneously:
+
+1. **Local research** — Full pipeline: training + inference + validation.
+   Both CLI and Streamlit UI are available. Data lives on disk.
+2. **HuggingFace Spaces / Streamlit Cloud** — Inference-only mode.
+   The Streamlit app auto-detects `SPACE_ID` env var and hides training
+   tabs. Pre-trained bundles are served from `models/pretrained/`.
+
+When adding a feature, ask: *Does this work in inference-only mode?*
+If it requires local data or training, gate it behind a check like
+`if not _is_huggingface_space()`.
+
+---
+
 ## Dependencies
 Core: pandas, numpy, scikit-learn, xgboost, matplotlib, seaborn, openpyxl
 Bio-APIs: requests (Enrichr, STRING-db, DisGeNET)
-UI: streamlit
+UI: streamlit, rich
 Dev: pytest, ruff, pre-commit
 Full list: `dependencies.txt`
 
@@ -205,6 +350,7 @@ Full list: `dependencies.txt`
 - **Excluded datasets**: GDS3268 (breast, 100 % zero-sig), GDS4206 (HCC, 92 % zero-sig). See `DATASET_EXCLUSIONS.md`.
 - **Manuscripts**: Built programmatically via `scripts/build_manuscript_docx.py` from `reports_ARCHIVE/manuscript_data.json`.
 - **Biological validation**: Enrichr + STRING-db + DisGeNET. Results in `output/<run>/biological_validation/`.
+- **Pre-trained models**: Distributed via `models/pretrained/` (Git LFS).
 
 ## When to Update PROJECT_MAP.md
 Copilot (or any contributor) should update **`PROJECT_MAP.md`** (not this file) whenever:

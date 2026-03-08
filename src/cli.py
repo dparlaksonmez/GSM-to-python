@@ -58,8 +58,8 @@ BANNER = r"""
    ║   ╚██████╔╝███████║██║ ╚═╝ ██║                               ║
    ║    ╚═════╝ ╚══════╝╚═╝     ╚═╝                               ║
    ║                                                              ║
-   ║   [bold white]Group  ·  Score  ·  Model[/bold white]                              ║
-   ║   [dim]Bioinformatics Gene Expression Pipeline[/dim]                 ║
+   ║   [bold white]Group  ·  Score  ·  Model[/bold white]                               ║
+   ║   [dim]Bioinformatics Gene Expression Pipeline[/dim]                   ║
    ║                                                              ║
    ╚══════════════════════════════════════════════════════════════╝
 [/bold cyan]"""
@@ -86,11 +86,23 @@ def _discover_grouping_files() -> list[Path]:
 
 
 def _discover_bundles() -> list[Path]:
-    """Find all .gsm.zip bundles in output/."""
+    """Find all .gsm.zip bundles in output/ and models/pretrained/."""
+    bundles: list[Path] = []
     output_dir = PROJECT_ROOT / "output"
-    if not output_dir.exists():
-        return []
-    return sorted(output_dir.rglob("*.gsm.zip"))
+    if output_dir.exists():
+        bundles.extend(output_dir.rglob("*.gsm.zip"))
+    pretrained_dir = PROJECT_ROOT / "models" / "pretrained"
+    if pretrained_dir.exists():
+        bundles.extend(pretrained_dir.glob("*.gsm.zip"))
+    return sorted(bundles)
+
+
+def _bundle_label(b: Path) -> str:
+    """Human-readable label for a bundle, with [pretrained] tag."""
+    pretrained_dir = PROJECT_ROOT / "models" / "pretrained"
+    if b.parent == pretrained_dir:
+        return f"{b.stem}  [magenta][pretrained][/magenta]"
+    return f"{b.stem}  [dim]{b.parent.parent.name}[/dim]"
 
 
 def _discover_patient_files() -> list[Path]:
@@ -237,7 +249,7 @@ def _prompt_choice(console, prompt: str, choices: list[str],
 
 def _prompt_text(console, prompt: str, default: str = "") -> str:
     """Prompt for free text input with an optional default."""
-    suffix = f" [dim]({default})[/dim]" if default else ""
+    suffix = f" [dim](default: {default} — press Enter to keep)[/dim]" if default else ""
     try:
         raw = console.input(
             f"  [bold cyan]▶ {prompt}{suffix}: [/bold cyan]"
@@ -334,13 +346,255 @@ def _goodbye(console) -> None:
     )
 
 
+##### Advanced Parameters Collector #####
+
+def _collect_advanced_params(
+    console,
+    *,
+    split_ratio_default: float,
+    normalization_default: str,
+    ttest_default: float,
+    cv_folds_default: int,
+    best_groups_default: int,
+    feature_filter_default: int,
+    scoring_model_default: str,
+    class_balancing_default: bool,
+    balance_ratio_default: float,
+    sampling_default: str,
+    save_intermediate_default: bool,
+    bio_top_genes_default: int,
+) -> dict:
+    """Present an advanced parameter tuning page and return overrides.
+
+    Shows current defaults and lets users change any value they like.
+    Only keys whose values differ from the default are returned.
+    """
+    from rich.panel import Panel
+
+    console.print(
+        "\n[bold cyan]═══ ⚙️  ADVANCED PARAMETERS ═══[/bold cyan]\n"
+    )
+    console.print(
+        "  [dim]Press Enter to keep the default value (shown in parentheses).[/dim]\n"
+    )
+
+    overrides: dict = {}
+
+    # ── Data Processing ──
+    console.print(Panel(
+        "  [bold]Data Processing[/bold]",
+        border_style="dim", expand=False,
+    ))
+
+    val = _prompt_text(
+        console, "Train/test split ratio",
+        str(split_ratio_default),
+    )
+    try:
+        split_ratio = float(val)
+        if not (0.3 <= split_ratio <= 0.95):
+            console.print("  [yellow]⚠ Clamped to [0.3, 0.95][/yellow]")
+            split_ratio = max(0.3, min(0.95, split_ratio))
+        if split_ratio != split_ratio_default:
+            overrides["split_ratio"] = split_ratio
+    except ValueError:
+        pass
+
+    norm_choices = ["zscore", "minmax", "robust"]
+    nidx = _prompt_choice(
+        console, "Normalization Method", norm_choices,
+        [
+            f"{'(current)' if normalization_default == 'zscore' else ''}",
+            f"{'(current)' if normalization_default == 'minmax' else ''}",
+            f"{'(current)' if normalization_default == 'robust' else ''}",
+        ],
+        allow_back=False,
+    )
+    if nidx is not None:
+        chosen_norm = norm_choices[nidx]
+        if chosen_norm != normalization_default:
+            overrides["normalization"] = chosen_norm
+
+    # ── Feature Selection ──
+    console.print(Panel(
+        "  [bold]Feature Selection[/bold]",
+        border_style="dim", expand=False,
+    ))
+
+    val = _prompt_text(
+        console, "T-test FDR threshold (α)",
+        str(ttest_default),
+    )
+    try:
+        tv = float(val)
+        if tv != ttest_default:
+            overrides["ttest_threshold"] = tv
+    except ValueError:
+        pass
+
+    val = _prompt_text(
+        console, "Initial feature filter size (0 = off)",
+        str(feature_filter_default),
+    )
+    if val.isdigit():
+        ff = int(val)
+        if ff != feature_filter_default:
+            overrides["feature_filter_size"] = ff
+
+    val = _prompt_text(
+        console, "Best groups to keep for final model",
+        str(best_groups_default),
+    )
+    if val.isdigit():
+        bg = int(val)
+        if bg != best_groups_default:
+            overrides["best_groups"] = bg
+
+    # ── Cross-Validation & Scoring ──
+    console.print(Panel(
+        "  [bold]Cross-Validation & Scoring[/bold]",
+        border_style="dim", expand=False,
+    ))
+
+    val = _prompt_text(
+        console, "CV folds (scoring phase)",
+        str(cv_folds_default),
+    )
+    if val.isdigit():
+        cf = int(val)
+        if cf != cv_folds_default:
+            overrides["cv_folds"] = cf
+
+    scoring_choices = ["RandomForest", "XGBoost", "DecisionTree"]
+    scoring_desc = [
+        f"Best bio coherence {'(current)' if scoring_model_default == 'RandomForest' else ''}",
+        f"Faster {'(current)' if scoring_model_default == 'XGBoost' else ''}",
+        f"Fastest {'(current)' if scoring_model_default == 'DecisionTree' else ''}",
+    ]
+    sidx = _prompt_choice(
+        console, "Scoring Model (group ranking)", scoring_choices,
+        scoring_desc, allow_back=False,
+    )
+    if sidx is not None:
+        chosen_scoring = scoring_choices[sidx]
+        if chosen_scoring != scoring_model_default:
+            overrides["scoring_model"] = chosen_scoring
+
+    # ── Class Balancing ──
+    console.print(Panel(
+        "  [bold]Class Balancing[/bold]",
+        border_style="dim", expand=False,
+    ))
+
+    bal = _prompt_yes_no(
+        console, "Apply class balancing?",
+        default=class_balancing_default,
+    )
+    if bal != class_balancing_default:
+        overrides["class_balancing"] = bal
+
+    if bal:
+        samp_choices = ["undersampling", "oversampling"]
+        samp_desc = [
+            f"Reduce majority class {'(current)' if sampling_default == 'undersampling' else ''}",
+            f"Duplicate minority class {'(current)' if sampling_default == 'oversampling' else ''}",
+        ]
+        sampidx = _prompt_choice(
+            console, "Sampling Method", samp_choices,
+            samp_desc, allow_back=False,
+        )
+        if sampidx is not None:
+            chosen_samp = samp_choices[sampidx]
+            if chosen_samp != sampling_default:
+                overrides["sampling_method"] = chosen_samp
+
+        val = _prompt_text(
+            console, "Min class balance ratio",
+            str(balance_ratio_default),
+        )
+        try:
+            br = float(val)
+            if br != balance_ratio_default:
+                overrides["balance_ratio"] = br
+        except ValueError:
+            pass
+
+    # ── Output Options ──
+    console.print(Panel(
+        "  [bold]Output Options[/bold]",
+        border_style="dim", expand=False,
+    ))
+
+    si = _prompt_yes_no(
+        console, "Save intermediate results?",
+        default=save_intermediate_default,
+    )
+    if si != save_intermediate_default:
+        overrides["save_intermediate"] = si
+
+    val = _prompt_text(
+        console, "Bio validation top genes count",
+        str(bio_top_genes_default),
+    )
+    if val.isdigit():
+        btg = int(val)
+        if btg != bio_top_genes_default:
+            overrides["bio_top_genes"] = btg
+
+    if overrides:
+        console.print(
+            f"\n  [green]✓[/green] {len(overrides)} advanced parameter(s) "
+            f"customized.\n"
+        )
+    else:
+        console.print(
+            "\n  [dim]No changes — using all defaults.[/dim]\n"
+        )
+
+    return overrides
+
+
+def _show_runtime_estimate(console, n_iterations: int, data_path: Path) -> None:
+    """Show a rough runtime estimate based on dataset size and iterations."""
+    try:
+        file_mb = data_path.stat().st_size / (1024 * 1024)
+        # Rough heuristic: ~0.3s per iteration for small test data,
+        # ~3-5s per iteration for medium (30-50 MB) GEO datasets,
+        # scales roughly with file size.
+        per_iter_sec = max(0.3, min(15.0, file_mb * 0.08))
+        total_sec = per_iter_sec * n_iterations
+        if total_sec < 60:
+            est = f"~{total_sec:.0f}s"
+        elif total_sec < 3600:
+            est = f"~{total_sec / 60:.0f} min"
+        else:
+            est = f"~{total_sec / 3600:.1f} hr"
+        console.print(
+            f"\n  [dim]⏱  Estimated runtime: {est} "
+            f"(rough estimate based on dataset size)[/dim]"
+        )
+    except Exception:
+        pass
+
+
 ##### Interactive Train #####
 
 def _interactive_train(console) -> None:
-    """Guided training flow."""
+    """Guided training flow with optional advanced parameter tuning."""
     from rich.table import Table
 
     console.print("\n[bold cyan]═══ 🧬 TRAIN PIPELINE ═══[/bold cyan]\n")
+
+    # Import config defaults (used as fallbacks throughout)
+    from src.workflows.GSM_workflow_config import (
+        TRAIN_TEST_SPLIT_RATIO, NORMALIZATION_METHOD,
+        TTEST_THRESHOLD, CROSS_VALIDATION_FOLDS,
+        BEST_GROUPS_TO_KEEP, INITIAL_FEATURE_FILTER_SIZE,
+        SCORING_MODEL, APPLY_CLASS_BALANCING,
+        MIN_CLASS_BALANCE_RATIO, SAMPLING_METHOD,
+        SAVE_INTERMEDIATE_RESULTS,
+        BIOLOGICAL_VALIDATION_TOP_GENES,
+    )
 
     # Step 1: Select dataset
     datasets = _discover_datasets()
@@ -421,13 +675,47 @@ def _interactive_train(console) -> None:
     seed_str = _prompt_text(console, "Random seed", "44")
     seed = int(seed_str) if seed_str.isdigit() else 44
 
+    # Optional experiment name
+    run_name_input = _prompt_text(
+        console, "Experiment name (optional, press Enter to skip)", ""
+    )
+    run_name: Optional[str] = run_name_input.strip() or None
+
     # Step 5: Options
     console.print("\n  [bold]Step 5/5 · Options[/bold]\n")
     run_bio = _prompt_yes_no(
         console, "Run biological validation?", default=True
     )
 
-    # Summary
+    # ── Advanced Parameters (optional) ──
+    # Collect all tuneable parameters with their current defaults.
+    # Only values the user changes are stored as overrides.
+    advanced: dict = {}
+    console.print()
+    configure_advanced = _prompt_yes_no(
+        console,
+        "Configure advanced parameters?",
+        default=False,
+    )
+
+    if configure_advanced:
+        advanced = _collect_advanced_params(
+            console,
+            split_ratio_default=TRAIN_TEST_SPLIT_RATIO,
+            normalization_default=NORMALIZATION_METHOD,
+            ttest_default=TTEST_THRESHOLD,
+            cv_folds_default=CROSS_VALIDATION_FOLDS,
+            best_groups_default=BEST_GROUPS_TO_KEEP,
+            feature_filter_default=INITIAL_FEATURE_FILTER_SIZE,
+            scoring_model_default=SCORING_MODEL,
+            class_balancing_default=APPLY_CLASS_BALANCING,
+            balance_ratio_default=MIN_CLASS_BALANCE_RATIO,
+            sampling_default=SAMPLING_METHOD,
+            save_intermediate_default=SAVE_INTERMEDIATE_RESULTS,
+            bio_top_genes_default=BIOLOGICAL_VALIDATION_TOP_GENES,
+        )
+
+    # Summary table
     summary = Table(
         title="Training Configuration", border_style="cyan",
         show_header=False, padding=(0, 2),
@@ -439,9 +727,22 @@ def _interactive_train(console) -> None:
     summary.add_row("Classifier", model_name)
     summary.add_row("Iterations", str(n_iterations))
     summary.add_row("Seed", str(seed))
+    if run_name:
+        summary.add_row("Name", run_name)
     summary.add_row("Bio Validation", "Yes" if run_bio else "No")
+
+    # Show advanced overrides in table (only those that differ from default)
+    if advanced:
+        summary.add_row("", "")  # blank separator
+        for key, val in advanced.items():
+            label = key.replace("_", " ").title()
+            summary.add_row(f"  {label}", str(val))
     console.print()
     console.print(summary)
+
+    # Estimated runtime hint
+    _show_runtime_estimate(console, n_iterations, data_path)
+
     console.print()
 
     run_mode = _prompt_choice(
@@ -470,6 +771,8 @@ def _interactive_train(console) -> None:
             model_name=model_name,
             n_iterations=n_iterations,
             seed=seed,
+            advanced=advanced,
+            run_name=run_name,
         )
         return
 
@@ -482,6 +785,8 @@ def _interactive_train(console) -> None:
         n_iterations=n_iterations,
         seed=seed,
         run_bio=run_bio,
+        advanced=advanced,
+        run_name=run_name,
     )
 
 
@@ -502,9 +807,7 @@ def _interactive_infer(console) -> None:
         return
 
     console.print("  [bold]Step 1/2 · Select Model Bundle[/bold]\n")
-    bundle_names = [
-        f"{b.stem}  [dim]{b.parent.parent.name}[/dim]" for b in bundles
-    ]
+    bundle_names = [_bundle_label(b) for b in bundles]
     bidx = _prompt_choice(console, "Available Bundles", bundle_names)
     if bidx is None:
         return
@@ -597,9 +900,7 @@ def _interactive_multi_infer(console) -> None:
         "  [dim]Select bundles one at a time. Enter 0 when done.[/dim]\n"
     )
 
-    bundle_names = [
-        f"{b.stem}  [dim]{b.parent.parent.name}[/dim]" for b in bundles
-    ]
+    bundle_names = [_bundle_label(b) for b in bundles]
     selected_bundle_paths: list = []
     available_indices = list(range(len(bundles)))
 
@@ -705,9 +1006,7 @@ def _interactive_bundle_info(console) -> None:
         )
         return
 
-    bundle_names = [
-        f"{b.stem}  [dim]{b.parent.parent.name}[/dim]" for b in bundles
-    ]
+    bundle_names = [_bundle_label(b) for b in bundles]
     bidx = _prompt_choice(console, "Available Bundles", bundle_names)
     if bidx is None:
         return
@@ -737,6 +1036,17 @@ def _interactive_browse_outputs(console) -> None:
     for run_dir in runs:
         summary = {"path": run_dir, "name": run_dir.name}
 
+        # Read optional run_name from runtime_config.json
+        rc_path = run_dir / "runtime_config.json"
+        if rc_path.exists():
+            try:
+                rc = json.loads(rc_path.read_text())
+                rn = rc.get("run_name", "")
+                if rn:
+                    summary["run_name"] = rn
+            except Exception:
+                pass
+
         # Try to get basic metrics from results JSON
         results_json = run_dir / "modeling_results_all_iterations.json"
         if results_json.exists():
@@ -751,14 +1061,23 @@ def _interactive_browse_outputs(console) -> None:
                 summary["auc"] = best.get("auc_roc", 0)
                 summary["groups"] = best.get("num_groups_used", "?")
                 summary["features"] = best.get("num_features_used", "?")
+                summary["finished"] = True
             except Exception:
-                pass
+                summary["finished"] = False
+        else:
+            summary["finished"] = False
 
         # Check for bundle
         bundles_dir = run_dir / "bundles"
         summary["has_bundle"] = (
             bundles_dir.exists()
             and bool(list(bundles_dir.glob("*.gsm.zip")))
+        )
+
+        # Check for biological validation
+        bio_dir = run_dir / "biological_validation"
+        summary["has_bio"] = (
+            bio_dir.exists() and bool(list(bio_dir.glob("*")))
         )
 
         run_summaries.append(summary)
@@ -770,34 +1089,58 @@ def _interactive_browse_outputs(console) -> None:
         padding=(0, 1),
     )
     overview.add_column("#", style="bold cyan", width=3)
-    overview.add_column("Run", style="bold", max_width=55)
+    overview.add_column("Run", style="bold", max_width=50)
+    overview.add_column("Name", style="magenta", max_width=20)
     overview.add_column("F1", justify="center", width=6)
     overview.add_column("AUC", justify="center", width=6)
-    overview.add_column("Groups", justify="center", width=6)
-    overview.add_column("Features", justify="center", width=8)
-    overview.add_column("Bundle", justify="center", width=6)
+    overview.add_column("Status", justify="left", width=18)
 
     for i, s in enumerate(run_summaries):
         f1 = f"{s['f1']:.3f}" if "f1" in s else "—"
         auc = f"{s['auc']:.3f}" if "auc" in s else "—"
-        groups = str(s.get("groups", "—"))
-        features = str(s.get("features", "—"))
-        bundle = "[green]✓[/green]" if s["has_bundle"] else "[dim]—[/dim]"
+        rn = s.get("run_name", "")
 
-        overview.add_row(
-            str(i + 1), s["name"], f1, auc, groups, features, bundle,
-        )
+        # Compact status: ✓done/⚠partial + 📦bundle + 🧬bio
+        status_parts = []
+        if s["finished"]:
+            status_parts.append("[green]✓done[/green]")
+        else:
+            status_parts.append("[yellow]⚠partial[/yellow]")
+        if s["has_bundle"]:
+            status_parts.append("[green]📦[/green]")
+        if s["has_bio"]:
+            status_parts.append("[green]🧬[/green]")
+        status = " ".join(status_parts)
+
+        overview.add_row(str(i + 1), s["name"], rn, f1, auc, status)
 
     console.print(overview)
-    console.print()
+    console.print(
+        "  [dim]Enter a row number to inspect, or 0 to go back.[/dim]\n"
+    )
 
-    # Let user drill into a specific run
-    names = [s["name"] for s in run_summaries]
-    idx = _prompt_choice(console, "Select a run to inspect", names)
-    if idx is None:
-        return
-
-    _inspect_run(console, run_summaries[idx])
+    # Direct numeric selection using the table row numbers
+    while True:
+        try:
+            raw = console.input(
+                "[bold cyan]  ▶ Your choice: [/bold cyan]"
+            ).strip()
+            if not raw:
+                continue
+            num = int(raw)
+            if num == 0:
+                return
+            if 1 <= num <= len(run_summaries):
+                _inspect_run(console, run_summaries[num - 1])
+                return
+            console.print(
+                f"  [red]Enter a number between 0 and "
+                f"{len(run_summaries)}[/red]"
+            )
+        except ValueError:
+            console.print("  [red]Please enter a number.[/red]")
+        except (KeyboardInterrupt, EOFError):
+            return
 
 
 def _inspect_run(console, run_summary: dict) -> None:
@@ -1191,6 +1534,8 @@ def _launch_background_train_with_config(
     model_name: str,
     n_iterations: int,
     seed: int,
+    advanced: Optional[dict] = None,
+    run_name: Optional[str] = None,
 ) -> None:
     """Launch a background training subprocess with pre-configured params."""
     import subprocess
@@ -1211,6 +1556,34 @@ def _launch_background_train_with_config(
         "--model", model_name,
         "--progress-file", str(progress_path),
     ]
+
+    if run_name:
+        cmd.extend(["--name", run_name])
+
+    # Append advanced parameter overrides as CLI flags
+    adv = advanced or {}
+    _ADV_CLI_MAP = {
+        "split_ratio": "--split-ratio",
+        "normalization": "--normalization",
+        "ttest_threshold": "--ttest-threshold",
+        "cv_folds": "--cv-folds",
+        "best_groups": "--best-groups",
+        "feature_filter_size": "--feature-filter-size",
+        "scoring_model": "--scoring-model",
+        "class_balancing": "--class-balancing",
+        "sampling_method": "--sampling-method",
+        "balance_ratio": "--balance-ratio",
+        "save_intermediate": "--save-intermediate",
+        "bio_top_genes": "--bio-top-genes",
+    }
+    for key, flag in _ADV_CLI_MAP.items():
+        if key in adv:
+            val = adv[key]
+            # Convert booleans to lowercase strings for argparse
+            if isinstance(val, bool):
+                cmd.extend([flag, "yes" if val else "no"])
+            else:
+                cmd.extend([flag, str(val)])
 
     console.print(
         f"\n  [dim]Launching: {' '.join(cmd[-10:])}[/dim]"
@@ -1598,8 +1971,18 @@ def _execute_train(
     run_bio: bool,
     is_test: bool = False,
     progress_file: Optional[Path] = None,
+    advanced: Optional[dict] = None,
+    run_name: Optional[str] = None,
 ) -> None:
-    """Execute the GSM training pipeline with rich progress display."""
+    """Execute the GSM training pipeline with rich progress display.
+
+    Args:
+        advanced: Optional dict of advanced parameter overrides.
+            Valid keys: split_ratio, normalization, ttest_threshold,
+            cv_folds, best_groups, feature_filter_size, scoring_model,
+            class_balancing, sampling_method, balance_ratio,
+            save_intermediate, bio_top_genes.
+    """
     from rich.panel import Panel
     from rich.progress import (
         Progress, SpinnerColumn, TextColumn, BarColumn,
@@ -1617,7 +2000,13 @@ def _execute_train(
         LABEL_COLUMN_NAME, CLASS_LABELS_POSITIVE, CLASS_LABELS_NEGATIVE,
         GENE_COLUMN_NAME, GROUP_COLUMN_NAME, NORMALIZATION_METHOD,
         BIOLOGICAL_VALIDATION_TOP_GENES, DISGENET_API_KEY,
+        TTEST_THRESHOLD, CROSS_VALIDATION_FOLDS,
+        BEST_GROUPS_TO_KEEP, INITIAL_FEATURE_FILTER_SIZE,
+        APPLY_CLASS_BALANCING, MIN_CLASS_BALANCE_RATIO,
+        SAMPLING_METHOD, SAVE_INTERMEDIATE_RESULTS,
     )
+
+    adv = advanced or {}
 
     console.print()
     console.print(Panel(
@@ -1625,7 +2014,8 @@ def _execute_train(
         f"  Grouping:    [bold]{group_path.name}[/bold]\n"
         f"  Classifier:  [bold]{model_name}[/bold]\n"
         f"  Iterations:  [bold]{n_iterations}[/bold]\n"
-        f"  Seed:        [bold]{seed}[/bold]",
+        f"  Seed:        [bold]{seed}[/bold]"
+        + (f"\n  Name:        [bold]{run_name}[/bold]" if run_name else ""),
         title="[bold cyan]🧬 Starting Training[/bold cyan]",
         border_style="green",
     ))
@@ -1693,24 +2083,55 @@ def _execute_train(
                 group_data,
                 n_iterations=n_iterations,
                 model_name=model_name,
-                scoring_model=SCORING_MODEL,
+                scoring_model=adv.get(
+                    "scoring_model", SCORING_MODEL,
+                ),
                 initial_seed=seed,
-                sample_ratio=TRAIN_TEST_SPLIT_RATIO,
+                sample_ratio=adv.get(
+                    "split_ratio", TRAIN_TEST_SPLIT_RATIO,
+                ),
                 label_column=LABEL_COLUMN_NAME,
                 positive_class_label=CLASS_LABELS_POSITIVE,
                 negative_class_label=CLASS_LABELS_NEGATIVE,
                 gene_column=GENE_COLUMN_NAME,
                 group_column=GROUP_COLUMN_NAME,
-                normalization_method=NORMALIZATION_METHOD,
+                normalization_method=adv.get(
+                    "normalization", NORMALIZATION_METHOD,
+                ),
+                ttest_threshold=adv.get(
+                    "ttest_threshold", TTEST_THRESHOLD,
+                ),
+                cross_validation_folds=adv.get(
+                    "cv_folds", CROSS_VALIDATION_FOLDS,
+                ),
+                best_groups_to_keep=adv.get(
+                    "best_groups", BEST_GROUPS_TO_KEEP,
+                ),
+                initial_feature_filter_size=adv.get(
+                    "feature_filter_size", INITIAL_FEATURE_FILTER_SIZE,
+                ),
+                apply_class_balancing=adv.get(
+                    "class_balancing", APPLY_CLASS_BALANCING,
+                ),
+                min_class_balance_ratio=adv.get(
+                    "balance_ratio", MIN_CLASS_BALANCE_RATIO,
+                ),
+                sampling_method=adv.get(
+                    "sampling_method", SAMPLING_METHOD,
+                ),
+                save_intermediate_results=adv.get(
+                    "save_intermediate", SAVE_INTERMEDIATE_RESULTS,
+                ),
                 run_biological_validation_flag=run_bio,
-                biological_validation_top_genes=(
-                    BIOLOGICAL_VALIDATION_TOP_GENES
+                biological_validation_top_genes=adv.get(
+                    "bio_top_genes", BIOLOGICAL_VALIDATION_TOP_GENES,
                 ),
                 disgenet_api_key=DISGENET_API_KEY,
                 input_data_name=data_path.stem,
                 group_data_name=group_path.stem,
                 progress_callback=_on_progress,
                 progress_file=progress_file,
+                run_name=run_name,
             )
     except Exception as e:
         console.print(
@@ -2134,8 +2555,68 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip biological validation",
     )
     train_p.add_argument(
+        "--name", type=str, default=None,
+        help="Optional experiment name (appended to output folder and bundle)",
+    )
+    train_p.add_argument(
         "--progress-file", type=str, default=None,
         help="Path to write iteration progress JSON (used by background jobs)",
+    )
+
+    # ── train: advanced parameters ──
+    adv_group = train_p.add_argument_group("advanced parameters")
+    adv_group.add_argument(
+        "--split-ratio", type=float, default=None,
+        help="Train/test split ratio (default: 0.7)",
+    )
+    adv_group.add_argument(
+        "--normalization", type=str, default=None,
+        choices=["zscore", "minmax", "robust"],
+        help="Normalization method (default: zscore)",
+    )
+    adv_group.add_argument(
+        "--ttest-threshold", type=float, default=None,
+        help="T-test FDR threshold (default: 0.05)",
+    )
+    adv_group.add_argument(
+        "--cv-folds", type=int, default=None,
+        help="Cross-validation folds for scoring (default: 3)",
+    )
+    adv_group.add_argument(
+        "--best-groups", type=int, default=None,
+        help="Number of top gene groups to keep (default: 10)",
+    )
+    adv_group.add_argument(
+        "--feature-filter-size", type=int, default=None,
+        help="Initial feature filter size, 0=off (default: 0)",
+    )
+    adv_group.add_argument(
+        "--scoring-model", type=str, default=None,
+        choices=["RandomForest", "XGBoost", "DecisionTree"],
+        help="Model used for group scoring (default: RandomForest)",
+    )
+    adv_group.add_argument(
+        "--class-balancing", type=str, default=None,
+        choices=["yes", "no"],
+        help="Apply class balancing (default: yes)",
+    )
+    adv_group.add_argument(
+        "--sampling-method", type=str, default=None,
+        choices=["undersampling", "oversampling"],
+        help="Sampling method for class balancing (default: undersampling)",
+    )
+    adv_group.add_argument(
+        "--balance-ratio", type=float, default=None,
+        help="Min class balance ratio (default: 0.5)",
+    )
+    adv_group.add_argument(
+        "--save-intermediate", type=str, default=None,
+        choices=["yes", "no"],
+        help="Save intermediate iteration results (default: yes)",
+    )
+    adv_group.add_argument(
+        "--bio-top-genes", type=int, default=None,
+        help="Number of top genes for bio validation (default: 20)",
     )
 
     # ── infer ──
@@ -2224,6 +2705,43 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_advanced_from_args(args: argparse.Namespace) -> dict:
+    """Extract advanced parameter overrides from parsed CLI arguments.
+
+    Maps argparse attribute names (with underscores/hyphens) to the
+    canonical keys used by _execute_train's `advanced` dict.
+    Only non-None values are included.
+    """
+    mapping = {
+        "split_ratio": "split_ratio",
+        "normalization": "normalization",
+        "ttest_threshold": "ttest_threshold",
+        "cv_folds": "cv_folds",
+        "best_groups": "best_groups",
+        "feature_filter_size": "feature_filter_size",
+        "scoring_model": "scoring_model",
+        "sampling_method": "sampling_method",
+        "balance_ratio": "balance_ratio",
+        "bio_top_genes": "bio_top_genes",
+    }
+    result: dict = {}
+    for attr, key in mapping.items():
+        val = getattr(args, attr, None)
+        if val is not None:
+            result[key] = val
+
+    # Boolean-from-string fields: yes/no → True/False
+    cb = getattr(args, "class_balancing", None)
+    if cb is not None:
+        result["class_balancing"] = cb.lower() in ("yes", "true", "1")
+
+    si = getattr(args, "save_intermediate", None)
+    if si is not None:
+        result["save_intermediate"] = si.lower() in ("yes", "true", "1")
+
+    return result
+
+
 def _handle_train_args(args: argparse.Namespace) -> None:
     """Handle direct train command."""
     from src.workflows.GSM_workflow_config import (
@@ -2254,6 +2772,9 @@ def _handle_train_args(args: argparse.Namespace) -> None:
         )
         n_iterations = args.iterations or NUMBER_OF_ITERATIONS
 
+    # Build advanced overrides dict from CLI arguments
+    advanced = _build_advanced_from_args(args)
+
     _execute_train(
         console,
         data_path=data_path,
@@ -2268,6 +2789,8 @@ def _handle_train_args(args: argparse.Namespace) -> None:
         progress_file=(
             Path(args.progress_file) if args.progress_file else None
         ),
+        advanced=advanced if advanced else None,
+        run_name=getattr(args, "name", None),
     )
 
 

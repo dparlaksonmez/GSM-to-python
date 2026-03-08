@@ -302,6 +302,7 @@ def gsm_run(
     group_data_name: Optional[str] = None,
     progress_callback: Optional[Callable] = None,
     progress_file: Optional[Path] = None,
+    run_name: Optional[str] = None,
 ) -> Path:
     """
     Main entry point for the GSM pipeline execution.
@@ -323,6 +324,9 @@ def gsm_run(
             invoked after each iteration for live progress updates (foreground).
         progress_file: Optional path to a JSON file where iteration progress is
             written after each iteration (useful for background job monitoring).
+        run_name: Optional human-readable label for this experiment.
+            Appended to the output folder name and stored in runtime_config.json
+            and the model bundle metadata.  Keep it short and filesystem-safe.
         
     Returns:
         Path: The directory where results were saved.
@@ -330,8 +334,15 @@ def gsm_run(
     # Use provided names or fall back to config file values
     main_data_stem = input_data_name if input_data_name else Path(INPUT_EXPRESSION_DATA).stem
     group_data_stem = group_data_name if group_data_name else Path(INPUT_GROUP_DATA).stem
-    
-    output_folder_path = Path(OUTPUT_DIR) / f"gsm_{time.strftime('%Y_%m_%d-%H_%M_%S')}_{main_data_stem}_{group_data_stem}"
+
+    # Sanitise run_name for filesystem safety (keep alphanumerics, hyphens, underscores)
+    _safe_run_name = ""
+    if run_name:
+        import re as _re
+        _safe_run_name = _re.sub(r"[^\w\-]", "_", run_name.strip())[:60]
+
+    _folder_suffix = f"_{_safe_run_name}" if _safe_run_name else ""
+    output_folder_path = Path(OUTPUT_DIR) / f"gsm_{time.strftime('%Y_%m_%d-%H_%M_%S')}_{main_data_stem}_{group_data_stem}{_folder_suffix}"
     output_folder_path.mkdir(parents=True, exist_ok=True)
     if logger_path is None:
         logger_path = output_folder_path / "gsm_workflow.log"
@@ -345,6 +356,7 @@ def gsm_run(
     # Build runtime params dict — these are the ACTUAL values used by this run,
     # not necessarily what's in the config file. Log these to prevent confusion.
     runtime_params = {
+        "run_name": run_name or "",
         "input_data": main_data_stem,
         "input_shape": list(input_data.shape),
         "grouping_data": group_data_stem,
@@ -805,6 +817,7 @@ def gsm_run(
                     random_seed=initial_seed,
                     output_dir=output_folder_path,
                     logger=logger,
+                    run_name=run_name or "",
                 )
                 logger.info(f"🏥 Clinical inference bundle: {bundle_path.name}")
             else:

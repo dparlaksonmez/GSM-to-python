@@ -306,11 +306,15 @@ def render_results_dashboard(run_path: str):
 ##### CLINICAL INFERENCE UI #####
 
 def _discover_bundles(output_dir: str) -> list[Path]:
-    """Find all .gsm.zip bundles in the output directory tree."""
+    """Find all .gsm.zip bundles in output/ and models/pretrained/."""
+    bundles: list[Path] = []
     out = Path(output_dir)
-    if not out.exists():
-        return []
-    return sorted(out.rglob("*.gsm.zip"), reverse=True)
+    if out.exists():
+        bundles.extend(out.rglob("*.gsm.zip"))
+    pretrained_dir = project_root / "models" / "pretrained"
+    if pretrained_dir.exists():
+        bundles.extend(pretrained_dir.glob("*.gsm.zip"))
+    return sorted(bundles, reverse=True)
 
 
 def render_inference_page():
@@ -346,7 +350,14 @@ def render_inference_page():
         output_dir = str(project_root / "output")
         bundles = _discover_bundles(output_dir)
         if bundles:
-            labels = [f"{b.parent.parent.name} / {b.name}" for b in bundles]
+            pretrained_dir = project_root / "models" / "pretrained"
+
+            def _bundle_label(b: Path) -> str:
+                if b.parent == pretrained_dir:
+                    return f"[pretrained] {b.name}"
+                return f"{b.parent.parent.name} / {b.name}"
+
+            labels = [_bundle_label(b) for b in bundles]
             sel_idx = st.selectbox(
                 "Available bundles", range(len(labels)),
                 format_func=lambda i: labels[i],
@@ -354,8 +365,8 @@ def render_inference_page():
             bundle_path = bundles[sel_idx] if sel_idx is not None else None
         else:
             st.info(
-                "No model bundles found. Run the training pipeline first "
-                "to generate a bundle."
+                "No model bundles found. Train a pipeline first, "
+                "or place pre-trained .gsm.zip files in models/pretrained/"
             )
 
     # ---- Bundle info ----
@@ -821,9 +832,19 @@ def render_dataset_explorer():
     c5.metric("Total Runs", total_runs)
 
 
+##### ENVIRONMENT DETECTION #####
+
+def _is_huggingface_space() -> bool:
+    """Detect if running inside a HuggingFace Space."""
+    import os
+    return os.environ.get("SPACE_ID") is not None
+
+
 ##### MAIN APPLICATION #####
 
 def main():
+    hf_mode = _is_huggingface_space()
+
     # ---- Header ----
     st.markdown(
         '<h1 style="margin-bottom:0;">🧬 GSM Bioinformatics Pipeline</h1>'
@@ -833,15 +854,24 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # ---- Top-level navigation ----
-    nav_tab = st.radio(
-        "Mode",
-        [
+    # On HuggingFace Spaces, show only inference tabs
+    if hf_mode:
+        nav_options = [
+            "🏥 Clinical Inference",
+            "🏥 Multi-Bundle Inference",
+        ]
+    else:
+        nav_options = [
             "🧪 Training Pipeline",
             "🏥 Clinical Inference",
             "🏥 Multi-Bundle Inference",
             "📊 Dataset Explorer",
-        ],
+        ]
+
+    # ---- Top-level navigation ----
+    nav_tab = st.radio(
+        "Mode",
+        nav_options,
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -950,9 +980,78 @@ def main():
             ["XGBoost", "RandomForest", "DecisionTree", "SVM", "KNN", "MLP"],
         )
 
+        # Advanced parameters (collapsible)
+        with st.expander("⚙️ Advanced Parameters"):
+            from src.workflows.GSM_workflow_config import (
+                TTEST_THRESHOLD, CROSS_VALIDATION_FOLDS,
+                BEST_GROUPS_TO_KEEP, INITIAL_FEATURE_FILTER_SIZE,
+                SCORING_MODEL, APPLY_CLASS_BALANCING,
+                SAMPLING_METHOD, SAVE_INTERMEDIATE_RESULTS,
+                BIOLOGICAL_VALIDATION_TOP_GENES,
+            )
+
+            ttest_threshold = st.number_input(
+                "T-test FDR threshold (α)",
+                min_value=0.001, max_value=0.2,
+                value=float(TTEST_THRESHOLD), step=0.005,
+                format="%.3f",
+                help="Genes with FDR-adjusted p > threshold are excluded",
+            )
+            cv_folds = st.number_input(
+                "CV folds (scoring phase)",
+                min_value=2, max_value=10,
+                value=int(CROSS_VALIDATION_FOLDS),
+                help="Stratified K-fold for group scoring",
+            )
+            best_groups = st.number_input(
+                "Best groups to keep",
+                min_value=2, max_value=50,
+                value=int(BEST_GROUPS_TO_KEEP),
+                help="Top-ranked gene groups used in final model",
+            )
+            feature_filter = st.number_input(
+                "Initial feature filter (0 = off)",
+                min_value=0, max_value=10000,
+                value=int(INITIAL_FEATURE_FILTER_SIZE),
+                help="Limit to top N features before grouping",
+            )
+            scoring_model = st.selectbox(
+                "Scoring model (group ranking)",
+                ["RandomForest", "XGBoost", "DecisionTree"],
+                index=["RandomForest", "XGBoost", "DecisionTree"].index(
+                    SCORING_MODEL
+                ) if SCORING_MODEL in ["RandomForest", "XGBoost", "DecisionTree"] else 0,
+            )
+            class_balancing = st.checkbox(
+                "Apply class balancing",
+                value=APPLY_CLASS_BALANCING,
+            )
+            sampling_method = st.selectbox(
+                "Sampling method",
+                ["undersampling", "oversampling"],
+                index=["undersampling", "oversampling"].index(
+                    SAMPLING_METHOD
+                ) if SAMPLING_METHOD in ["undersampling", "oversampling"] else 0,
+            )
+            save_intermediate = st.checkbox(
+                "Save intermediate results",
+                value=SAVE_INTERMEDIATE_RESULTS,
+            )
+            bio_top_genes = st.number_input(
+                "Bio validation top genes",
+                min_value=5, max_value=100,
+                value=int(BIOLOGICAL_VALIDATION_TOP_GENES),
+            )
+
         st.divider()
 
         st.markdown("### 🏷️ Label Mapping")
+        run_name_input = st.text_input(
+            "Experiment name (optional)",
+            value="",
+            help="Human-readable label appended to the output folder and bundle name",
+        )
+        run_name = run_name_input.strip() or None
         label_col = st.text_input("Label column", LABEL_COLUMN_NAME)
         c1, c2 = st.columns(2)
         pos_label = c1.text_input("Positive class", CLASS_LABELS_POSITIVE)
@@ -1045,10 +1144,20 @@ def main():
                         gene_column=gene_col,
                         group_column=group_col,
                         normalization_method=norm_method,
+                        ttest_threshold=ttest_threshold,
+                        cross_validation_folds=cv_folds,
+                        best_groups_to_keep=best_groups,
+                        initial_feature_filter_size=feature_filter,
+                        scoring_model=scoring_model,
+                        apply_class_balancing=class_balancing,
+                        sampling_method=sampling_method,
+                        save_intermediate_results=save_intermediate,
+                        biological_validation_top_genes=bio_top_genes,
                         notebook_mode=False,
                         extra_handlers=[handler],
                         input_data_name=expr_name,
                         group_data_name=group_name,
+                        run_name=run_name,
                     )
 
                     st.session_state["last_output_path"] = str(output_path)

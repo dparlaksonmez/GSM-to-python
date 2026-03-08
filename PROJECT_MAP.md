@@ -41,6 +41,37 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 **Entry point (inference):** `src/inference/inference_engine.py` → `infer()`  
 **Entry point (CLI):** `gsm/__main__.py` → `src/cli.py` → `main()` / `python -m gsm`
 
+### What each phase does (conceptually)
+
+| Phase | Input | What happens | Output |
+|-------|-------|-------------|--------|
+| **Filter** | Raw expression CSV (genes × samples) | Welch t-test per gene, BH-FDR correction, keep genes with p < α | Filtered gene list |
+| **Group (Phase I)** | Filtered genes + DisGeNET mapping | Project genes onto disease-gene groups; each gene may belong to multiple groups | Gene-group assignment matrix |
+| **Score (Phase II)** | Grouped expression data | For each group, train a classifier (3-fold CV) and record its F1/AUC | Ranked list of groups by predictive power |
+| **Model (Phase III)** | Top-ranked groups' features | Train final classifier on pooled features from top-K groups | Fitted model + feature importances |
+| **Rank** | 100 iterations of the above | Robust Rank Aggregation across all iterations | Consensus feature ranking |
+| **Validate** | Top features | Query Enrichr, STRING-db, DisGeNET for biological enrichment | Validation report |
+| **Bundle** | Top-10 models + scaler + metadata | Serialize into a `.gsm.zip` archive | Portable model bundle |
+| **Infer** | Bundle + patient CSV | Ensemble prediction → per-patient class + confidence + risk | Clinical report (`.txt` + `.xlsx`) |
+
+### Training vs. inference split
+
+Training and inference are **completely separated** by the `.gsm.zip`
+bundle boundary.  Training-time code (`filter/`, `grouping/`, `scoring/`,
+`modeling/`, `ranking/`) is never imported during inference.  The
+`src/inference/` module is self-contained: it loads the bundle, aligns
+patient features, scales them, and runs ensemble prediction.
+
+### Workflow relationships
+
+| Workflow | File | Purpose | Relationship |
+|----------|------|---------|-------------|
+| **GSM** | `GSM_workflow.py` | Main GSM pipeline (filter → group → score → model → rank → validate) | Primary workflow |
+| **Group Lasso** | `group_lasso_workflow.py` | GL-based feature selection with overlap-aware duplication | Alternative approach for thesis comparison |
+| **GL→RF Hybrid** | `gl_rf_hybrid.py` | Stage 1: GL feature selection → Stage 2: RF classification | Experimental hybrid |
+| **Stability Selection** | `stability_selection_gl.py` | Meinshausen & Bühlmann stability selection with Latent GL | Feature stability analysis |
+| **Classification** | `classification_workflow.py` | Plain classification baseline (no grouping, no feature selection) | Baseline comparator |
+
 ---
 
 ## Root-Level Files
@@ -154,13 +185,13 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 ### `src/ui/`
 | File | Purpose |
 |------|---------|
-| `app.py` | Streamlit web GUI — 4 tabs: Training Pipeline, Clinical Inference (single-bundle, patient_data/ auto-discovery), Multi-Bundle Consensus Inference, Dataset Explorer (stats & previews for all datasets) |
+| `app.py` | Streamlit web GUI — 4 tabs: Training Pipeline (with ⚙️ Advanced Parameters expander), Clinical Inference (single-bundle, patient_data/ auto-discovery), Multi-Bundle Consensus Inference, Dataset Explorer (stats & previews for all datasets). Auto-detects HuggingFace Spaces (`SPACE_ID` env var) and hides training tabs for inference-only mode. `_is_huggingface_space()` helper. `_discover_bundles()` scans output/ + models/pretrained/. |
 
 ### `src/cli.py` — Rich Interactive CLI
 | Subcommand | Purpose |
 |------------|----------|
 | *(no args)* | Interactive guided menu with `rich` panels & numbered choices |
-| `train` | Run GSM pipeline (wraps `gsm_workflow()`) — rich iteration progress bar + result panels. `--progress-file` writes JSON for background monitoring |
+| `train` | Run GSM pipeline (wraps `gsm_workflow()`) — rich iteration progress bar + result panels. `--progress-file` writes JSON for background monitoring. Advanced params: `--split-ratio`, `--normalization`, `--ttest-threshold`, `--cv-folds`, `--best-groups`, `--feature-filter-size`, `--scoring-model`, `--class-balancing`, `--sampling-method`, `--balance-ratio`, `--save-intermediate`, `--bio-top-genes` |
 | `infer` | Load `.gsm.zip` bundle + patient CSV → color-coded result table |
 | `multi-infer` | Combine multiple bundles from different datasets for robust consensus inference |
 | `bundle-info` | Inspect a saved model bundle in a rich panel |
@@ -169,7 +200,7 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 | `jobs` | Monitor background training jobs (list, view-log, stop running, clear finished) |
 | `bio-validate` | Re-run biological validation on a completed run (Enrichr + STRING-db + DisGeNET) |
 
-Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_prompt_yes_no()`, `_execute_train()`, `_execute_infer()`, `_execute_multi_infer()`, `_execute_bundle_info()`, `_execute_bio_validate()`, `_discover_datasets()`, `_discover_bundles()`, `_discover_patient_files()`, `_interactive_browse_outputs()`, `_inspect_run()`, `_launch_background_train_with_config()`, `_interactive_monitor_jobs()`, `_show_bg_jobs_banner()`, `_stop_job()`, `_read_progress_file()`
+Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_prompt_yes_no()`, `_collect_advanced_params()` (advanced parameter tuning page), `_show_runtime_estimate()`, `_build_advanced_from_args()`, `_execute_train()`, `_execute_infer()`, `_execute_multi_infer()`, `_execute_bundle_info()`, `_execute_bio_validate()`, `_discover_datasets()`, `_discover_bundles()` (scans output/ + models/pretrained/), `_bundle_label()`, `_discover_patient_files()`, `_interactive_browse_outputs()` (shows status with ✓done/⚠partial, 📦bundle, 🧬bio indicators), `_inspect_run()`, `_launch_background_train_with_config()`, `_interactive_monitor_jobs()`, `_show_bg_jobs_banner()`, `_stop_job()`, `_read_progress_file()`
 
 ---
 
@@ -210,6 +241,14 @@ Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_pro
 | `data/patient_data/` | Patient CSV files for clinical inference (auto-discovered by CLI) |
 | `data/test/` | Small test fixtures for unit tests |
 | `data/data_ARCHIVE/` | Archived/deprecated datasets |
+
+---
+
+## `models/`
+
+| Folder | Contents |
+|--------|----------|
+| `models/pretrained/` | Pre-trained `.gsm.zip` bundles shipped with the repo (Git LFS). Both CLI and Streamlit auto-discover from here with `[pretrained]` label. |
 
 ---
 
@@ -292,4 +331,4 @@ supplementary PDFs, and related publications.
 
 ---
 
-*Last updated: 2026-03-07*
+*Last updated: 2026-03-08*

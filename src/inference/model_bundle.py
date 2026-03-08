@@ -85,6 +85,8 @@ class BundleMetadata:
     ensemble_strategy: str
     # Model type
     model_name: str
+    # Optional human-readable experiment label
+    run_name: str = ""
 
 
 @dataclass
@@ -126,6 +128,7 @@ def save_bundle(
     logger: logging.Logger,
     max_models: int = DEFAULT_N_MODELS_TO_SAVE,
     ensemble_strategy: str = DEFAULT_ENSEMBLE_STRATEGY,
+    run_name: str = "",
 ) -> Path:
     """Save a ModelBundle to a compressed .gsm.zip file.
 
@@ -148,6 +151,7 @@ def save_bundle(
         logger: Logger instance
         max_models: Maximum number of models to include (default: 10)
         ensemble_strategy: 'mean_probability' or 'majority_vote'
+        run_name: Optional human-readable experiment label
 
     Returns:
         Path to the saved .gsm.zip file
@@ -168,7 +172,10 @@ def save_bundle(
 
     # Create bundle ID
     timestamp = datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
-    bundle_id = f"bundle_{dataset_name}_{timestamp}"
+    import re as _re
+    _safe_name = _re.sub(r"[^\w\-]", "_", run_name.strip())[:60] if run_name else ""
+    _name_suffix = f"_{_safe_name}" if _safe_name else ""
+    bundle_id = f"bundle_{dataset_name}_{timestamp}{_name_suffix}"
 
     # Build metadata
     metadata = BundleMetadata(
@@ -202,6 +209,7 @@ def save_bundle(
         ],
         ensemble_strategy=ensemble_strategy,
         model_name=model_name,
+        run_name=run_name or "",
     )
 
     # Write to a temp directory, then zip
@@ -382,6 +390,10 @@ def bundle_info(bundle_path: Path) -> str:
         "═" * 60,
         f"  Bundle ID:        {meta.bundle_id}",
         f"  Created:          {meta.created_at}",
+    ]
+    if meta.run_name:
+        lines.append(f"  Experiment Name:  {meta.run_name}")
+    lines += [
         f"  GSM Version:      {meta.gsm_version}",
         f"  Sklearn Version:  {meta.sklearn_version}",
         "",

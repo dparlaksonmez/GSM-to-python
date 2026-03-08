@@ -74,9 +74,29 @@
 
 **How to deploy:**
 1. Create a Hugging Face Space (Streamlit SDK)
-2. Push your code + `.gsm.zip` bundles
+2. Push your code + pre-trained bundles in `models/pretrained/`
 3. Add `requirements.txt` (same as `dependencies.txt`)
-4. App auto-deploys
+4. App auto-deploys in inference-only mode (training tabs hidden)
+
+**HF-specific behaviour:**
+The Streamlit app auto-detects the `SPACE_ID` environment variable
+that HuggingFace injects.  When detected:
+- Only the **Clinical Inference** and **Multi-Bundle Inference** tabs
+  are shown (training and dataset explorer are hidden).
+- Pre-trained bundles in `models/pretrained/` appear automatically
+  in the bundle selector with a `[pretrained]` label.
+- Users can also upload their own `.gsm.zip` files.
+
+**Minimal HF Space structure:**
+```
+your-hf-space/
+├── src/ui/app.py            # Streamlit entry point
+├── src/inference/            # Inference engine
+├── models/pretrained/        # Pre-trained .gsm.zip bundles
+│   └── GDS1962_rf_seed44.gsm.zip
+├── requirements.txt
+└── README.md                 # HF Space card (with YAML header)
+```
 
 **Estimated setup time:** ~1 hour
 
@@ -123,8 +143,8 @@ COPY gsm/ gsm/
 COPY data/patient_data/ data/patient_data/
 COPY assets/ assets/
 
-# Pre-load bundles
-COPY output/*/bundles/*.gsm.zip bundles/
+# Pre-trained bundles (ship with the image)
+COPY models/pretrained/ models/pretrained/
 
 EXPOSE 8501
 CMD ["streamlit", "run", "src/ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
