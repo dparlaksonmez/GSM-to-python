@@ -41,6 +41,8 @@ from src.workflows.GSM_workflow_config import (
     GENE_COLUMN_NAME,
     GROUP_COLUMN_NAME,
     NORMALIZATION_METHOD,
+    BIOLOGICAL_VALIDATION_TOP_GENES,
+    DISGENET_API_KEY,
 )
 
 
@@ -48,17 +50,24 @@ from src.workflows.GSM_workflow_config import (
 EXPRESSION_DATA_DIR = Path("data/expression_data")
 GROUPING_DATA_FILE = Path("data/grouping_data/cancer-DisGeNET_gedinet.txt")
 DEFAULT_ITERATIONS = 100
+# Datasets excluded from publication experiments (see DOCS/DATASET_EXCLUSIONS.md)
+EXCLUDED_DATASETS = {"GDS3268", "GDS4206"}
 
 
 def get_all_datasets() -> list[Path]:
-    """Get all CSV files in the expression_data directory."""
-    return sorted(EXPRESSION_DATA_DIR.glob("*.csv"))
+    """Get all CSV files in the expression_data directory, excluding known-bad ones."""
+    return sorted(
+        p for p in EXPRESSION_DATA_DIR.glob("*.csv")
+        if p.stem not in EXCLUDED_DATASETS
+    )
 
 
 def run_single_dataset(
     dataset_path: Path,
     grouping_path: Path,
     n_iterations: int,
+    run_bio: bool = True,
+    run_name: str | None = None,
 ) -> tuple[str, float, bool]:
     """
     Run GSM pipeline on a single dataset.
@@ -100,6 +109,10 @@ def run_single_dataset(
             normalization_method=NORMALIZATION_METHOD,
             input_data_name=dataset_path.stem,
             group_data_name=grouping_path.stem,
+            run_biological_validation_flag=run_bio,
+            biological_validation_top_genes=BIOLOGICAL_VALIDATION_TOP_GENES,
+            disgenet_api_key=DISGENET_API_KEY,
+            run_name=run_name,
         )
         
         elapsed = time.time() - start_time
@@ -117,6 +130,8 @@ def run_single_dataset(
 def run_all_datasets(
     datasets: list[Path] | None = None,
     n_iterations: int = DEFAULT_ITERATIONS,
+    run_bio: bool = True,
+    run_name: str | None = None,
 ) -> None:
     """Run GSM pipeline on multiple datasets."""
     
@@ -148,7 +163,10 @@ def run_all_datasets(
     
     for i, dataset_path in enumerate(datasets, 1):
         print(f"\n[{i}/{len(datasets)}] Starting {dataset_path.stem}...")
-        result = run_single_dataset(dataset_path, grouping_path, n_iterations)
+        result = run_single_dataset(
+            dataset_path, grouping_path, n_iterations,
+            run_bio=run_bio, run_name=run_name,
+        )
         results.append(result)
     
     # Summary
@@ -194,6 +212,17 @@ def main():
         action="store_true",
         help="List available datasets and exit",
     )
+    parser.add_argument(
+        "--name",
+        type=str,
+        default=None,
+        help="Optional experiment name for all runs",
+    )
+    parser.add_argument(
+        "--no-bio",
+        action="store_true",
+        help="Skip biological validation",
+    )
     
     args = parser.parse_args()
     
@@ -216,7 +245,12 @@ def main():
     else:
         datasets = None
     
-    run_all_datasets(datasets=datasets, n_iterations=args.iterations)
+    run_all_datasets(
+        datasets=datasets,
+        n_iterations=args.iterations,
+        run_bio=not args.no_bio,
+        run_name=args.name,
+    )
 
 
 if __name__ == "__main__":

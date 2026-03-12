@@ -70,14 +70,14 @@ class BaselineResult:
 DATASETS = {
     "GDS1962": "Glioblastoma",
     "GDS2545": "Prostate Cancer",
+    "GDS2547": "Prostate Cancer (Lapointe)",
     "GDS2771": "Lung Cancer",
     "GDS3257": "Acute Myeloid Leukemia",
-    "GDS3268": "Breast Cancer",
     "GDS3837": "Colorectal Cancer",
     "GDS5499": "Pancreatic Cancer",
 }
 
-N_ITERATIONS = 10          # number of random train/test splits
+N_ITERATIONS = 100          # number of random train/test splits
 N_BOOTSTRAP = 500          # bootstrap resamples for CI
 CV_FOLDS = 5               # stratified CV folds
 TTEST_TOP_K = 100          # genes to keep for RF-ttest baseline
@@ -95,7 +95,7 @@ def load_dataset(dataset_id: str) -> tuple[pd.DataFrame, pd.Series]:
     Missing values are filled with 0 (median imputation is an alternative).
     """
     path = DATA_DIR / f"{dataset_id}.csv"
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, encoding="utf-8", encoding_errors="replace")
 
     # Label column is 'class' with values 'pos' / 'neg'
     label_col = "class"

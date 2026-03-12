@@ -58,7 +58,7 @@ GEO Expression Data + DisGeNET Gene-Disease Knowledge
 
 Training and inference are **completely separated** by the `.gsm.zip`
 bundle boundary.  Training-time code (`filter/`, `grouping/`, `scoring/`,
-`modeling/`, `ranking/`) is never imported during inference.  The
+`modeling/`) is never imported during inference.  The
 `src/inference/` module is self-contained: it loads the bundle, aligns
 patient features, scales them, and runs ensemble prediction.
 
@@ -81,7 +81,7 @@ patient features, scales them, and runs ensemble prediction.
 | `dependencies.txt` | pip requirements |
 | `pytest.ini` | Pytest configuration |
 | `.pre-commit-config.yaml` | Pre-commit hooks (ruff, trailing whitespace) |
-| `.gitattributes` | Git LFS tracking (`*.csv`) |
+| `.gitattributes` | Git LFS tracking (`*.csv`, `models/pretrained/*.gsm.zip`) |
 | `.lfsconfig` | LFS fetch-include for `data/` |
 | `CONTRIBUTING.md` | Contribution guidelines |
 | `README.md` | Project overview and quick-start |
@@ -219,6 +219,7 @@ Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_pro
 | `run_gl_all_datasets.py` | Run GL workflow on all 7 cancer datasets with cross-dataset summary | `output/gl_all_datasets_<ts>/` |
 | `gl_hyperparameter_search.py` | Grid search over λ₁, λ₂ and filter thresholds with heatmap output | `output/gl_hyperparam_<dataset>_<ts>/` |
 | `MANUSCRIPT_BUILD_STEPS.txt` | Build order documentation for GSM manuscript | — |
+| `manuscript_changelog.py` | Compare two manuscript .docx versions and output a word-level diff changelog | `reports_ARCHIVE/changelog_v*_v*.txt` (with `--output`) or stdout |
 | `run_baselines.py` | Non-GSM baseline classifiers | `output/baselines/baseline_results.json` |
 | `run_sensitivity_analysis.py` | One-at-a-time sensitivity analysis | `output/sensitivity_runs/sensitivity_results.json` |
 | `compute_sensitivity_impact.py` | Δ-F1 impact rankings | `output/sensitivity_runs/sensitivity_impact.json` |
@@ -229,6 +230,10 @@ Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_pro
 | `rerun_bio_validation.py` | Re-run failed bio validations | In-place in `output/<run>/biological_validation/` |
 | `rerun_seed_bio_validation.py` | Re-run seed bio validations | `output/seed_stability/seed_stability_results.json` |
 | `verify_gene_lists.py` | Sanity-check gene lists | stdout |
+| `_rerun_bio_validation.py` | Internal helper: re-run biological validation for specific runs | In-place in `output/<run>/biological_validation/` |
+| `run_publication_experiments.py` | Orchestrate all publication experiments end-to-end | Various `output/` sub-dirs |
+| `run_grouping_comparison.py` | Compare 3 knowledge sources (DisGeNET, KEGG, maTE) × 3 datasets | `output/grouping_comparison_results.json` |
+| `finalize_publication.py` | Final checks and packaging for publication submission | — |
 
 ---
 
@@ -237,7 +242,7 @@ Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_pro
 | Folder | Contents |
 |--------|----------|
 | `data/expression_data/` | GEO expression matrices (`.csv`, tracked by Git LFS) |
-| `data/grouping_data/` | DisGeNET gene-disease mappings |
+| `data/grouping_data/` | Gene-to-group knowledge mappings: DisGeNET disease-gene associations (`cancer-DisGeNET_gedinet.txt`), KEGG pathways (`kegg_genes_table_vFatma_pripath.csv`), miRNA targets (`mate_grouping_file.csv`) |
 | `data/patient_data/` | Patient CSV files for clinical inference (auto-discovered by CLI) |
 | `data/test/` | Small test fixtures for unit tests |
 | `data/data_ARCHIVE/` | Archived/deprecated datasets |
@@ -249,6 +254,19 @@ Key functions: `interactive_menu()`, `_prompt_choice()`, `_prompt_text()`, `_pro
 | Folder | Contents |
 |--------|----------|
 | `models/pretrained/` | Pre-trained `.gsm.zip` bundles shipped with the repo (Git LFS). Both CLI and Streamlit auto-discover from here with `[pretrained]` label. |
+
+### Publication Bundles (Random Forest, seed 44, 100 iterations)
+
+| Bundle | Disease |
+|--------|---------|
+| `bundle_GDS1962_publication_RF.gsm.zip` | Glioblastoma |
+| `bundle_GDS2545_publication_RF.gsm.zip` | Prostate Cancer |
+| `bundle_GDS2547_publication_RF.gsm.zip` | Prostate Cancer (Lapointe) |
+| `bundle_GDS2771_publication_RF.gsm.zip` | Lung Cancer |
+| `bundle_GDS3257_publication_RF.gsm.zip` | Acute Myeloid Leukemia |
+| `bundle_GDS3837_publication_RF.gsm.zip` | Colorectal Cancer |
+| `bundle_GDS5499_publication_RF.gsm.zip` | Pancreatic Cancer |
+| `README.md` | Bundle documentation |
 
 ---
 
@@ -296,6 +314,15 @@ supplementary PDFs, and related publications.
 
 ---
 
+## `.github/` — CI & Copilot
+
+| File | Purpose |
+|------|---------|
+| `copilot-instructions.md` | Coding conventions and AI agent guidelines |
+| `workflows/tests.yml` | CI workflow — runs `pytest` on push/PR |
+
+---
+
 ## `DOCS/` — Documentation
 
 | File | Topic |
@@ -307,6 +334,10 @@ supplementary PDFs, and related publications.
 | `COPILOT.md` | GitHub Copilot usage |
 | `WEB_DEPLOYMENT.md` | Web deployment options, costs, and architecture for publishing inference as a website |
 | `TROUBLESHOOTING.md` | Common fixes |
+| `DATASET_EXCLUSIONS.md` | Rationale for excluding GDS3268 and GDS4206 |
+| `README.md` | Documentation index |
+| `aggregated_group_ranking_explanation.txt` | Explanation of aggregated group ranking algorithm |
+| `feature_ranking_methods_explanation.txt` | Explanation of feature ranking methods (RRA, etc.) |
 
 ---
 
@@ -327,8 +358,8 @@ supplementary PDFs, and related publications.
 | Model bundle format | `.gsm.zip` | Top-10 models by F1 + scaler + feature names + metadata |
 | Ensemble strategy | `mean_probability` (default) | Also supports `majority_vote` |
 | Risk thresholds | HIGH ≥ 0.80, MEDIUM ≥ 0.55, LOW < 0.55 | Configurable in `inference_engine.py` |
-| Per-sample importance 8 Perturbation-based local importance | Model-agnostic, ≤200 samples, top-50 candidates |
+| Per-sample importance | Perturbation-based local importance | Model-agnostic, ≤200 samples, top-50 candidates |
 
 ---
 
-*Last updated: 2026-03-08*
+*Last updated: 2026-06-10*

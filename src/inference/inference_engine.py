@@ -173,24 +173,26 @@ def _get_ensemble_feature_importance(
     bundle: ModelBundle,
     top_n: int = DEFAULT_TOP_GENES,
 ) -> dict[str, float]:
-    """Aggregate feature importances across all models in the ensemble.
+    """Aggregate feature importances across all models, weighted by F1.
 
-    Uses the mean importance across models. Only works for
-    tree-based models that expose feature_importances_.
+    Models with higher F1 contribute proportionally more to the
+    aggregated importance vector.  Only works for tree-based models
+    that expose feature_importances_.
     """
     importances = np.zeros(len(bundle.metadata.feature_names))
-    n_contributing = 0
+    weight_sum = 0.0
 
     for model_artifact in bundle.models:
         model = model_artifact.model
         if hasattr(model, "feature_importances_"):
             fi = model.feature_importances_
             if len(fi) == len(importances):
-                importances += fi
-                n_contributing += 1
+                w = max(model_artifact.f1_score, 0.01)
+                importances += fi * w
+                weight_sum += w
 
-    if n_contributing > 0:
-        importances /= n_contributing
+    if weight_sum > 0:
+        importances /= weight_sum
 
     # Build name→importance dict, sorted descending
     feature_importance = dict(
@@ -289,7 +291,9 @@ def infer(
     """Run clinical inference on new patient expression data.
 
     Preprocesses the data using the bundle's saved scaler, then
-    generates ensemble predictions with confidence scores.
+    generates F1-weighted ensemble predictions with confidence scores.
+    Models with higher held-out F1 contribute proportionally more
+    to both the probability estimates and the feature importances.
 
     Args:
         bundle: Loaded ModelBundle
@@ -354,6 +358,11 @@ def infer(
     all_probabilities = np.zeros((len(X), n_models))
     all_predictions = np.zeros((len(X), n_models), dtype=int)
 
+    # Compute per-model F1 weights (models with higher F1 contribute more)
+    f1_scores = np.array([m.f1_score for m in bundle.models])
+    model_weights = np.maximum(f1_scores, 0.01)  # avoid zero weights
+    model_weights = model_weights / model_weights.sum()
+
     for i, model_artifact in enumerate(bundle.models):
         model = model_artifact.model
         try:
@@ -379,23 +388,23 @@ def infer(
         sample_probas = all_probabilities[row_idx]
         sample_preds = all_predictions[row_idx]
 
-        # Ensemble prediction
+        # Ensemble prediction — F1-weighted
         if strategy == "mean_probability":
-            ensemble_prob = float(np.mean(sample_probas))
+            ensemble_prob = float(np.dot(model_weights, sample_probas))
             predicted_positive = ensemble_prob >= 0.5
         else:  # majority_vote
-            vote_count = int(np.sum(sample_preds))
-            predicted_positive = vote_count > n_models / 2
-            ensemble_prob = float(vote_count / n_models)
+            weighted_votes = float(np.dot(model_weights, sample_preds))
+            predicted_positive = weighted_votes >= 0.5
+            ensemble_prob = weighted_votes
 
         # Confidence = distance from decision boundary
         confidence = abs(ensemble_prob - 0.5) * 2  # Scale to 0–1
 
-        # Agreement ratio
+        # Agreement ratio (F1-weighted)
         if predicted_positive:
-            agreement = float(np.mean(sample_preds))
+            agreement = float(np.dot(model_weights, sample_preds))
         else:
-            agreement = float(np.mean(1 - sample_preds))
+            agreement = float(np.dot(model_weights, 1 - sample_preds))
 
         predicted_class = "positive" if predicted_positive else "negative"
         predicted_label = pos_label if predicted_positive else neg_label

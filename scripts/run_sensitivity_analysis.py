@@ -76,7 +76,7 @@ class SensitivityResult:
 
 ##### CONFIGURATION #####
 # Datasets representative of different sizes and difficulties
-DEFAULT_DATASETS = ["GDS2545", "GDS3257", "GDS3268"]
+DEFAULT_DATASETS = ["GDS2545", "GDS3257", "GDS2771"]
 DEFAULT_ITERATIONS = 10   # Enough for variance estimation, fast enough
 
 # Parameter grid

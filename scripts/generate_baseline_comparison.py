@@ -63,17 +63,17 @@ GSM_DATA_PATH = (
 DATASET_SHORT = {
     "GDS1962": "GBM",
     "GDS2545": "Prostate",
+    "GDS2547": "Prostate (2)",
     "GDS2771": "Lung",
     "GDS3257": "AML",
-    "GDS3268": "Breast",
     "GDS3837": "Colorectal",
     "GDS5499": "Pancreatic",
 }
 
 # Dataset ordering (same as manuscript)
 DATASET_ORDER = [
-    "GDS1962", "GDS2545", "GDS2771", "GDS3257",
-    "GDS3268", "GDS3837", "GDS5499",
+    "GDS1962", "GDS2545", "GDS2547", "GDS2771", "GDS3257",
+    "GDS3837", "GDS5499",
 ]
 
 # Method display names and colours
@@ -110,7 +110,10 @@ def _load_data() -> dict[str, list[MethodResult]]:
         results[ds_id] = []
 
         # GSM result
-        gsm = next(p for p in gsm_perf if p["dataset_id"] == ds_id)
+        gsm = next((p for p in gsm_perf if p["dataset_id"] == ds_id), None)
+        if gsm is None:
+            print(f"⚠️  No GSM result for {ds_id}, skipping")
+            continue
         results[ds_id].append(MethodResult(
             dataset_id=ds_id,
             disease=DATASET_SHORT.get(ds_id, ds_id),
@@ -181,8 +184,16 @@ def generate_baseline_comparison() -> str:
                     val = getattr(r, metric_key)
                     values.append(val)
                     if metric_key == "f1_score":
-                        lo = max(0, val - min(r.f1_ci_lower, r.f1_ci_upper))
-                        hi = max(0, max(r.f1_ci_lower, r.f1_ci_upper) - val)
+                        # Only show CI if bounds are real (not placeholder 1.0)
+                        has_real_ci = (
+                            r.f1_ci_lower < r.f1_ci_upper
+                            and r.f1_ci_lower <= val <= r.f1_ci_upper
+                        )
+                        if has_real_ci:
+                            lo = val - r.f1_ci_lower
+                            hi = r.f1_ci_upper - val
+                        else:
+                            lo, hi = 0, 0
                         ci_lower.append(lo)
                         ci_upper.append(hi)
                     else:

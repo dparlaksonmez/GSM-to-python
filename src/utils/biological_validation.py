@@ -40,6 +40,79 @@ ENRICHR_URL = "https://maayanlab.cloud/Enrichr"
 STRING_API_URL = "https://string-db.org/api"
 DISGENET_API_URL = "https://www.disgenet.org/api"
 
+# Retry settings for external API calls
+MAX_RETRIES = 3
+INITIAL_BACKOFF_SECONDS = 2.0
+
+
+def _request_with_retry(
+    method: str,
+    url: str,
+    logger: logging.Logger,
+    *,
+    params: dict | None = None,
+    headers: dict | None = None,
+    files: dict | None = None,
+    max_retries: int = MAX_RETRIES,
+    initial_backoff: float = INITIAL_BACKOFF_SECONDS,
+) -> requests.Response:
+    """Send an HTTP request with exponential-backoff retry on failure.
+
+    Retries on HTTP 429 (rate limit), 5xx (server error), and
+    connection/timeout errors.  Raises on non-retryable 4xx.
+    """
+    backoff = initial_backoff
+    last_exception: Exception | None = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            if method.upper() == "GET":
+                resp = requests.get(url, params=params, headers=headers, timeout=30)
+            else:
+                resp = requests.post(url, params=params, headers=headers, files=files, timeout=30)
+
+            # Success
+            if resp.status_code == 200:
+                return resp
+
+            # Retryable status codes
+            if resp.status_code in (429, 500, 502, 503, 504):
+                logger.warning(
+                    f"   ⚠️  API {resp.status_code} on {url} "
+                    f"(attempt {attempt}/{max_retries}), retrying in {backoff:.0f}s…"
+                )
+                time.sleep(backoff)
+                backoff *= 2
+                last_exception = Exception(
+                    f"HTTP {resp.status_code} from {url}"
+                )
+                continue
+
+            # Non-retryable client error
+            resp.raise_for_status()
+
+        except requests.exceptions.ConnectionError as exc:
+            logger.warning(
+                f"   ⚠️  Connection error on {url} "
+                f"(attempt {attempt}/{max_retries}), retrying in {backoff:.0f}s…"
+            )
+            last_exception = exc
+            time.sleep(backoff)
+            backoff *= 2
+
+        except requests.exceptions.Timeout as exc:
+            logger.warning(
+                f"   ⚠️  Timeout on {url} "
+                f"(attempt {attempt}/{max_retries}), retrying in {backoff:.0f}s…"
+            )
+            last_exception = exc
+            time.sleep(backoff)
+            backoff *= 2
+
+    raise Exception(
+        f"API request to {url} failed after {max_retries} retries: {last_exception}"
+    )
+
 # Enrichr gene set libraries to query
 ENRICHR_LIBRARIES = [
     "KEGG_2021_Human",
@@ -302,17 +375,16 @@ def query_enrichr(genes: List[str], logger: logging.Logger) -> List[EnrichmentRe
     """
     logger.debug("Querying Enrichr...")
     
-    # Step 1: Submit gene list
+    # Step 1: Submit gene list (with retry)
     genes_str = "\n".join(genes)
     payload = {
         "list": (None, genes_str),
         "description": (None, "GSM Pipeline Top Features")
     }
     
-    response = requests.post(f"{ENRICHR_URL}/addList", files=payload)
-    
-    if response.status_code != 200:
-        raise Exception(f"Enrichr addList failed: {response.status_code}")
+    response = _request_with_retry(
+        "POST", f"{ENRICHR_URL}/addList", logger, files=payload
+    )
     
     result = response.json()
     user_list_id = result.get('userListId')
@@ -328,13 +400,13 @@ def query_enrichr(genes: List[str], logger: logging.Logger) -> List[EnrichmentRe
     for library in ENRICHR_LIBRARIES:
         logger.debug(f"Querying: {library}")
         
-        response = requests.get(
-            f"{ENRICHR_URL}/enrich",
-            params={"userListId": user_list_id, "backgroundType": library}
-        )
-        
-        if response.status_code != 200:
-            logger.warning(f"   ⚠️ Failed to query {library}")
+        try:
+            response = _request_with_retry(
+                "GET", f"{ENRICHR_URL}/enrich", logger,
+                params={"userListId": user_list_id, "backgroundType": library}
+            )
+        except Exception:
+            logger.warning(f"   ⚠️ Failed to query {library} after retries")
             continue
         
         data = response.json()
@@ -389,14 +461,17 @@ def query_string_db(genes: List[str], logger: logging.Logger, species: int = 960
         "caller_identity": "gsm_pipeline"
     }
     
-    # Get interactions
-    response = requests.get(
-        f"{STRING_API_URL}/json/network",
-        params=params
-    )
+    # Get interactions (with retry)
+    try:
+        response = _request_with_retry(
+            "GET", f"{STRING_API_URL}/json/network", logger, params=params
+        )
+    except Exception as exc:
+        logger.warning(f"   ⚠️ STRING network query failed after retries: {exc}")
+        response = None
     
     interactions = []
-    if response.status_code == 200:
+    if response is not None and response.status_code == 200:
         network_data = response.json()
         
         for edge in network_data:
@@ -408,8 +483,6 @@ def query_string_db(genes: List[str], logger: logging.Logger, species: int = 960
             interactions.append(interaction)
         
         logger.debug(f"STRING: {len(interactions)} interactions")
-    else:
-        logger.warning(f"   ⚠️ STRING network query failed: {response.status_code}")
     
     # Generate network image URL
     network_url = (
@@ -417,14 +490,17 @@ def query_string_db(genes: List[str], logger: logging.Logger, species: int = 960
         f"identifiers={genes_str}&species={species}&network_flavor=confidence"
     )
     
-    # Get enrichment from STRING
-    enrichment_response = requests.get(
-        f"{STRING_API_URL}/json/enrichment",
-        params=params
-    )
+    # Get enrichment from STRING (with retry)
+    try:
+        enrichment_response = _request_with_retry(
+            "GET", f"{STRING_API_URL}/json/enrichment", logger, params=params
+        )
+    except Exception as exc:
+        logger.warning(f"   ⚠️ STRING enrichment query failed after retries: {exc}")
+        enrichment_response = None
     
     string_enrichment = []
-    if enrichment_response.status_code == 200:
+    if enrichment_response is not None and enrichment_response.status_code == 200:
         string_enrichment = enrichment_response.json()
         logger.debug(f"STRING enrichment: {len(string_enrichment)} terms")
     
@@ -461,10 +537,15 @@ def query_disgenet(
     all_associations = []
     
     for gene in genes:
-        response = requests.get(
-            f"{DISGENET_API_URL}/gda/gene/{gene}",
-            headers=headers
-        )
+        try:
+            response = _request_with_retry(
+                "GET", f"{DISGENET_API_URL}/gda/gene/{gene}", logger,
+                headers=headers
+            )
+        except Exception:
+            logger.warning(f"   ⚠️ DisGeNET query failed for {gene} after retries")
+            time.sleep(0.3)
+            continue
         
         if response.status_code == 200:
             data = response.json()
@@ -478,8 +559,6 @@ def query_disgenet(
                     source=assoc.get('source', '')
                 )
                 all_associations.append(disease_assoc)
-        else:
-            logger.warning(f"   ⚠️ DisGeNET query failed for {gene}: {response.status_code}")
         
         # Rate limiting
         time.sleep(0.3)
