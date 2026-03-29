@@ -65,7 +65,7 @@ OUTPUT_DIR = project_dir / "output"
 # │  More iterations = more robust results, but longer runtime               │
 # │  Recommended: 50-100 for publication, 10 for testing                     │
 # └──────────────────────────────────────────────────────────────────────────┘
-NUMBER_OF_ITERATIONS = 2
+NUMBER_OF_ITERATIONS = 100
 
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  REPRODUCIBILITY                                                         │
@@ -77,7 +77,7 @@ RANDOM_SEED = 44
 # │  CROSS-VALIDATION                                                        │
 # │  Number of folds for K-fold cross-validation during group scoring        │
 # └──────────────────────────────────────────────────────────────────────────┘
-CROSS_VALIDATION_FOLDS = 3
+CROSS_VALIDATION_FOLDS = 10
 
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  SAVE OPTIONS                                                            │
@@ -109,7 +109,7 @@ NORMALIZATION_METHOD = "zscore"
 # │  TRAIN/TEST SPLIT                                                        │
 # │  Proportion of data used for training (rest used for testing)            │
 # └──────────────────────────────────────────────────────────────────────────┘
-TRAIN_TEST_SPLIT_RATIO = 0.9            # 70% train, 30% test
+TRAIN_TEST_SPLIT_RATIO = 0.9            # 90% train, 10% test
 
 
 # ╔════════════════════════════════════════════════════════════════════════════╗
