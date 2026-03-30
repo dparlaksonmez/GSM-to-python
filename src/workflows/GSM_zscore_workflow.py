@@ -14,7 +14,7 @@ Notlar:
 """
 
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import json
 from datetime import datetime, timedelta
 import time
@@ -34,6 +34,8 @@ from src.workflows.GSM_workflow import (
     save_runtime_config,
     build_runtime_log_items,
     log_runtime_config,
+    generate_iteration_seed,
+    set_random_seed,
     save_results,
     visualize_f1_scores,
     generate_all_figures,
@@ -61,12 +63,16 @@ from src.scoring.run_scoring import run_scoring, score_all_features
 from src.grouping.run_grouping import run_grouping
 from src.modeling.run_modeling import ModelingResult, run_modeling, select_features_from_top_groups
 from src.scoring.feature_scorer import FeatureScore
+from src.scoring.metrics import MetricsData
 from src.utils.save_ranked_features import save_ranked_features, FeatureRankingOutput
 from src.utils.visualization import visualize_f1_scores
 from src.data_processing.normalization import fit_scaler
+from src.workflows.postprocessing_helpers import ensure_results_json, run_postprocessing_aggregations
 from src.utils.rank_aggregation import (
-    load_ranked_groups_from_excel,
-    load_ranked_features_from_excel,
+    RankedFeatureItem,
+    RankedFeatureList,
+    RankedGroupItem,
+    RankedGroupList,
     aggregate_group_ranks_rra,
     aggregate_feature_ranks_rra,
     save_aggregated_group_ranking,
@@ -76,25 +82,12 @@ from src.utils.rank_aggregation import (
     save_best_averaged_rankings,
     aggregate_model_feature_importance_rra,
 )
-from src.utils.biological_validation import run_biological_validation
-
-
-# -----------------------------------------------------------------------------
-# Yardımcılar
-# -----------------------------------------------------------------------------
-
-def generate_iteration_seed(initial_seed: int, iteration: int) -> int:
-    return initial_seed + (iteration * 1000)
-
-
-def set_random_seed(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
 
 
 # -----------------------------------------------------------------------------
 # Z-Score entegrasyonlu ana döngü
 # -----------------------------------------------------------------------------
+
 
 def gsm_main_loop_zscore(
     data: pd.DataFrame,
@@ -109,13 +102,14 @@ def gsm_main_loop_zscore(
     label_column: str = config.LABEL_COLUMN_NAME,
     sample_ratio: float = config.TRAIN_TEST_SPLIT_RATIO,
     ttest_threshold: float = config.TTEST_THRESHOLD,
+    q_value_threshold: float = config.Q_VALUE_THRESHOLD,
     initial_feature_filter_size: int = config.INITIAL_FEATURE_FILTER_SIZE,
     best_groups_to_keep: int = config.BEST_GROUPS_TO_KEEP,
     cross_validation_folds: int = config.CROSS_VALIDATION_FOLDS,
     scoring_model: str = config.SCORING_MODEL,
     iteration_seed: int = config.RANDOM_SEED,
     save_group_derived_features: bool = False,
-) -> List[ModelingResult]:
+) -> Tuple[List[ModelingResult], List[MetricsData]]:
     """
     GSM_workflow.gsm_main_loop'un aynısı; tek fark, t-test temelli
     feature selection sonrası z-score pipeline çağrılır.
@@ -138,22 +132,37 @@ def gsm_main_loop_zscore(
         logger=logger,
     )
 
-    # --- Z-SCORE ENTEGRASYONU ---
-    logger.info("Running z-score extension (gsm_with_zscore) after feature selection...")
-    gsm_zscore.config = config  # aynı config'i kullan
-    try:
-        gsm_zscore.run_zscore_pipeline()
-    except Exception as exc:  # savunma amaçlı
-        logger.warning(f"Z-score pipeline failed (continuing GSM): {exc}")
-    # -----------------------------
-
-    # Gene Grouping
+    # Apply z-score filtering on the current training split to avoid leakage and duplicate I/O.
+    logger.info("Applying in-memory z-score group filtering on training split...")
     if filtered_train.selected_feature_names is not None:
         filtered_feature_names = list(filtered_train.selected_feature_names)
     else:
         filtered_feature_names = list(
             train_test_split_data.X_train.columns[filtered_train.selected_features]
         )
+
+    try:
+        zscore_filtered_feature_names, significant_group_df = gsm_zscore.run_zscore_filter(
+            filtered_train,
+            list(train_test_split_data.X_train.columns),
+            grouping_data,
+            gene_column_name=gene_column,
+            group_column_name=group_column,
+            q_value_threshold=q_value_threshold,
+            logger=logger,
+        )
+        if zscore_filtered_feature_names:
+            logger.info(
+                f"Z-score filtering kept {len(zscore_filtered_feature_names)} features across "
+                f"{len(significant_group_df)} significant groups."
+            )
+            filtered_feature_names = zscore_filtered_feature_names
+        else:
+            logger.warning(
+                "Z-score filtering returned no significant groups; falling back to t-test filtered features."
+            )
+    except Exception as exc:  # defensive fallback
+        logger.warning(f"In-memory z-score filtering failed; falling back to t-test features: {exc}")
 
     group_feature_mappings = run_grouping(
         grouping_data,
@@ -182,7 +191,7 @@ def gsm_main_loop_zscore(
 
     if not ranked_groups:
         logger.warning("No ranked groups available for modeling")
-        return modeling_result_list
+        return modeling_result_list, ranked_groups
 
     max_group_count = min(best_groups_to_keep, len(ranked_groups))
     previous_feature_count = 0
@@ -241,7 +250,7 @@ def gsm_main_loop_zscore(
         )
     else:
         logger.info("Modeling completed (no results)")
-    return modeling_result_list
+    return modeling_result_list, ranked_groups
 
 
 # -----------------------------------------------------------------------------
@@ -417,7 +426,7 @@ def gsm_run(
         logger.info("=" * 50)
         logger.info(f"Iteration {i}/{n_iterations} (seed={iteration_seed})")
 
-        modeling_result = gsm_main_loop_zscore(
+        modeling_results, ranked_groups = gsm_main_loop_zscore(
             data=data_preprocessed,
             grouping_data=group_data_processed,
             model_name=model_name,
@@ -430,6 +439,7 @@ def gsm_run(
             label_column=label_column,
             sample_ratio=sample_ratio,
             ttest_threshold=ttest_threshold,
+            q_value_threshold=config.Q_VALUE_THRESHOLD,
             initial_feature_filter_size=initial_feature_filter_size,
             best_groups_to_keep=best_groups_to_keep,
             cross_validation_folds=cross_validation_folds,
@@ -438,11 +448,16 @@ def gsm_run(
         )
 
         iteration_results.append(
-            {"iteration": i, "random_seed": iteration_seed, "modeling_results": modeling_result}
+            {
+                "iteration": i,
+                "random_seed": iteration_seed,
+                "modeling_results": modeling_results,
+                "ranked_groups": ranked_groups,
+            }
         )
 
-        if modeling_result:
-            best_model_result = max(modeling_result, key=lambda r: r.f1_score)
+        if modeling_results:
+            best_model_result = max(modeling_results, key=lambda r: r.f1_score)
             if best_model_result.fitted_model is not None:
                 collected_model_artifacts.append(
                     ModelArtifact(
@@ -543,110 +558,12 @@ def gsm_run(
         logger.warning("No data available for visualization")
 
     results_json_path = output_folder_path / "modeling_results_all_iterations.json"
-    all_results_data = None
-    aggregated_groups = None
-    aggregated_features = None
-    robust_rank_groups = None
-    robust_rank_features = None
-
-    try:
-        ranked_groups_dir = output_folder_path / "ranked_groups"
-        ranked_groups_combined_path = output_folder_path / "ranked_groups_all_iterations.xlsx"
-        if ranked_groups_dir.exists():
-            csv_files = sorted(ranked_groups_dir.glob("iter_*_groups.csv"))
-            if csv_files:
-                frames = [pd.read_csv(f) for f in csv_files]
-                combined_groups_df = pd.concat(frames, ignore_index=True)
-                combined_groups_df.to_excel(ranked_groups_combined_path, index=False)
-                logger.debug(f"Consolidated {len(csv_files)} ranked group files")
-    except Exception as e:
-        logger.warning(f"Failed to consolidate ranked groups: {e}")
-
-    try:
-        ranked_features_combined_path = output_folder_path / "ranked_features_all_iterations.xlsx"
-        if results_json_path.exists():
-            with open(results_json_path, "r") as f:
-                _results_for_features = json.load(f)
-            feature_rows = []
-            for iter_data in _results_for_features:
-                iter_num = iter_data["metadata"]["iteration"]
-                results_list = iter_data.get("results", [])
-                if results_list:
-                    best_result = max(results_list, key=lambda r: r.get("num_features_used", 0))
-                    fi = best_result.get("feature_importance", {})
-                    for feat_name, importance in fi.items():
-                        feature_rows.append(
-                            {
-                                "feature_name": feat_name,
-                                "importance_score": importance,
-                                "iteration": iter_num,
-                            }
-                        )
-            if feature_rows:
-                features_df = pd.DataFrame(feature_rows)
-                features_df.to_excel(ranked_features_combined_path, index=False)
-                logger.debug(f"Built ranked features file: {len(feature_rows)} entries")
-    except Exception as e:
-        logger.warning(f"Failed to build ranked features file: {e}")
-
-    if results_json_path.exists():
-        with open(results_json_path, "r") as f:
-            all_results_data = json.load(f)
-        try:
-            save_best_averaged_rankings(output_folder_path, all_results_data, logger)
-            aggregated_groups = compute_best_averaged_groups(all_results_data, logger)
-            aggregated_features = compute_best_averaged_features(all_results_data, logger)
-        except Exception as e:
-            logger.warning(f"Failed to compute averaged rankings: {e}")
-        try:
-            ranked_groups_path = output_folder_path / "ranked_groups_all_iterations.xlsx"
-            ranked_groups_lists = load_ranked_groups_from_excel(ranked_groups_path, logger)
-            if ranked_groups_lists:
-                aggregated_group_ranking = aggregate_group_ranks_rra(ranked_groups_lists)
-                save_aggregated_group_ranking(
-                    aggregated_group_ranking,
-                    output_folder_path / "aggregated_group_ranking_rra.xlsx",
-                    logger,
-                )
-                robust_rank_groups = [
-                    {
-                        "Group Name": item.group_name,
-                        "Aggregated P-Value": item.aggregated_p_value,
-                        "Aggregated Score": item.aggregated_score,
-                        "Average Rank": item.average_rank,
-                        "Occurrences": item.occurrences,
-                    }
-                    for item in aggregated_group_ranking.items
-                ]
-        except Exception as e:
-            logger.warning(f"Failed to aggregate group rankings: {e}")
-        try:
-            ranked_features_path = output_folder_path / "ranked_features_all_iterations.xlsx"
-            ranked_features_lists = load_ranked_features_from_excel(ranked_features_path, logger)
-            if ranked_features_lists:
-                aggregated_feature_ranking = aggregate_feature_ranks_rra(ranked_features_lists)
-                save_aggregated_feature_ranking(
-                    aggregated_feature_ranking,
-                    output_folder_path / "aggregated_feature_ranking_rra.xlsx",
-                    logger,
-                )
-                robust_rank_features = [
-                    {
-                        "Feature Name": item.feature_name,
-                        "Aggregated P-Value": item.aggregated_p_value,
-                        "Aggregated Score": item.aggregated_score,
-                        "Average Rank": item.average_rank,
-                        "Average Importance": item.average_importance,
-                        "Occurrences": item.occurrences,
-                    }
-                    for item in aggregated_feature_ranking.items
-                ]
-        except Exception as e:
-            logger.warning(f"Failed to aggregate feature rankings: {e}")
-        try:
-            aggregate_model_feature_importance_rra(all_results_data, output_folder_path, logger)
-        except Exception as e:
-            logger.warning(f"Failed to aggregate model feature importances: {e}")
+    postprocessing_results = run_postprocessing_aggregations(iteration_results, output_folder_path, logger)
+    all_results_data = postprocessing_results["all_results_data"]
+    aggregated_groups = postprocessing_results["aggregated_groups"]
+    aggregated_features = postprocessing_results["aggregated_features"]
+    robust_rank_groups = postprocessing_results["robust_rank_groups"]
+    robust_rank_features = postprocessing_results["robust_rank_features"]
 
     logger.info("Generating summary report...")
     save_results.save_summary_report(
@@ -663,16 +580,19 @@ def gsm_run(
         robust_rank_features=robust_rank_features,
     )
 
+    if not results_json_path.exists():
+        ensure_results_json(results_json_path, all_results_data, logger)
+
     try:
-        if results_json_path.exists():
-            generate_all_figures(output_folder_path, results_json_path, logger)
-        else:
-            logger.warning("Results JSON not found, skipping figures")
+        generate_all_figures(output_folder_path, results_json_path, logger)
     except Exception as e:
         logger.warning(f"Figure generation failed: {e}")
 
     if run_biological_validation_flag and results_json_path.exists():
         try:
+            # Import biological validation lazily so optional API dependencies do not block normal workflow runs.
+            from src.utils.biological_validation import run_biological_validation
+
             logger.info("🧬 Running biological validation...")
             grouping_data_path = project_root / config.INPUT_GROUP_DATA
             run_biological_validation(

@@ -64,7 +64,7 @@ import src.workflows.GSM_workflow_config as gsm_workflow_config
 
 import pandas as pd
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 import random
 from datetime import datetime, timedelta
@@ -73,6 +73,7 @@ from datetime import datetime, timedelta
 from src.grouping.run_grouping import run_grouping
 from src.scoring.run_scoring import run_scoring, score_all_features
 from src.scoring.feature_scorer import FeatureScore
+from src.scoring.metrics import MetricsData
 from src.utils.save_ranked_features import (
     save_ranked_features,
     FeatureRankingOutput,
@@ -86,6 +87,7 @@ from src.utils import save_results
 from src.utils.visualization import visualize_f1_scores
 from src.utils.logger import setup_logger  # Add this import at the top with other imports
 from src.utils.generate_figures import generate_all_figures
+from src.workflows.postprocessing_helpers import ensure_results_json, run_postprocessing_aggregations
 from src.utils.rank_aggregation import (
     load_ranked_groups_from_excel,
     load_ranked_features_from_excel,
@@ -98,7 +100,6 @@ from src.utils.rank_aggregation import (
     save_best_averaged_rankings,
     aggregate_model_feature_importance_rra
 )
-from src.utils.biological_validation import run_biological_validation
 from src.data_processing.normalization import fit_scaler
 from src.inference.model_bundle import (
     ModelArtifact,
@@ -451,7 +452,6 @@ def gsm_run(
     X_full = data_preprocessed.drop(columns=[label_column])
     y_full = data_preprocessed[label_column]
     feature_scores = score_all_features(X_full, y_full, logger, random_state=initial_seed)
-    logger.info("Feature scoring done")
     features_output = output_folder_path / "individual_feature_scores.csv"
     save_ranked_features(
         FeatureRankingOutput(
@@ -464,7 +464,7 @@ def gsm_run(
         logger,
     )
 
-    iteration_results: List[IterationResult] = []
+    iteration_results: List[Dict[str, Any]] = []
     iteration_times: List[float] = []  # Track iteration durations for ETA estimation
     collected_model_artifacts: List[ModelArtifact] = []  # For inference bundle
     pipeline_start_time = time.time()
@@ -481,7 +481,7 @@ def gsm_run(
         logger.info(f"{'='*50}")
         logger.info(f"Iteration {i}/{n_iterations} (seed={iteration_seed})")
         
-        modeling_result = gsm_main_loop(
+        modeling_results, ranked_groups = gsm_main_loop(
             data=data_preprocessed, 
             grouping_data=group_data_processed, 
             model_name=model_name,
@@ -500,16 +500,17 @@ def gsm_run(
             iteration_seed=iteration_seed,
             save_group_derived_features=(i == 1)
         )
-        
-        iteration_results.append(IterationResult(
-            iteration=i,
-            random_seed=iteration_seed,
-            modeling_results=modeling_result
-        ))
+
+        iteration_results.append({
+            "iteration": i,
+            "random_seed": iteration_seed,
+            "modeling_results": modeling_results,
+            "ranked_groups": ranked_groups,
+        })
 
         # Collect the best model from this iteration for the inference bundle
-        if modeling_result:
-            best_model_result = max(modeling_result, key=lambda r: r.f1_score)
+        if modeling_results:
+            best_model_result = max(modeling_results, key=lambda r: r.f1_score)
             if best_model_result.fitted_model is not None:
                 collected_model_artifacts.append(ModelArtifact(
                     model=best_model_result.fitted_model,
@@ -581,10 +582,10 @@ def gsm_run(
     if save_intermediate_results:
         logger.info("Saving results...")
         save_results.save_modeling_results(
-            results=[r.modeling_results for r in iteration_results],
+            results=[r["modeling_results"] for r in iteration_results],
             iteration_metadata=[save_results.IterationMetadata(
-                iteration=r.iteration,
-                random_seed=r.random_seed
+                iteration=r["iteration"],
+                random_seed=r["random_seed"]
             ) for r in iteration_results],
             output_dir=str(output_folder_path),
             experiment_name="modeling_results",
@@ -595,9 +596,9 @@ def gsm_run(
     logger.info("Generating visualizations...")
     viz_data = []
     for res in iteration_results:
-        for model_res in res.modeling_results:
+        for model_res in res["modeling_results"]:
             viz_data.append({
-                "Iteration": res.iteration,
+                "Iteration": res["iteration"],
                 "NumGroups": model_res.num_groups_used,
                 "F1Score": model_res.f1_score
             })
@@ -608,132 +609,21 @@ def gsm_run(
     else:
         logger.warning("No data available for visualization")
 
-    # Load results JSON for aggregation
     results_json_path = output_folder_path / "modeling_results_all_iterations.json"
-    all_results_data = None
-    aggregated_groups = None
-    aggregated_features = None
-    robust_rank_groups = None
-    robust_rank_features = None
-
-    # Consolidate per-iteration ranked group CSVs into a single Excel file
-    # so the RRA aggregation code can consume it.
-    try:
-        ranked_groups_dir = output_folder_path / "ranked_groups"
-        ranked_groups_combined_path = output_folder_path / "ranked_groups_all_iterations.xlsx"
-        if ranked_groups_dir.exists():
-            csv_files = sorted(ranked_groups_dir.glob("iter_*_groups.csv"))
-            if csv_files:
-                frames = [pd.read_csv(f) for f in csv_files]
-                combined_groups_df = pd.concat(frames, ignore_index=True)
-                combined_groups_df.to_excel(ranked_groups_combined_path, index=False)
-                logger.debug(f"Consolidated {len(csv_files)} ranked group files")
-    except Exception as e:
-        logger.warning(f"Failed to consolidate ranked groups: {e}")
-
-    # Build ranked features file from modeling results (feature_importance per iteration)
-    try:
-        ranked_features_combined_path = output_folder_path / "ranked_features_all_iterations.xlsx"
-        if results_json_path.exists():
-            with open(results_json_path, 'r') as f:
-                _results_for_features = json.load(f)
-            feature_rows = []
-            for iter_data in _results_for_features:
-                iter_num = iter_data["metadata"]["iteration"]
-                # Use the result with the most features (last modeling step)
-                results_list = iter_data.get("results", [])
-                if results_list:
-                    best_result = max(results_list, key=lambda r: r.get("num_features_used", 0))
-                    fi = best_result.get("feature_importance", {})
-                    for feat_name, importance in fi.items():
-                        feature_rows.append({
-                            "feature_name": feat_name,
-                            "importance_score": importance,
-                            "iteration": iter_num,
-                        })
-            if feature_rows:
-                features_df = pd.DataFrame(feature_rows)
-                features_df.to_excel(ranked_features_combined_path, index=False)
-                logger.debug(f"Built ranked features file: {len(feature_rows)} entries")
-    except Exception as e:
-        logger.warning(f"Failed to build ranked features file: {e}")
-    
-    if results_json_path.exists():
-        with open(results_json_path, 'r') as f:
-            all_results_data = json.load(f)
-        
-        # Compute and save best averaged groups/features
-        try:
-            save_best_averaged_rankings(output_folder_path, all_results_data, logger)
-            aggregated_groups = compute_best_averaged_groups(all_results_data, logger)
-            aggregated_features = compute_best_averaged_features(all_results_data, logger)
-        except Exception as e:
-            logger.warning(f"Failed to compute averaged rankings: {e}")
-        
-        # Perform robust rank aggregation on groups
-        try:
-            ranked_groups_path = output_folder_path / "ranked_groups_all_iterations.xlsx"
-            ranked_groups_lists = load_ranked_groups_from_excel(ranked_groups_path, logger)
-            if ranked_groups_lists:
-                aggregated_group_ranking = aggregate_group_ranks_rra(ranked_groups_lists)
-                save_aggregated_group_ranking(
-                    aggregated_group_ranking, 
-                    output_folder_path / "aggregated_group_ranking_rra.xlsx", 
-                    logger
-                )
-                robust_rank_groups = [
-                    {
-                        'Group Name': item.group_name,
-                        'Aggregated P-Value': item.aggregated_p_value,
-                        'Aggregated Score': item.aggregated_score,
-                        'Average Rank': item.average_rank,
-                        'Occurrences': item.occurrences
-                    }
-                    for item in aggregated_group_ranking.items
-                ]
-        except Exception as e:
-            logger.warning(f"Failed to aggregate group rankings: {e}")
-        
-        # Perform robust rank aggregation on features
-        try:
-            ranked_features_path = output_folder_path / "ranked_features_all_iterations.xlsx"
-            ranked_features_lists = load_ranked_features_from_excel(ranked_features_path, logger)
-            if ranked_features_lists:
-                aggregated_feature_ranking = aggregate_feature_ranks_rra(ranked_features_lists)
-                save_aggregated_feature_ranking(
-                    aggregated_feature_ranking,
-                    output_folder_path / "aggregated_feature_ranking_rra.xlsx",
-                    logger
-                )
-                robust_rank_features = [
-                    {
-                        'Feature Name': item.feature_name,
-                        'Aggregated P-Value': item.aggregated_p_value,
-                        'Aggregated Score': item.aggregated_score,
-                        'Average Rank': item.average_rank,
-                        'Average Importance': item.average_importance,
-                        'Occurrences': item.occurrences
-                    }
-                    for item in aggregated_feature_ranking.items
-                ]
-        except Exception as e:
-            logger.warning(f"Failed to aggregate feature rankings: {e}")
-
-        # Perform RRA on model feature importances (XGBoost gain-based)
-        try:
-            model_fi_rra = aggregate_model_feature_importance_rra(
-                all_results_data, output_folder_path, logger
-            )
-        except Exception as e:
-            logger.warning(f"Failed to aggregate model feature importances: {e}")
+    postprocessing_results = run_postprocessing_aggregations(iteration_results, output_folder_path, logger)
+    all_results_data = postprocessing_results["all_results_data"]
+    aggregated_groups = postprocessing_results["aggregated_groups"]
+    aggregated_features = postprocessing_results["aggregated_features"]
+    robust_rank_groups = postprocessing_results["robust_rank_groups"]
+    robust_rank_features = postprocessing_results["robust_rank_features"]
 
     # Identify the best performing iteration and save a summary report
     logger.info("Generating summary report...")
     save_results.save_summary_report(
-        results=[r.modeling_results for r in iteration_results],
+        results=[r["modeling_results"] for r in iteration_results],
         iteration_metadata=[save_results.IterationMetadata(
-            iteration=r.iteration,
-            random_seed=r.random_seed
+            iteration=r["iteration"],
+            random_seed=r["random_seed"]
         ) for r in iteration_results],
         output_dir=output_folder_path,
         logger=logger,
@@ -743,18 +633,21 @@ def gsm_run(
         robust_rank_features=robust_rank_features
     )
 
+    if not results_json_path.exists():
+        ensure_results_json(results_json_path, all_results_data, logger)
+
     # Generate publication-quality figures
     try:
-        if results_json_path.exists():
-            generate_all_figures(output_folder_path, results_json_path, logger)
-        else:
-            logger.warning("Results JSON not found, skipping figures")
+        generate_all_figures(output_folder_path, results_json_path, logger)
     except Exception as e:
         logger.warning(f"Figure generation failed: {e}")
 
     # Run biological validation if enabled
     if run_biological_validation_flag and results_json_path.exists():
         try:
+            # Import biological validation lazily so optional API dependencies do not block normal workflow runs.
+            from src.utils.biological_validation import run_biological_validation
+
             logger.info("🧬 Running biological validation...")
             grouping_data_path = project_root / INPUT_GROUP_DATA
             run_biological_validation(
@@ -790,7 +683,7 @@ def gsm_run(
             best_features: List[str] = []
             best_groups: List[str] = []
             for res in iteration_results:
-                for mr in res.modeling_results:
+                for mr in res["modeling_results"]:
                     if (mr.f1_score == best_overall.f1_score
                             and mr.used_features):
                         best_features = mr.used_features
@@ -849,7 +742,7 @@ def gsm_main_loop(data: pd.DataFrame,
                   cross_validation_folds: int = CROSS_VALIDATION_FOLDS,
                   scoring_model: str = SCORING_MODEL,
                   iteration_seed: int = RANDOM_SEED,
-                  save_group_derived_features: bool = False) -> List[ModelingResult]:
+                  save_group_derived_features: bool = False) -> tuple[List[ModelingResult], List[MetricsData]]:
     """
     Executes one complete iteration of the GSM workflow.
 
@@ -936,7 +829,7 @@ def gsm_main_loop(data: pd.DataFrame,
     # Start with top 1 group and increase to best_groups_to_keep
     if not ranked_groups:
         logger.warning("No ranked groups available for modeling")
-        return modeling_result_list
+        return modeling_result_list, ranked_groups
 
     max_group_count = min(best_groups_to_keep, len(ranked_groups))
     previous_feature_count = 0
@@ -997,7 +890,7 @@ def gsm_main_loop(data: pd.DataFrame,
         )
     else:
         logger.info("Modeling completed (no results)")
-    return modeling_result_list
+    return modeling_result_list, ranked_groups
 
 def generate_iteration_seed(initial_seed: int, iteration: int) -> int:
     """Generate a deterministic seed for each iteration based on initial seed."""

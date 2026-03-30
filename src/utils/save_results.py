@@ -22,11 +22,7 @@ _NON_SERIALIZABLE_FIELDS = {"fitted_model"}
 
 
 def _strip_non_serializable(obj: Any) -> Any:
-    """Recursively remove non-serializable fields from nested dicts/lists.
-
-    Used before json.dump to drop fitted model objects that cannot be
-    converted to JSON.
-    """
+    """Recursively remove non-serializable fields from nested dicts/lists."""
     if isinstance(obj, dict):
         return {
             k: _strip_non_serializable(v)
@@ -36,6 +32,28 @@ def _strip_non_serializable(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_strip_non_serializable(item) for item in obj]
     return obj
+
+
+# Serialize only lightweight fields here because fitted model objects are kept for bundle export, not JSON.
+def _serialize_modeling_result(modeling_result: ModelingResult) -> Dict[str, Any]:
+    """Serialize a ModelingResult without deep-copying the fitted model object."""
+    payload = {
+        key: value
+        for key, value in modeling_result.__dict__.items()
+        if key not in _NON_SERIALIZABLE_FIELDS
+    }
+    return _strip_non_serializable(payload)
+
+
+def _serialize_iteration_payload(metadata: "IterationMetadata", results: List[ModelingResult]) -> Dict[str, Any]:
+    """Build the JSON payload for one iteration without materializing model objects."""
+    return {
+        "metadata": {
+            "iteration": metadata.iteration,
+            "random_seed": metadata.random_seed,
+        },
+        "results": [_serialize_modeling_result(result) for result in results],
+    }
 
 
 @dataclass
@@ -211,19 +229,13 @@ def save_modeling_results(
     
     try:
         # Save detailed results in a single combined file
-        payloads = []
-        for iteration_idx, result_group in enumerate(results):
-            payloads.append(
-                IterationResultsPayload(
-                    metadata=iteration_metadata[iteration_idx],
-                    results=result_group
-                )
-            )
+        # Avoid building large dataclass trees with model objects just to write JSON.
+        serializable = [
+            _serialize_iteration_payload(iteration_metadata[iteration_idx], result_group)
+            for iteration_idx, result_group in enumerate(results)
+        ]
 
         output_file = output_path / f"{experiment_name}_all_iterations.json"
-        serializable = _strip_non_serializable(
-            [asdict(payload) for payload in payloads]
-        )
         with open(output_file, 'w') as f:
             json.dump(serializable, f, indent=2)
 

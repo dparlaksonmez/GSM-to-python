@@ -69,6 +69,22 @@ class FigureConfig:
     color_palette: str = 'viridis'
 
 
+def _has_any_finite_values(df: pd.DataFrame) -> bool:
+    """Return True when a frame still contains at least one plottable numeric value."""
+    if df.empty:
+        return False
+    numeric_df = df.apply(pd.to_numeric, errors='coerce')
+    return bool(np.isfinite(numeric_df.to_numpy(dtype=float)).any())
+
+
+def _render_placeholder_figure(ax: plt.Axes, title: str, message: str) -> None:
+    """Show a clear placeholder instead of letting seaborn warn on empty matrices."""
+    ax.clear()
+    ax.set_title(title)
+    ax.axis('off')
+    ax.text(0.5, 0.5, message, ha='center', va='center', fontsize=12, wrap=True)
+
+
 ##### MAIN ENTRY POINT #####
 def generate_all_figures(
     output_dir: Path,
@@ -408,30 +424,38 @@ def plot_confidence_interval_forest(
                 ci_uppers.append(result.get('f1_ci_upper', 1))
     
     fig, ax = plt.subplots(figsize=(10, max(6, len(iterations) * 0.4)))
-    
-    y_pos = np.arange(len(iterations))
-    
-    # Plot points with error bars
-    ax.errorbar(
-        f1_scores, y_pos,
-        xerr=[np.array(f1_scores) - np.array(ci_lowers), 
-              np.array(ci_uppers) - np.array(f1_scores)],
-        fmt='o', color='steelblue', markersize=8,
-        capsize=4, capthick=1.5, elinewidth=1.5
-    )
-    
-    # Add vertical line for pooled mean
-    pooled_mean = np.mean(f1_scores)
-    ax.axvline(pooled_mean, color='red', linestyle='--', linewidth=2, 
-               label=f'Pooled Mean: {pooled_mean:.3f}')
-    
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(iterations)
-    ax.set_xlabel('F1 Score')
-    ax.set_title('F1 Score with 95% Confidence Intervals\n(Best Configuration: 2 Groups)')
-    ax.set_xlim(0, 1.1)
-    ax.legend(loc='lower right')
-    ax.invert_yaxis()
+
+    if not f1_scores:
+        _render_placeholder_figure(
+            ax,
+            'F1 Score with 95% Confidence Intervals\n(Best Configuration: 2 Groups)',
+            'No 2-group configuration was available for the confidence-interval forest plot.',
+        )
+        logger.warning('Skipping CI forest points because no 2-group configuration was available')
+    else:
+        y_pos = np.arange(len(iterations))
+
+        # Plot points with error bars
+        ax.errorbar(
+            f1_scores, y_pos,
+            xerr=[np.array(f1_scores) - np.array(ci_lowers), 
+                  np.array(ci_uppers) - np.array(f1_scores)],
+            fmt='o', color='steelblue', markersize=8,
+            capsize=4, capthick=1.5, elinewidth=1.5
+        )
+
+        # Add vertical line for pooled mean
+        pooled_mean = np.mean(f1_scores)
+        ax.axvline(pooled_mean, color='red', linestyle='--', linewidth=2, 
+                   label=f'Pooled Mean: {pooled_mean:.3f}')
+
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(iterations)
+        ax.set_xlabel('F1 Score')
+        ax.set_title('F1 Score with 95% Confidence Intervals\n(Best Configuration: 2 Groups)')
+        ax.set_xlim(0, 1.1)
+        ax.legend(loc='lower right')
+        ax.invert_yaxis()
     
     plt.tight_layout()
     
@@ -550,13 +574,21 @@ def plot_group_performance_heatmap(
     # Determine figure size and annotation based on number of iterations
     n_iterations = len(df)
     n_groups = len(df.columns)
-    
-    # For many iterations, use a larger figure and smaller/no annotations
-    if n_iterations > 30:
+
+    # Render a placeholder instead of asking seaborn to infer limits from an all-NaN matrix.
+    if not _has_any_finite_values(df):
+        fig, ax = plt.subplots(figsize=config.figsize_wide)
+        _render_placeholder_figure(
+            ax,
+            'F1 Score Heatmap: Iterations × Group Counts',
+            'No finite performance values were available for the heatmap.',
+        )
+        logger.warning('Skipping group performance heatmap cells because the matrix has no finite values')
+    elif n_iterations > 30:
         # Large heatmap without annotations for clarity
         fig_height = max(10, n_iterations * 0.15)
         fig, ax = plt.subplots(figsize=(12, fig_height))
-        
+
         sns.heatmap(
             df, 
             annot=False,  # No annotations for many iterations
@@ -566,13 +598,13 @@ def plot_group_performance_heatmap(
             ax=ax,
             cbar_kws={'label': 'F1 Score', 'shrink': 0.5}
         )
-        
+
         # Show only every Nth y-tick label for readability
         tick_step = max(1, n_iterations // 20)
         ax.set_yticks(ax.get_yticks()[::tick_step])
     else:
         fig, ax = plt.subplots(figsize=config.figsize_wide)
-        
+
         sns.heatmap(
             df, 
             annot=True, 
@@ -1006,23 +1038,31 @@ def plot_metrics_correlation(
     
     # Calculate correlation matrix
     corr_matrix = df.corr()
-    
+
     fig, ax = plt.subplots(figsize=(10, 8))
-    
-    # Create heatmap
-    mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
-    sns.heatmap(
-        corr_matrix, 
-        mask=mask,
-        annot=True, 
-        fmt='.2f',
-        cmap='RdBu_r',
-        center=0,
-        square=True,
-        linewidths=0.5,
-        ax=ax,
-        cbar_kws={'label': 'Correlation', 'shrink': 0.8}
-    )
+
+    if not _has_any_finite_values(corr_matrix):
+        _render_placeholder_figure(
+            ax,
+            'Correlation Matrix of Performance Metrics',
+            'Not enough finite metric values were available to compute correlations.',
+        )
+        logger.warning('Skipping correlation heatmap cells because the correlation matrix has no finite values')
+    else:
+        # Create heatmap
+        mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+        sns.heatmap(
+            corr_matrix, 
+            mask=mask,
+            annot=True, 
+            fmt='.2f',
+            cmap='RdBu_r',
+            center=0,
+            square=True,
+            linewidths=0.5,
+            ax=ax,
+            cbar_kws={'label': 'Correlation', 'shrink': 0.8}
+        )
     
     ax.set_title('Correlation Matrix of Performance Metrics')
     

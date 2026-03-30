@@ -146,6 +146,21 @@ def _prepare_group_tasks(
     
     return tasks, group_features
 
+# Honor the outer batch launcher budget so dataset-level parallelism and joblib do not oversubscribe the machine.
+def _resolve_n_jobs(n_jobs: int) -> int:
+    """Respect the launcher CPU budget when scoring is run inside batch mode."""
+    if n_jobs != DEFAULT_N_JOBS:
+        return n_jobs
+
+    env_value = os.getenv("GSM_INNER_N_JOBS") or os.getenv("GSM_SCORING_N_JOBS")
+    if not env_value:
+        return DEFAULT_N_JOBS
+
+    try:
+        return max(1, int(env_value))
+    except ValueError:
+        return DEFAULT_N_JOBS
+
 
 def run_scoring(
     data_x: pd.DataFrame,
@@ -204,7 +219,9 @@ def run_scoring(
             )
 
         # Determine number of jobs
-        actual_n_jobs = n_jobs if n_jobs != -1 else os.cpu_count() or 1
+        # Keep inner scoring workers bounded when the workflow is launched in parallel across datasets.
+        resolved_n_jobs = _resolve_n_jobs(n_jobs)
+        actual_n_jobs = resolved_n_jobs if resolved_n_jobs != -1 else os.cpu_count() or 1
         logger.debug(f"Parallel scoring with {actual_n_jobs} workers")
 
         # Run scoring in parallel using joblib
@@ -228,7 +245,7 @@ def run_scoring(
             )
             for idx, task in enumerate(tasks)
         ]
-        results = list(Parallel(n_jobs=n_jobs, verbose=0)(tqdm(scoring_tasks, desc="📊 Scoring groups")))
+        results = list(Parallel(n_jobs=resolved_n_jobs, verbose=0)(tqdm(scoring_tasks, desc="📊 Scoring groups")))
         
         # Filter out failed results (keep only successful MetricsData)
         processed_group_scores: List[MetricsData] = [r for r in results if r is not None]

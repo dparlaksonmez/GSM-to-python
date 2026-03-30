@@ -26,6 +26,7 @@ Example Usage:
 >>> print(f"AUC-ROC: {result.auc_roc:.4f}")
 """
 
+import os
 import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
@@ -44,6 +45,19 @@ from xgboost import XGBClassifier
 
 from src.scoring.metrics import MetricsData
 from src.grouping.grouping_utils import GroupFeatureMappingData
+
+
+# Read the shared CPU budget from the batch launcher so final model fits respect dataset-level parallelism.
+def _resolve_parallel_jobs() -> int:
+    """Respect the launcher CPU budget when the workflow is run in batch mode."""
+    env_value = os.getenv("GSM_INNER_N_JOBS") or os.getenv("GSM_MODEL_N_JOBS")
+    if not env_value:
+        return -1
+
+    try:
+        return max(1, int(env_value))
+    except ValueError:
+        return -1
 
 
 ##### CONSTANTS FOR STATISTICAL ANALYSIS #####
@@ -340,9 +354,11 @@ def train_and_evaluate_model(
         - AUC-ROC provides classification quality independent of threshold choice
     """
     # Select model type with explicit random_state for reproducibility
-    # n_jobs=-1 for final modeling RF to use all cores (this is NOT nested inside joblib)
+    # Reuse the same CPU budget here to avoid nested all-core fits inside each dataset process.
+    parallel_jobs = _resolve_parallel_jobs()
+    # Final modeling should respect the batch launcher CPU budget when provided.
     if model_name == "RandomForest":
-        model = RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=random_state)
+        model = RandomForestClassifier(n_estimators=100, n_jobs=parallel_jobs, random_state=random_state)
     elif model_name == "XGBoost":
         # Gradient boosting: fast, accurate, with native feature importance
         model = XGBClassifier(
@@ -353,14 +369,14 @@ def train_and_evaluate_model(
             eval_metric='logloss',
             verbosity=0,
             random_state=random_state,
-            n_jobs=-1
+            n_jobs=parallel_jobs
         )
     elif model_name == "DecisionTree":
         model = DecisionTreeClassifier(random_state=random_state)
     elif model_name == "SVM":
         model = SVC(probability=True, random_state=random_state)  # Enable probability estimates
     elif model_name == "KNN":
-        model = KNeighborsClassifier(n_neighbors=5, n_jobs=-1)  # Deterministic algorithm
+        model = KNeighborsClassifier(n_neighbors=5, n_jobs=parallel_jobs)  # Deterministic algorithm
     elif model_name == "MLP":
         model = MLPClassifier(hidden_layer_sizes=(100,), max_iter=500, random_state=random_state)
     else:

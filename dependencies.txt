@@ -20,3 +20,8 @@ rich>=13.0.0
 
 # Testing
 pytest
+pytz==2026.1
+tzdata>=2022.7
+pillow==12.1.0
+pyparsing==3.3.2
+requests>=2.27,<3

@@ -101,9 +101,6 @@ def visualize_f1_scores(results_df: pd.DataFrame, output_dir: Path, logger: Opti
     # Set publication-quality style
     _setup_publication_style()
     
-    # Color palette
-    colors = sns.color_palette("viridis", n_colors=results_df["NumGroups"].nunique())
-    
     # Plot 1: F1 Scores across Iterations
     fig, ax = plt.subplots(figsize=(12, 6))
     
@@ -145,15 +142,23 @@ def visualize_f1_scores(results_df: pd.DataFrame, output_dir: Path, logger: Opti
     
     # Plot 2: Average F1 Scores by Number of Groups
     fig, ax = plt.subplots(figsize=(10, 6))
-    
+
+    group_order = sorted(results_df["NumGroups"].dropna().unique().tolist())
+
     bars = sns.barplot(
         data=results_df, 
         x="NumGroups", 
         y="F1Score", 
+        hue="NumGroups",
+        order=group_order,
+        hue_order=group_order,
+        dodge=False,
         errorbar="sd", 
         palette="viridis",
         capsize=0.15,
-        errwidth=1.5,
+        legend=False,
+        # Use the new seaborn API so the plot stays quiet on recent versions.
+        err_kws={"linewidth": 1.5},
         edgecolor='black',
         linewidth=1,
         ax=ax
