@@ -27,12 +27,19 @@ API References:
 """
 
 import json
+import os
 import time
 import logging
+import random
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 import requests
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None
 
 
 ##### CONSTANTS #####
@@ -41,8 +48,74 @@ STRING_API_URL = "https://string-db.org/api"
 DISGENET_API_URL = "https://www.disgenet.org/api"
 
 # Retry settings for external API calls
-MAX_RETRIES = 3
-INITIAL_BACKOFF_SECONDS = 2.0
+MAX_RETRIES = int(os.getenv("GSM_API_MAX_RETRIES", "6"))
+INITIAL_BACKOFF_SECONDS = float(os.getenv("GSM_API_INITIAL_BACKOFF_SECONDS", "2.0"))
+MAX_BACKOFF_SECONDS = float(os.getenv("GSM_API_MAX_BACKOFF_SECONDS", "60.0"))
+REQUEST_TIMEOUT_SECONDS = float(os.getenv("GSM_API_TIMEOUT_SECONDS", "45.0"))
+ENRICHR_MIN_REQUEST_INTERVAL_SECONDS = float(os.getenv("GSM_ENRICHR_MIN_REQUEST_INTERVAL_SECONDS", "2.5"))
+STRING_MIN_REQUEST_INTERVAL_SECONDS = float(os.getenv("GSM_STRING_MIN_INTERVAL_SECONDS", "0.3"))
+DISGENET_MIN_REQUEST_INTERVAL_SECONDS = float(os.getenv("GSM_DISGENET_MIN_INTERVAL_SECONDS", "0.3"))
+THROTTLE_STATE_DIR = Path(os.getenv("GSM_API_THROTTLE_DIR", "/tmp/gsm_api_throttle"))
+
+
+def _sleep_with_jitter(seconds: float) -> None:
+    """Sleep with a small random offset so workers do not retry in lockstep."""
+    if seconds <= 0:
+        return
+
+    jitter_ceiling = min(1.0, seconds * 0.25)
+    time.sleep(seconds + random.uniform(0, jitter_ceiling))
+
+
+def _throttle_requests(service_name: str, min_interval: float, logger: logging.Logger) -> None:
+    """Serialize requests across local processes for the same external service."""
+    if min_interval <= 0:
+        return
+
+    THROTTLE_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    lock_path = THROTTLE_STATE_DIR / f"{service_name}.lock"
+    state_path = THROTTLE_STATE_DIR / f"{service_name}.json"
+
+    with lock_path.open("a+", encoding="utf-8") as lock_handle:
+        if fcntl is not None:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+
+        try:
+            last_request_ts = 0.0
+            if state_path.exists():
+                try:
+                    state = json.loads(state_path.read_text(encoding="utf-8"))
+                    last_request_ts = float(state.get("last_request_ts", 0.0))
+                except Exception:
+                    last_request_ts = 0.0
+
+            wait_seconds = max(0.0, min_interval - (time.time() - last_request_ts))
+            if wait_seconds > 0:
+                logger.debug(
+                    f"   ⏳ Global throttle for {service_name}: waiting {wait_seconds:.2f}s before next request"
+                )
+                time.sleep(wait_seconds)
+
+            state_path.write_text(
+                json.dumps({"last_request_ts": time.time()}),
+                encoding="utf-8",
+            )
+        finally:
+            if fcntl is not None:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+
+
+def _resolve_retry_delay(response: requests.Response | None, backoff: float) -> float:
+    """Use Retry-After when present, otherwise exponential backoff."""
+    if response is not None:
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                return max(backoff, float(retry_after))
+            except ValueError:
+                pass
+
+    return min(backoff, MAX_BACKOFF_SECONDS)
 
 
 def _request_with_retry(
@@ -55,6 +128,9 @@ def _request_with_retry(
     files: dict | None = None,
     max_retries: int = MAX_RETRIES,
     initial_backoff: float = INITIAL_BACKOFF_SECONDS,
+    service_name: str = "external_api",
+    min_request_interval: float = 0.0,
+    request_timeout: float = REQUEST_TIMEOUT_SECONDS,
 ) -> requests.Response:
     """Send an HTTP request with exponential-backoff retry on failure.
 
@@ -66,10 +142,18 @@ def _request_with_retry(
 
     for attempt in range(1, max_retries + 1):
         try:
+            _throttle_requests(service_name, min_request_interval, logger)
+
             if method.upper() == "GET":
-                resp = requests.get(url, params=params, headers=headers, timeout=30)
+                resp = requests.get(url, params=params, headers=headers, timeout=request_timeout)
             else:
-                resp = requests.post(url, params=params, headers=headers, files=files, timeout=30)
+                resp = requests.post(
+                    url,
+                    params=params,
+                    headers=headers,
+                    files=files,
+                    timeout=request_timeout,
+                )
 
             # Success
             if resp.status_code == 200:
@@ -77,12 +161,13 @@ def _request_with_retry(
 
             # Retryable status codes
             if resp.status_code in (429, 500, 502, 503, 504):
+                retry_delay = _resolve_retry_delay(resp, backoff)
                 logger.warning(
                     f"   ⚠️  API {resp.status_code} on {url} "
-                    f"(attempt {attempt}/{max_retries}), retrying in {backoff:.0f}s…"
+                    f"(attempt {attempt}/{max_retries}), retrying in {retry_delay:.1f}s…"
                 )
-                time.sleep(backoff)
-                backoff *= 2
+                _sleep_with_jitter(retry_delay)
+                backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
                 last_exception = Exception(
                     f"HTTP {resp.status_code} from {url}"
                 )
@@ -97,8 +182,8 @@ def _request_with_retry(
                 f"(attempt {attempt}/{max_retries}), retrying in {backoff:.0f}s…"
             )
             last_exception = exc
-            time.sleep(backoff)
-            backoff *= 2
+            _sleep_with_jitter(backoff)
+            backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
 
         except requests.exceptions.Timeout as exc:
             logger.warning(
@@ -106,8 +191,8 @@ def _request_with_retry(
                 f"(attempt {attempt}/{max_retries}), retrying in {backoff:.0f}s…"
             )
             last_exception = exc
-            time.sleep(backoff)
-            backoff *= 2
+            _sleep_with_jitter(backoff)
+            backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
 
     raise Exception(
         f"API request to {url} failed after {max_retries} retries: {last_exception}"
@@ -373,7 +458,10 @@ def query_enrichr(genes: List[str], logger: logging.Logger) -> List[EnrichmentRe
     Returns:
         List of EnrichmentResult objects
     """
-    logger.debug("Querying Enrichr...")
+    logger.debug(
+        "Querying Enrichr..."
+        f" (global min interval={ENRICHR_MIN_REQUEST_INTERVAL_SECONDS:.2f}s, retries={MAX_RETRIES})"
+    )
     
     # Step 1: Submit gene list (with retry)
     genes_str = "\n".join(genes)
@@ -383,7 +471,12 @@ def query_enrichr(genes: List[str], logger: logging.Logger) -> List[EnrichmentRe
     }
     
     response = _request_with_retry(
-        "POST", f"{ENRICHR_URL}/addList", logger, files=payload
+        "POST",
+        f"{ENRICHR_URL}/addList",
+        logger,
+        files=payload,
+        service_name="enrichr",
+        min_request_interval=ENRICHR_MIN_REQUEST_INTERVAL_SECONDS,
     )
     
     result = response.json()
@@ -402,8 +495,12 @@ def query_enrichr(genes: List[str], logger: logging.Logger) -> List[EnrichmentRe
         
         try:
             response = _request_with_retry(
-                "GET", f"{ENRICHR_URL}/enrich", logger,
-                params={"userListId": user_list_id, "backgroundType": library}
+                "GET",
+                f"{ENRICHR_URL}/enrich",
+                logger,
+                params={"userListId": user_list_id, "backgroundType": library},
+                service_name="enrichr",
+                min_request_interval=ENRICHR_MIN_REQUEST_INTERVAL_SECONDS,
             )
         except Exception:
             logger.warning(f"   ⚠️ Failed to query {library} after retries")
@@ -464,7 +561,12 @@ def query_string_db(genes: List[str], logger: logging.Logger, species: int = 960
     # Get interactions (with retry)
     try:
         response = _request_with_retry(
-            "GET", f"{STRING_API_URL}/json/network", logger, params=params
+            "GET",
+            f"{STRING_API_URL}/json/network",
+            logger,
+            params=params,
+            service_name="string",
+            min_request_interval=STRING_MIN_REQUEST_INTERVAL_SECONDS,
         )
     except Exception as exc:
         logger.warning(f"   ⚠️ STRING network query failed after retries: {exc}")
@@ -493,7 +595,12 @@ def query_string_db(genes: List[str], logger: logging.Logger, species: int = 960
     # Get enrichment from STRING (with retry)
     try:
         enrichment_response = _request_with_retry(
-            "GET", f"{STRING_API_URL}/json/enrichment", logger, params=params
+            "GET",
+            f"{STRING_API_URL}/json/enrichment",
+            logger,
+            params=params,
+            service_name="string",
+            min_request_interval=STRING_MIN_REQUEST_INTERVAL_SECONDS,
         )
     except Exception as exc:
         logger.warning(f"   ⚠️ STRING enrichment query failed after retries: {exc}")
@@ -539,8 +646,12 @@ def query_disgenet(
     for gene in genes:
         try:
             response = _request_with_retry(
-                "GET", f"{DISGENET_API_URL}/gda/gene/{gene}", logger,
-                headers=headers
+                "GET",
+                f"{DISGENET_API_URL}/gda/gene/{gene}",
+                logger,
+                headers=headers,
+                service_name="disgenet",
+                min_request_interval=DISGENET_MIN_REQUEST_INTERVAL_SECONDS,
             )
         except Exception:
             logger.warning(f"   ⚠️ DisGeNET query failed for {gene} after retries")
